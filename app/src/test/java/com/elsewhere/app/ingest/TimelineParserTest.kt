@@ -105,6 +105,54 @@ class TimelineParserTest {
         assertEquals(mapOf("unknown_segment" to 1, "missing_field" to 2, "bad_timestamp" to 1), r.skippedByReason)
     }
 
+    @Test fun `a malformed frequent place is dropped, the rest still parses`() {
+        val doc = """{"semanticSegments":[
+            {"startTime":"2025-01-01T00:00:00Z","endTime":"2025-01-01T01:00:00Z","visit":{"topCandidate":{"placeId":"A","placeLocation":{"latLng":"1°, 2°"}}}}
+        ],"userLocationProfile":{"frequentPlaces":[{"placeLocation":"1°, 2°","label":"HOME"},{"placeId":"B","placeLocation":"3°, 4°"}]}}"""
+        val p = parseTimeline(doc)
+        assertEquals(1, p.visits.size)
+        assertEquals(listOf("B"), p.frequentPlaces.map { it.placeId })
+    }
+
+    @Test fun `timestamps with rolled-over fields are accepted like Date-UTC`() {
+        // 2025-02-30 rolls over to 2025-03-02 (non-leap year).
+        val doc = """{"semanticSegments":[
+            {"startTime":"2025-02-30T00:00:00Z","endTime":"2025-02-28T24:00:00Z","visit":{"topCandidate":{"placeId":"A","placeLocation":{"latLng":"1°, 2°"}}}}
+        ]}"""
+        val v = parseTimeline(doc).visits.single()
+        assertEquals(1740873600L, v.start)
+        assertEquals(1740787200L, v.end)
+    }
+
+    @Test fun `a null visit goes down the visit branch and reads as missing_field`() {
+        val doc = """{"semanticSegments":[
+            {"startTime":"2025-01-01T00:00:00Z","endTime":"2025-01-01T01:00:00Z","visit":null},
+            {"startTime":"2025-01-01T00:00:00Z","endTime":"2025-01-01T01:00:00Z","activity":null},
+            {"startTime":"2025-01-01T00:00:00Z","endTime":"2025-01-01T01:00:00Z","timelinePath":null}
+        ]}"""
+        assertEquals(mapOf("missing_field" to 3), parseTimeline(doc).report.skippedByReason)
+    }
+
+    @Test fun `stream and string entry points agree`() {
+        val fromStream = javaClass.classLoader.getResourceAsStream("mini_timeline.json")!!.use { parseTimeline(it) }
+        assertEquals(parsed, fromStream)
+    }
+
+    @Test fun `semanticSegments after userLocationProfile and other top-level keys still parses`() {
+        val doc = """{"rawSignals":[{"x":"]}\"","y":[1,{"z":"}"}]}],
+            "userLocationProfile":{"frequentPlaces":[{"placeId":"H","placeLocation":"1°, 2°","label":"HOME"}]},
+            "n":12.5,"flag":true,"nothing":null,
+            "semanticSegments":[
+            {"startTime":"2025-01-01T00:00:00Z","endTime":"2025-01-01T01:00:00Z","visit":{"topCandidate":{"placeId":"A","placeLocation":{"latLng":"1°, 2°"}}}},
+            {"startTime":"2025-01-01T01:00:00Z","endTime":"2025-01-01T02:00:00Z","activity":{"start":{"latLng":"1°, 2°"},"end":{"latLng":"1°, 3°"},"distanceMeters":10,"topCandidate":{"type":"WALKING"}}}
+        ]}"""
+        val p = parseTimeline(doc.byteInputStream())
+        assertEquals(listOf("A"), p.visits.map { it.placeId })
+        assertEquals(listOf("WALKING"), p.activities.map { it.mode })
+        assertEquals(listOf("H"), p.frequentPlaces.map { it.placeId })
+        assertEquals(2, p.report.parsed)
+    }
+
     @Test fun `a document without segments parses to nothing`() {
         val p = parseTimeline("{}")
         assertTrue(p.visits.isEmpty() && p.activities.isEmpty() && p.frequentPlaces.isEmpty())

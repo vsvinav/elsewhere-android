@@ -12,8 +12,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import java.time.LocalDateTime
-import java.time.ZoneOffset
+import java.io.InputStream
+import java.io.Reader
+import java.time.LocalDate
 
 // Port of pipeline/parse.py: a Google Timeline export → flat records, with the same skip reasons.
 data class PVisit(
@@ -33,10 +34,7 @@ data class Parsed(
 
 private val LATLNG = Regex("""^\s*(-?\d+(?:\.\d+)?)°?\s*,\s*(-?\d+(?:\.\d+)?)°?\s*\z""")
 private val TS = Regex("""^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})\z""")
-// Some exports carry terminal escape sequences from how they were copied.
-private val ESCAPES = Regex("""\u001b\[[0-9;?]*[A-Za-z]""")
-
-internal class Bad(val reason: String) : Exception(reason)
+internal class Bad(val reason: String) : RuntimeException(reason)
 
 private fun str(v: JsonElement?): String? = (v as? JsonPrimitive)?.takeIf { it.isString }?.content
 
@@ -54,8 +52,9 @@ internal fun ts(s: JsonElement?): Pair<Long, Int> {
     val g = m.groupValues
     val z = g[7]
     val off = if (z == "Z") 0 else (if (z[0] == '-') -1 else 1) * (z.substring(1, 3).toInt() * 60 + z.substring(4, 6).toInt())
-    val utc = LocalDateTime.of(g[1].toInt(), g[2].toInt(), g[3].toInt(), g[4].toInt(), g[5].toInt(), g[6].toInt())
-        .toEpochSecond(ZoneOffset.UTC) - off * 60
+    // Like `Date.UTC`, out-of-range fields roll over (2025-02-30 → 2025-03-02, 24:00 → next day) instead of failing.
+    val day = LocalDate.of(g[1].toInt(), 1, 1).plusMonths(g[2].toLong() - 1).plusDays(g[3].toLong() - 1).toEpochDay()
+    val utc = day * 86400 + g[4].toLong() * 3600 + g[5].toLong() * 60 + g[6].toLong() - off * 60
     return utc to off
 }
 
@@ -91,8 +90,109 @@ private fun segTz(seg: JsonElement, stringTz: Int): Int {
 internal fun jsRound(x: Double): Double = Math.floor(x + 0.5)
 private fun trunc(x: Double): Double = if (x < 0) Math.ceil(x) else Math.floor(x)
 
-fun parseTimeline(text: String): Parsed {
-    val doc = Json.parseToJsonElement(ESCAPES.replace(text, "")) as? JsonObject ?: JsonObject(emptyMap())
+fun parseTimeline(text: String): Parsed = parseTimeline(text.byteInputStream())
+
+/** Streams the export: only one segment (and the user profile) is ever held as a JSON tree, so
+ *  100–200 MB files fit in an Android heap. */
+fun parseTimeline(input: InputStream): Parsed {
+    val b = Builder()
+    val src = Src(input.bufferedReader(Charsets.UTF_8))
+    val sb = StringBuilder()
+    src.skipWs()
+    if (src.peek() != '{'.code) return b.build()
+    src.next()
+    while (true) {
+        src.skipWs()
+        val c = src.peek()
+        if (c == '}'.code || c < 0) break
+        if (c == ','.code) { src.next(); continue }
+        if (c != '"'.code) throw Bad("bad_json")
+        sb.setLength(0); src.readString(sb)
+        val key = sb.substring(1, sb.length - 1)
+        src.skipWs(); if (src.next() != ':'.code) throw Bad("bad_json"); src.skipWs()
+        when {
+            key == "semanticSegments" && src.peek() == '['.code -> {
+                src.next()
+                var idx = 0
+                while (true) {
+                    src.skipWs()
+                    val d = src.peek()
+                    if (d == ']'.code || d < 0) { src.next(); break }
+                    if (d == ','.code) { src.next(); continue }
+                    sb.setLength(0); src.readValue(sb)
+                    b.segment(Json.parseToJsonElement(sb.toString()), idx++)
+                }
+            }
+            key == "userLocationProfile" -> { sb.setLength(0); src.readValue(sb); b.profile(Json.parseToJsonElement(sb.toString())) }
+            else -> src.readValue(null)
+        }
+    }
+    return b.build()
+}
+
+/** Character source that drops terminal escape sequences (`ESC[…letter`) some exports carry from how they were copied. */
+private class Src(private val r: Reader) {
+    private val back = ArrayDeque<Int>()
+
+    private fun raw(): Int = if (back.isEmpty()) r.read() else back.removeLast()
+
+    fun next(): Int {
+        while (true) {
+            val c = raw()
+            if (c != 0x1b) return c
+            val buf = ArrayList<Int>()
+            var d = raw(); buf += d
+            if (d == '['.code) {
+                d = raw(); buf += d
+                while (d == ';'.code || d == '?'.code || (d >= '0'.code && d <= '9'.code)) { d = raw(); buf += d }
+                if ((d >= 'A'.code && d <= 'Z'.code) || (d >= 'a'.code && d <= 'z'.code)) continue
+            }
+            // Not a full escape sequence: emit ESC and everything after it verbatim.
+            for (i in buf.indices.reversed()) if (buf[i] >= 0) back.addLast(buf[i])
+            return c
+        }
+    }
+    fun peek(): Int { val c = next(); if (c >= 0) back.addLast(c); return c }
+    fun skipWs() { while (true) { val c = peek(); if (c == ' '.code || c == '\n'.code || c == '\r'.code || c == '\t'.code) next() else return } }
+
+    /** Reads one JSON string literal; `peek()` must be the opening quote. */
+    fun readString(sb: StringBuilder?) {
+        var c = next(); sb?.append(c.toChar())
+        while (true) {
+            c = next()
+            if (c < 0) throw Bad("bad_json")
+            sb?.append(c.toChar())
+            if (c == '\\'.code) { val e = next(); if (e < 0) throw Bad("bad_json"); sb?.append(e.toChar()) }
+            else if (c == '"'.code) return
+        }
+    }
+
+    /** Copies (or skips, when `sb` is null) one complete JSON value. */
+    fun readValue(sb: StringBuilder?) {
+        skipWs()
+        when (peek()) {
+            '"'.code -> readString(sb)
+            '{'.code, '['.code -> {
+                var depth = 0
+                while (true) {
+                    val c = peek()
+                    if (c < 0) throw Bad("bad_json")
+                    if (c == '"'.code) { readString(sb); continue }
+                    next(); sb?.append(c.toChar())
+                    if (c == '{'.code || c == '['.code) depth++
+                    else if (c == '}'.code || c == ']'.code) { depth--; if (depth == 0) return }
+                }
+            }
+            else -> while (true) {
+                val c = peek()
+                if (c < 0 || c == ','.code || c == '}'.code || c == ']'.code || c == ' '.code || c == '\n'.code || c == '\r'.code || c == '\t'.code) return
+                next(); sb?.append(c.toChar())
+            }
+        }
+    }
+}
+
+private class Builder {
     val visits = ArrayList<PVisit>()
     val activities = ArrayList<PActivity>()
     val paths = ArrayList<PPath>()
@@ -101,14 +201,16 @@ fun parseTimeline(text: String): Parsed {
     val skipped = LinkedHashMap<String, Int>()
     var segmentsTotal = 0
     var parsedCount = 0
-    val skip = { r: String -> skipped[r] = (skipped[r] ?: 0) + 1 }
+    fun skip(r: String) { skipped[r] = (skipped[r] ?: 0) + 1 }
 
-    val segs = (doc["semanticSegments"] as? JsonArray) ?: JsonArray(emptyList())
-    segs.forEachIndexed { idx, seg ->
+    /** Branches on key presence, like TS `!== undefined`: `"visit": null` is a visit with nothing in it. */
+    private fun has(seg: JsonElement, k: String) = seg is JsonObject && seg.containsKey(k)
+
+    fun segment(seg: JsonElement, idx: Int) {
         segmentsTotal++
         try {
             when {
-                opt(seg, "visit") != null -> {
+                has(seg, "visit") -> {
                     val (start, stz) = ts(field(seg, "startTime")); val (end, _) = ts(field(seg, "endTime"))
                     val v = field(seg, "visit"); val tc = field(v, "topCandidate")
                     val (lat, lng) = latlng(field(field(tc, "placeLocation"), "latLng"))
@@ -119,7 +221,7 @@ fun parseTimeline(text: String): Parsed {
                         lvl = trunc(num(opt(v, "hierarchyLevel"))).toInt(),
                     )
                 }
-                opt(seg, "activity") != null -> {
+                has(seg, "activity") -> {
                     val (start, stz) = ts(field(seg, "startTime")); val (end, _) = ts(field(seg, "endTime"))
                     val a = field(seg, "activity"); val tc = field(a, "topCandidate")
                     val (sLat, sLng) = latlng(field(field(a, "start"), "latLng")); val (eLat, eLng) = latlng(field(field(a, "end"), "latLng"))
@@ -129,35 +231,38 @@ fun parseTimeline(text: String): Parsed {
                         p = num(opt(a, "probability") ?: opt(tc, "probability")),
                     )
                 }
-                opt(seg, "timelinePath") != null -> {
+                has(seg, "timelinePath") -> {
                     val (start, _) = ts(field(seg, "startTime")); val (end, _) = ts(field(seg, "endTime"))
                     val raw = field(seg, "timelinePath") as? JsonArray ?: throw Bad("missing_field")
                     val pts = raw.map { p -> val (lat, lng) = latlng(field(p, "point")); Pt(lat, lng, ts(field(p, "time")).first) }
                     paths += PPath(start, end, pts)
                 }
-                opt(seg, "timelineMemory") != null -> {
+                has(seg, "timelineMemory") -> {
                     val (start, _) = ts(field(seg, "startTime")); val (end, _) = ts(field(seg, "endTime"))
                     val trip = opt(field(seg, "timelineMemory"), "trip") ?: JsonObject(emptyMap())
                     val dests = (opt(trip, "destinations") as? JsonArray ?: JsonArray(emptyList()))
                         .mapNotNull { d -> str(opt(opt(d, "identifier"), "placeId")) }
                     memories += PMemory(start, end, trunc(num(opt(trip, "distanceFromOriginKms"))), dests)
                 }
-                else -> { skip("unknown_segment"); return@forEachIndexed }
+                else -> { skip("unknown_segment"); return }
             }
             parsedCount++
         } catch (e: Bad) { skip(e.reason) } catch (e: RuntimeException) { skip("missing_field") }
     }
 
-    val up = doc["userLocationProfile"]
-    for (p in (opt(up, "frequentPlaces") as? JsonArray) ?: JsonArray(emptyList())) {
-        try {
-            val (lat, lng) = latlng(field(p, "placeLocation"))
-            frequentPlaces += FrequentPlace(placeId = field(p, "placeId").asString(), lat = lat, lng = lng, label = str(opt(p, "label")))
-        } catch (_: RuntimeException) { /* skip */ }
+    fun profile(up: JsonElement) {
+        for (p in (opt(up, "frequentPlaces") as? JsonArray) ?: JsonArray(emptyList())) {
+            try {
+                val (lat, lng) = latlng(field(p, "placeLocation"))
+                frequentPlaces += FrequentPlace(placeId = field(p, "placeId").asString(), lat = lat, lng = lng, label = str(opt(p, "label")))
+            } catch (_: RuntimeException) { /* skip */ }
+        }
     }
 
-    visits.sortBy { it.start }; activities.sortBy { it.start }; paths.sortBy { it.start }
-    return Parsed(visits, activities, paths, memories, frequentPlaces, ImportReport(segmentsTotal, parsedCount, skipped))
+    fun build(): Parsed {
+        visits.sortBy { it.start }; activities.sortBy { it.start }; paths.sortBy { it.start }
+        return Parsed(visits, activities, paths, memories, frequentPlaces, ImportReport(segmentsTotal, parsedCount, skipped))
+    }
 }
 
 /** JS `String(x)`: strings as-is, other primitives by their JSON text. */
