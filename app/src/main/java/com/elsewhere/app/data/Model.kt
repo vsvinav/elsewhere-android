@@ -6,18 +6,21 @@ enum class Units { KM, MI }
 enum class MapProvider { AUTO, GOOGLE, OSM }
 enum class Role { HOME, WORK }
 
-@Serializable data class LatLng(val lat: Double, val lng: Double)
+/** Anything with a position, so distance helpers work across visits, places and homes. */
+interface Located { val lat: Double; val lng: Double }
+
+@Serializable data class LatLng(override val lat: Double, override val lng: Double) : Located
 
 /** Anything with a time span, so range filters work across visits, activities and paths. */
 interface Spanned { val start: Long; val end: Long }
 
 /** One GPS sample: `ts` is epoch seconds. */
-@Serializable data class Pt(val lat: Double, val lng: Double, val ts: Long)
+@Serializable data class Pt(override val lat: Double, override val lng: Double, val ts: Long) : Located
 
 @Serializable data class Visit(
     val id: Int, override val start: Long, override val end: Long, val tz: Int, val placeId: String,
-    val lat: Double, val lng: Double, val type: String, val p: Double, val lvl: Int,
-) : Spanned
+    override val lat: Double, override val lng: Double, val type: String, val p: Double, val lvl: Int,
+) : Spanned, Located
 
 @Serializable data class Activity(
     val id: Int, override val start: Long, override val end: Long, val tz: Int,
@@ -28,12 +31,12 @@ interface Spanned { val start: Long; val end: Long }
 @Serializable data class Path(override val start: Long, override val end: Long, val pts: List<Pt>) : Spanned
 
 @Serializable data class Place(
-    val lat: Double, val lng: Double, val label: String?, val role: Role?,
+    override val lat: Double, override val lng: Double, val label: String?, val role: Role?,
     val city: String?, val countryCode: String?, val nVisits: Int,
     val totalHours: Double, val firstTs: Long, val lastTs: Long,
     val name: String?, val address: String? = null,
     val types: List<String> = emptyList(), val primaryType: String? = null, val photo: String? = null,
-)
+) : Located
 
 @Serializable data class Daily(
     val date: String, val kmByMode: Map<String, Double>, val nVisits: Int, val nPlaces: Int,

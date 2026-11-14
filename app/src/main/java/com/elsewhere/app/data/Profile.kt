@@ -2,7 +2,7 @@ package com.elsewhere.app.data
 
 import kotlinx.serialization.Serializable
 
-@Serializable data class Home(val lat: Double, val lng: Double, val city: String, val cc: String, val from: Long, val to: Long?, val name: String? = null)
+@Serializable data class Home(override val lat: Double, override val lng: Double, val city: String, val cc: String, val from: Long, val to: Long?, val name: String? = null) : Located
 @Serializable data class Work(val lat: Double, val lng: Double, val placeId: String, val name: String? = null, val from: Long, val to: Long?)
 @Serializable data class Profile(val name: String?, val units: Units, val homes: List<Home>, val works: List<Work>)
 
