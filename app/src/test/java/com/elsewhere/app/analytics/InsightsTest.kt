@@ -47,6 +47,31 @@ class InsightsTest {
         )
     }
 
+    @Test fun `explorationScore buckets by month, excluding home work and nested visits`() {
+        val b = explorationScore(data, JAN..(FEB + 10 * D))
+        assertEquals(listOf("2025-01", "2025-02"), b.map { it.key })
+        assertEquals(1 to 0, b[0].new to b[0].repeat)
+        assertEquals(1 to 1, b[1].new to b[1].repeat)
+        // 'old' (5 visits, last seen 80 days before Jan 1) crosses the 90-day line in January
+        assertEquals(1, b[0].lapsed)
+        assertEquals(0, b[1].lapsed)
+    }
+
+    @Test fun `placeStatuses flags new repeat lapsed`() {
+        val s = placeStatuses(data, FEB..MAR).associate { it.placeId to it.status }
+        assertEquals(mapOf("cafe" to PlaceStatus.REPEAT, "museum" to PlaceStatus.NEW, "old" to PlaceStatus.LAPSED), s)
+    }
+
+    @Test fun `commuteStats finds both legs with modes and durations`() {
+        val c = commuteStats(data, JAN..MAR)
+        assertEquals(2, c.legs.size)
+        assertEquals(1, c.toWork.n); assertEquals(60.0, c.toWork.medianMin); assertEquals(mapOf("WALKING" to 1, "IN_SUBWAY" to 1), c.toWork.byMode)
+        assertEquals(1, c.toHome.n); assertEquals(60.0, c.toHome.medianMin); assertEquals(mapOf("IN_PASSENGER_VEHICLE" to 1), c.toHome.byMode)
+        assertEquals(1, c.toWork.byHour[8])
+        assertEquals(1, c.toWork.byWeekday[2]) // 2025-01-01 is a Wednesday
+        assertEquals(6, c.legs[0].path.size)
+    }
+
     @Test fun `homeFacts totals the export, excludes home work from third places, and rolls up years`() {
         val f = homeFacts(data)
         assertEquals(512.0, f.totalKm, 1e-9)

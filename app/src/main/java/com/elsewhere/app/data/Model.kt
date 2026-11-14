@@ -47,9 +47,9 @@ interface Spanned { val start: Long; val end: Long }
 @Serializable data class Memory(val distanceFromOriginKm: Double, val destinationPlaceIds: List<String>)
 
 @Serializable data class Trip(
-    val start: Long, val end: Long, val nights: Int, val maxDistFromHomeKm: Double,
+    override val start: Long, override val end: Long, val nights: Int, val maxDistFromHomeKm: Double,
     val totalKmByMode: Map<String, Double>, val anchorCities: List<String>, val memory: Memory?,
-)
+) : Spanned
 
 @Serializable data class FrequentPlace(val placeId: String, val lat: Double, val lng: Double, val label: String?)
 
