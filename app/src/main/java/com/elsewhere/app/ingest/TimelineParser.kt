@@ -88,7 +88,7 @@ private fun segTz(seg: JsonElement, stringTz: Int): Int {
 }
 
 /** JS `Math.round`: half rounds toward +∞, unlike Kotlin's half-away-from-zero. */
-private fun jsRound(x: Double): Double = Math.floor(x + 0.5)
+internal fun jsRound(x: Double): Double = Math.floor(x + 0.5)
 private fun trunc(x: Double): Double = if (x < 0) Math.ceil(x) else Math.floor(x)
 
 fun parseTimeline(text: String): Parsed {

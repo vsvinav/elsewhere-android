@@ -8,21 +8,24 @@ enum class Role { HOME, WORK }
 
 @Serializable data class LatLng(val lat: Double, val lng: Double)
 
+/** Anything with a time span, so range filters work across visits, activities and paths. */
+interface Spanned { val start: Long; val end: Long }
+
 /** One GPS sample: `ts` is epoch seconds. */
 @Serializable data class Pt(val lat: Double, val lng: Double, val ts: Long)
 
 @Serializable data class Visit(
-    val id: Int, val start: Long, val end: Long, val tz: Int, val placeId: String,
+    val id: Int, override val start: Long, override val end: Long, val tz: Int, val placeId: String,
     val lat: Double, val lng: Double, val type: String, val p: Double, val lvl: Int,
-)
+) : Spanned
 
 @Serializable data class Activity(
-    val id: Int, val start: Long, val end: Long, val tz: Int,
+    val id: Int, override val start: Long, override val end: Long, val tz: Int,
     val sLat: Double, val sLng: Double, val eLat: Double, val eLng: Double,
     val m: Double, val mode: String, val p: Double,
-)
+) : Spanned
 
-@Serializable data class Path(val start: Long, val end: Long, val pts: List<Pt>)
+@Serializable data class Path(override val start: Long, override val end: Long, val pts: List<Pt>) : Spanned
 
 @Serializable data class Place(
     val lat: Double, val lng: Double, val label: String?, val role: Role?,
