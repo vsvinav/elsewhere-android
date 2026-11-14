@@ -1,0 +1,22 @@
+{
+  "name": "elsewhere-android",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Android shell for elsewhere, built with Capacitor from ../timeline/web",
+  "scripts": {
+    "web": "sh scripts/build-web.sh",
+    "sync": "npm run web && npx cap sync android",
+    "open": "npx cap open android",
+    "apk": "npm run sync && cd android && ./gradlew assembleDebug && echo APK: android/app/build/outputs/apk/debug/app-debug.apk"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4"
+  }
+}
