@@ -112,8 +112,12 @@ class RecordRepository @Inject constructor(
         .flowOn(Dispatchers.Default)
         .stateIn(scope, SharingStarted.Eagerly, null)
 
-    /** The record derived against a home at 0,0: enough for the onboarding suggestions, before any home is chosen. */
-    override suspend fun provisionalRecord(): Record? = withContext(Dispatchers.Default) { build(PROVISIONAL, settings.settings.first().mapsKey) }
+    /**
+     * The record derived against a home at 0,0: enough for the onboarding suggestions, before any home is chosen.
+     * It is the first build after an import, so it carries the bar from "Finding cities" to done; otherwise the bar
+     * would sit there until the user picked a home.
+     */
+    override suspend fun provisionalRecord(): Record? = withContext(Dispatchers.Default) { timed { build(PROVISIONAL, settings.settings.first().mapsKey) } }
 
     /** The readiness bar shows a rebuild as "Working out trips"; a failure leaves it cleared rather than stuck. */
     private suspend inline fun timed(block: () -> Record?): Record? {
