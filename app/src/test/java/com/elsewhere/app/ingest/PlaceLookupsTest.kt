@@ -142,6 +142,32 @@ class PlaceLookupsTest {
         assertNull(l.progress.value)
     }
 
+    @Test fun `at most four lookups are in flight`() = runTest(dispatcher) {
+        val l = lookups(); settle()
+        val ids = listOf("a", "b", "c", "d", "e", "f")
+        for (id in ids) src.gates[id] = CompletableDeferred()
+        l.need(ids, ids.associateWith { place() }); settle()
+        assertEquals(listOf("a", "b", "c", "d"), src.asked)
+        src.gates["b"]!!.complete(Unit); settle()
+        assertEquals(listOf("a", "b", "c", "d", "e"), src.asked)
+        ids.forEach { src.gates[it]!!.complete(Unit) }; settle()
+        assertEquals(ids, src.asked)
+        assertNull(l.progress.value)
+    }
+
+    @Test fun `a cancelled clusterName lookup is not cached`() = runTest(dispatcher) {
+        val l = lookups(); settle()
+        src.gates["a"] = CompletableDeferred()
+        val job = launch { l.clusterName(listOf("a"), places, "k") }
+        settle()
+        assertEquals(Progress(0, 1), l.progress.value)
+        job.cancel(); src.gates["a"]!!.complete(Unit); settle()
+        assertNull(l.progress.value)
+        assertTrue(store.rows.isEmpty())
+        l.need(listOf("a"), places); settle()
+        assertEquals(listOf("a", "a"), src.asked)
+    }
+
     @Test fun `a passing failure gets one more go after a backoff, and the pool goes on`() = runTest(dispatcher) {
         val l = lookups(backoffMs = 2000); settle()
         src.fails("a", IOException("reset by peer"))
