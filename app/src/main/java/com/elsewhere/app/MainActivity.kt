@@ -1,5 +1,6 @@
 package com.elsewhere.app
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -17,11 +18,17 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.elsewhere.app.ui.Root
 import com.elsewhere.app.ui.world.ElsewhereTheme
-import com.elsewhere.app.highlights.HighlightWorker
 import com.elsewhere.app.highlights.PendingHighlight
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint class MainActivity : ComponentActivity() {
+    /** The notification's PendingIntent is SINGLE_TOP, so a tap while the app is alive lands here, not in onCreate. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        PendingHighlight.take(intent)
+    }
+
     @Inject lateinit var meter: CostMeter
     @Inject lateinit var wikimedia: Wikimedia
     @Inject lateinit var appScope: CoroutineScope
@@ -38,7 +45,7 @@ import dagger.hilt.android.AndroidEntryPoint
             commons = { lat, lng -> wikimedia.photo(lat, lng) },
         )
         // A tap on the daily highlight lands here with the day; the Facts tab prints that card first.
-        intent?.getStringExtra(HighlightWorker.EXTRA_OPEN)?.let { PendingHighlight.date.value = it }
+        PendingHighlight.take(intent)
         setContent { CompositionLocalProvider(LocalPhotoSources provides photos) { ElsewhereTheme { Root() } } }
     }
 }

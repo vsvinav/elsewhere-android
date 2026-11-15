@@ -14,6 +14,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +39,8 @@ import com.elsewhere.app.ui.shell.TicketStrip
 import com.elsewhere.app.ui.shell.dayOf
 import com.elsewhere.app.ui.tabs.dates.DatesTab
 import com.elsewhere.app.ui.tabs.facts.FactsTab
+import com.elsewhere.app.highlights.PendingHighlight
+import com.elsewhere.app.ui.tabs.highlights.OpenDoor
 import com.elsewhere.app.ui.tabs.flights.FlightsTab
 import com.elsewhere.app.ui.tabs.map.MapTab
 import com.elsewhere.app.ui.tabs.numbers.NumbersTab
@@ -54,10 +57,10 @@ private enum class Picking { FROM, TO }
 
 /** The section each ticket opens on. */
 @Composable
-fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}) = when (tab) {
+fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}, onMapsKey: () -> Unit = {}, onOpen: OpenDoor = { _, _, _ -> }) = when (tab) {
     Tab.TOUR -> TourTab(onGo = go, onRecord = onRecord)
     Tab.NUMBERS -> NumbersTab()
-    Tab.FACTS -> FactsTab(onGo = go)
+    Tab.FACTS -> FactsTab(onOpen = onOpen, onKeyStep = onMapsKey)
     Tab.STOPS -> StopsTab()
     Tab.DATES -> DatesTab()
     Tab.FLIGHTS -> FlightsTab()
@@ -74,7 +77,7 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}) = when (t
 fun AppScaffold(
     onChangeAnswers: () -> Unit, onMapsKey: () -> Unit, onRecord: () -> Unit = {},
     shell: ShellViewModel = hiltViewModel(), rangeVm: RangeViewModel = hiltViewModel(),
-    content: @Composable (tab: Tab, go: (Tab) -> Unit) -> Unit = { t, g -> TabContent(t, g, onRecord) },
+    content: @Composable (tab: Tab, go: (Tab) -> Unit) -> Unit = { t, g -> TabContent(t, g, onRecord, onMapsKey) { r, _, _ -> rangeVm.setRange(r); g(Tab.MAP) } },
 ) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -98,6 +101,9 @@ fun AppScaffold(
     val years by rangeVm.years.collectAsStateWithLifecycle()
     val from = dayOf(range.first); val to = dayOf(range.last)
     var picking by remember { mutableStateOf<Picking?>(null) }
+    // A notification tap while the app is alive: jump to Facts, where the card takes the pending date.
+    val pendingDate by PendingHighlight.date.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingDate) { if (pendingDate != null) go(Tab.FACTS) }
 
     Box {
     Scaffold(

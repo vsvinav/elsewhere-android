@@ -154,7 +154,7 @@ internal class HighlightIndex(val data: Record) {
     val centroid = HashMap<String, LatLng>()
     var farthest: Daily? = null
     val hasHome: Boolean = data.profile.homes.isNotEmpty()
-    /** Score of each daily row, computed lazily and memoised. */
+    /** Score of every daily row, filled once in init so readers on any thread only look up. O(days). */
     val scores = HashMap<String, Int>()
 
     fun homeOf(ts: Long): Located = if (data.profile.homes.isNotEmpty()) homeAt(data.profile.homes, ts) else data.profile.home
@@ -184,6 +184,7 @@ internal class HighlightIndex(val data: Record) {
         for ((c, s) in sums) centroid[c] = LatLng(s[0] / s[2], s[1] / s[2])
         for (d in data.daily) { daily[d.date] = d; if (farthest.let { it == null || d.maxDistFromHomeKm > it.maxDistFromHomeKm }) farthest = d }
         if (data.visits.isNotEmpty()) for (n in bedStrip(data)) if (n.kind != NightKind.NONE) nights[numOf(n.date)] = n
+        for (d in data.daily) scores[d.date] = computeScore(data, this, d.date)
     }
 }
 
@@ -222,8 +223,9 @@ private fun cityOf(data: Record, v: Visit): Pair<String, Boolean> {
 /** The first trip overlapping [start, end]. Linear like the web twin: trips number in the dozens. */
 private fun tripOn(data: Record, start: Long, end: Long): Trip? = data.trips.firstOrNull { it.start <= end && it.end >= start }
 
-private fun scoreDay(data: Record, ix: HighlightIndex, date: String): Int {
-    ix.scores[date]?.let { return it }
+private fun scoreDay(data: Record, ix: HighlightIndex, date: String): Int = ix.scores[date] ?: computeScore(data, ix, date)
+
+private fun computeScore(data: Record, ix: HighlightIndex, date: String): Int {
     val visits = ix.byDay[numOf(date)]
     var s = 0
     if (!visits.isNullOrEmpty()) {
@@ -241,7 +243,6 @@ private fun scoreDay(data: Record, ix: HighlightIndex, date: String): Int {
         val city = data.places[lead.placeId]?.city
         if (city != null && ix.firstInCity[city] == date) s += 15
     }
-    ix.scores[date] = s
     return s
 }
 

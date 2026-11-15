@@ -1,6 +1,7 @@
 package com.elsewhere.app.highlights
 
 import com.elsewhere.app.OnThisDay
+import com.elsewhere.app.analytics.Scope
 import com.elsewhere.app.analytics.highlightFor
 import com.elsewhere.app.analytics.highlightState
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -35,10 +36,12 @@ class HighlightScheduleTest {
         assertFalse(shouldNotify(highlightState(data.copy(meta = data.meta.copy(range = OnThisDay.at(2023, 3, 3)..OnThisDay.at(2023, 5, 1))), "2023-04-10")))
         assertFalse(shouldNotify(highlightState(data.copy(visits = emptyList()), "2025-11-14")))
     }
-    @Test fun `title says this week on a Sunday and names the facts in the body`() {
+    @Test fun `title is the card's headline, this week only for a widened pick, and the body names the facts`() {
         val h = highlightFor(data, "2025-11-14")!!
-        assertEquals("On this day, 2 years ago — you woke up in Kyoto.", notificationTitle(h, "2025-11-14"))
-        assertEquals("This week, 2 years ago — you woke up in Kyoto.", notificationTitle(h, "2025-11-16"))
+        assertEquals("On this day, 2 years ago — you woke up in Kyoto.", notificationTitle(h))
         assertEquals("3 nights into a 7-night trip · 10,800 km from home · Weather of your week", notificationBody(h))
+        val widened = highlightFor(data, "2025-11-20")!!
+        assertEquals(Scope.WEEK, widened.scope)
+        assertTrue(notificationTitle(widened).startsWith("This week, 2 years ago — you "))
     }
 }

@@ -55,10 +55,10 @@ class HighlightWorker @AssistedInject constructor(
         private const val WORK = "highlight-daily"
         private const val ID = 7
 
-        /** Every 24 hours from the next `minuteOfDay`; replaces any earlier hour. */
+        /** Every 24 hours from the next `minuteOfDay`. Re-enqueued from scratch: UPDATE would keep the old period's clock, so a new hour would wait a day. */
         fun schedule(ctx: Context, minuteOfDay: Int, nowMs: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()) =
             WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(
-                WORK, ExistingPeriodicWorkPolicy.UPDATE,
+                WORK, ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
                 PeriodicWorkRequestBuilder<HighlightWorker>(1, TimeUnit.DAYS).setInitialDelay(nextRunDelayMs(nowMs, minuteOfDay, zone), TimeUnit.MILLISECONDS).build(),
             )
 
@@ -72,7 +72,7 @@ class HighlightWorker @AssistedInject constructor(
                 ctx, ID, Intent(ctx, MainActivity::class.java).putExtra(EXTRA_OPEN, today).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-            val title = notificationTitle(h, today)
+            val title = notificationTitle(h)
             val picture = HighlightPicture.draw(ctx, title, notificationBody(h), h.date.substring(0, 4))
             val n = NotificationCompat.Builder(ctx, CHANNEL)
                 .setSmallIcon(R.drawable.ic_record_pin).setContentTitle(title).setContentText(notificationBody(h))

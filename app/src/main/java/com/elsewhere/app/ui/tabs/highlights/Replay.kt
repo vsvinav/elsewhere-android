@@ -51,9 +51,14 @@ fun routeAt(g: RouteGeometry, playhead: Long?): RouteGeometry {
 fun routeFit(data: Record, g: RouteGeometry, stops: List<Stop>, land: FeatureCollection?, height: Float) =
     trailLayout(data.copy(strokes = g.roads, activities = g.flights), stops, land, height)
 
-/** The route as far as `seen`, printed in the fit of the whole trip. */
-fun routeLayout(data: Record, seen: RouteGeometry, stops: List<Stop>, land: FeatureCollection?, fit: TrailLayout, height: Float) =
-    trailLayout(data.copy(strokes = seen.roads, activities = seen.flights), stops, land, height, fit.proj)
+/**
+ * The route as far as `seen`, printed in the fit of the whole trip. Only the seen strokes are projected
+ * each frame; the land rings and pins are the fit's own, so a 10 s replay never re-projects the coast.
+ */
+fun routeLayout(data: Record, seen: RouteGeometry, fit: TrailLayout, height: Float): TrailLayout {
+    val part = trailLayout(data.copy(strokes = seen.roads, activities = seen.flights), emptyList(), null, height, fit.proj)
+    return fit.copy(lines = part.lines, flights = part.flights)
+}
 
 /**
  * A scoped replay: the playhead sweeps `range` in `ms` of wall time, one step per frame, then parks at

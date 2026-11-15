@@ -150,7 +150,7 @@ internal fun RouteFigure(data: Record, a: Answer.Route, tz: Int, replay: ReplayS
     val g = remember(data, a.range) { routeGeometry(data, a.range) }
     val fit = remember(g, stops, land) { routeFit(data, g, stops, land, 220f) }
     val playhead = replay.playhead
-    val layout = remember(g, fit, playhead) { if (playhead == null) fit else routeLayout(data, routeAt(g, playhead), stops, land, fit, 220f) }
+    val layout = remember(g, fit, playhead) { if (playhead == null) fit else routeLayout(data, routeAt(g, playhead), fit, 220f) }
     TrailMap(layout, Modifier.fillMaxWidth().semantics { contentDescription = "Route map" }, height = 220f)
     Spacer(Modifier.height(12.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {

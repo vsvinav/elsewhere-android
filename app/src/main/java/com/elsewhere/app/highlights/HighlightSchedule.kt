@@ -2,9 +2,8 @@ package com.elsewhere.app.highlights
 
 import com.elsewhere.app.analytics.Highlight
 import com.elsewhere.app.analytics.HighlightState
-import java.time.DayOfWeek
+import com.elsewhere.app.ui.tabs.highlights.headline
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 
@@ -28,14 +27,12 @@ fun shouldNotify(state: HighlightState): Boolean = state is HighlightState.Found
 /** One line for the notification body: the facts, or the city when there are none. */
 fun notificationBody(h: Highlight): String = h.facts.joinToString(" · ") { it.label }.ifEmpty { h.city }
 
-/** Sundays open with "This week" so the card reads as the week's; the rest of the week names the day. */
-fun notificationTitle(h: Highlight, date: String): String {
-    val sunday = LocalDate.parse(date).dayOfWeek == DayOfWeek.SUNDAY
-    val lead = if (sunday) "This week" else "On this day"
-    return "$lead, ${agoText(h.yearsAgo)} — you ${h.verb.text} ${h.city}."
-}
-
-private fun agoText(n: Int) = when { n <= 0 -> "earlier this year"; n == 1 -> "last year"; else -> "$n years ago" }
+/** The card's own headline: "This week" when the pick was widened, "On this day" otherwise. */
+fun notificationTitle(h: Highlight): String = headline(h)
 
 /** The date a notification tap asked for, until the Facts tab has shown it. Process-wide, like the intent that carried it. */
-object PendingHighlight { val date = kotlinx.coroutines.flow.MutableStateFlow<String?>(null) }
+object PendingHighlight {
+    val date = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    /** Takes the day a notification tap carries, whether it arrives in onCreate or onNewIntent. */
+    fun take(intent: android.content.Intent?) { intent?.getStringExtra(HighlightWorker.EXTRA_OPEN)?.let { date.value = it } }
+}

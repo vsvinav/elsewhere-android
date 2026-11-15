@@ -70,8 +70,6 @@ import com.elsewhere.app.analytics.HighlightState
 import com.elsewhere.app.analytics.highlightState
 import com.elsewhere.app.analytics.localToday
 import com.elsewhere.app.highlights.PendingHighlight
-import com.elsewhere.app.ui.Tab
-import com.elsewhere.app.ui.shell.RangeViewModel
 import com.elsewhere.app.ui.tabs.highlights.HighlightCard
 import com.elsewhere.app.ui.tabs.highlights.OpenDoor
 import kotlinx.coroutines.launch
@@ -81,21 +79,22 @@ import kotlinx.coroutines.launch
 /** Figures that read at 110dp go beside the text; the wide ones sit under it. */
 private fun wide(f: Figure?) = f is Figure.Scale || f is Figure.Beds
 
+/** The doors and the key step come from the scaffold, which owns the range and the tabs; no second RangeViewModel here. */
 @Composable
-fun FactsTab(onGo: (Tab) -> Unit = {}, vm: FactsViewModel = hiltViewModel(), range: RangeViewModel = hiltViewModel()) {
+fun FactsTab(onOpen: OpenDoor = { _, _, _ -> }, onKeyStep: (() -> Unit)? = null, vm: FactsViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     // A notification tap names the day its card was printed for; taken once, so the next visit is today's again.
     val pending = remember { PendingHighlight.date.value.also { PendingHighlight.date.value = null } }
-    ui?.let { FactsScreen(if (pending != null) it.copy(today = pending) else it, onOpen = { r, _, _ -> range.setRange(r); onGo(Tab.MAP) }) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
+    ui?.let { FactsScreen(if (pending != null) it.copy(today = pending) else it, onOpen = onOpen, onKeyStep = onKeyStep) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
 }
 
 @Composable
-fun FactsScreen(ui: FactsUi, modifier: Modifier = Modifier, scroll: Boolean = true, onOpen: OpenDoor = { _, _, _ -> }) {
+fun FactsScreen(ui: FactsUi, modifier: Modifier = Modifier, scroll: Boolean = true, onOpen: OpenDoor = { _, _, _ -> }, onKeyStep: (() -> Unit)? = null) {
     var seed by rememberSaveable { mutableIntStateOf(0) }
     var only by rememberSaveable { mutableStateOf<Kind?>(null) }
     val list = arrange(ui.rest, seed).filter { only == null || it.kind == only }
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier)) {
-        FactsHero(ui, only, onOnly = { only = if (only == it) null else it }, onShuffle = { seed = (System.currentTimeMillis() and 0xffff).toInt() }, onOpen = onOpen)
+        FactsHero(ui, only, onOnly = { only = if (only == it) null else it }, onShuffle = { seed = (System.currentTimeMillis() and 0xffff).toInt() }, onOpen = onOpen, onKeyStep = onKeyStep)
         Column(Modifier.padding(horizontal = 12.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             list.forEachIndexed { i, f -> FactPass(f, i + 1, list.size) }
         }
@@ -104,7 +103,7 @@ fun FactsScreen(ui: FactsUi, modifier: Modifier = Modifier, scroll: Boolean = tr
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-internal fun FactsHero(ui: FactsUi, only: Kind?, onOnly: (Kind) -> Unit, onShuffle: () -> Unit, onOpen: OpenDoor = { _, _, _ -> }) {
+internal fun FactsHero(ui: FactsUi, only: Kind?, onOnly: (Kind) -> Unit, onShuffle: () -> Unit, onOpen: OpenDoor = { _, _, _ -> }, onKeyStep: (() -> Unit)? = null) {
     val cards = ui.cards
     // "On this day" rides in front of the fact cards when the record has one (the web's HighlightSlot).
     val highlight = ui.raw?.takeIf { highlightState(it, ui.today ?: localToday()) != HighlightState.None }
@@ -133,7 +132,7 @@ internal fun FactsHero(ui: FactsUi, only: Kind?, onOnly: (Kind) -> Unit, onShuff
             Field(if (star == null) "On this day" else if (star.card) "Side note" else KIND_LABEL.getValue(star.kind), "${cur + 1} of $n")
             Spacer(Modifier.height(18.dp))
             HorizontalPager(pager, Modifier.fillMaxWidth(), pageSpacing = 16.dp, verticalAlignment = Alignment.Top) { page ->
-                if (page < extra) HighlightCard(highlight!!, onOpen, Modifier.padding(end = 8.dp, bottom = 8.dp), today = ui.today)
+                if (page < extra) HighlightCard(highlight!!, onOpen, Modifier.padding(end = 8.dp, bottom = 8.dp), today = ui.today, onKeyStep = onKeyStep)
                 else FlipCard(cards[page - extra], Modifier.padding(end = 8.dp, bottom = 8.dp))
             }
             Spacer(Modifier.height(18.dp))
