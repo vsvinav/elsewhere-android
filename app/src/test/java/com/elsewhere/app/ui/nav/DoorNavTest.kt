@@ -117,13 +117,12 @@ class DoorNavTest {
         assertNull(nav.origin.value)
     }
 
-    @Test fun `the origin survives closing the pin card or tapping empty map, and re-picking the same pin`() = runTest(dispatcher) {
+    @Test fun `the origin survives closing the pin card, but picking a pin afresh afterwards is the reader's own move`() = runTest(dispatcher) {
         nav.go(Door.Place("cafe", label = "Café"), from = Tab.FACTS); run()
         nav.pinChanged(null)
         assertEquals(Origin("Café", Tab.FACTS), nav.origin.value)
-        nav.go(Door.Place("cafe", label = "Café"), from = Tab.MAP); run()
         nav.pinChanged("cafe")
-        assertEquals(Origin("Café", Tab.FACTS), nav.origin.value)
+        assertNull(nav.origin.value)
     }
 
     @Test fun `after a range door, opening any pin is the reader's own move`() = runTest(dispatcher) {
