@@ -55,6 +55,8 @@ fun hintFor(message: String, status: String?): String? {
  * field mask (the free SKU) and a Map Tiles session. Each probe gives back [Probe.Ok] or Google's
  * message with a hint; a dead network is a failure too, never an exception.
  */
+const val PROBE_TIMEOUT_MS = 6_000L
+
 @Singleton
 class KeyCheck(
     client: OkHttpClient,
@@ -63,8 +65,8 @@ class KeyCheck(
 ) : KeyChecker {
     @Inject constructor(client: OkHttpClient) : this(client, "https://places.googleapis.com", "https://tile.googleapis.com")
 
-    /** A 10 s ceiling per probe unless the caller already set one. */
-    private val client = if (client.callTimeoutMillis == 0) client.newBuilder().callTimeout(10, TimeUnit.SECONDS).build() else client
+    /** A ceiling per probe unless the caller already set one: the web gives Google six seconds to draw a map. */
+    internal val client = if (client.callTimeoutMillis == 0) client.newBuilder().callTimeout(PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS).build() else client
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun run(key: String): KeyReport = coroutineScope {

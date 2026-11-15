@@ -36,6 +36,12 @@ class KeyCheckTest {
         }
     }
 
+    @Test fun `a probe is given six seconds unless the caller set its own ceiling`() {
+        assertEquals(6_000L, PROBE_TIMEOUT_MS)
+        assertEquals(6_000, KeyCheck(OkHttpClient()).client.callTimeoutMillis)
+        assertEquals(500, check.client.callTimeoutMillis)
+    }
+
     @Test fun `both probes answering 200 make an accepted key`() = runTest {
         serve(MockResponse().setBody("""{"id":"ChIJN1t_tDeuEmsRUsoyG83frY4"}"""), MockResponse().setBody("""{"session":"abc","expiry":"1700000000","tileWidth":256,"tileHeight":256,"imageFormat":"png"}"""))
         val r = check.run("AIza-ok")
