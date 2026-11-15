@@ -34,18 +34,33 @@ fun nightsIn(v: Visit): Int = nightsIn(v.start, v.end, v.tz)
 internal fun homeOf(data: Record, ts: Long): Located =
     if (data.profile.homes.isNotEmpty()) homeAt(data.profile.homes, ts) else data.profile.home
 
-/** Where you slept: nights per city away from home, like a tour's dates list. */
-fun tour(data: Record): Tour {
-    val byCity = LinkedHashMap<String, Stop>()
-    var nightsHome = 0; var nightsAway = 0
-    var headline: HeadlineAct? = null
-    val beds = HashMap<String, HashSet<String>>()
+/** A night's sleep away from home: a lvl-0 visit that spans at least one local 03:00 and sits off the home radius. */
+data class Sleep(val v: Visit, val nights: Int)
+data class SleptAway(val away: List<Sleep>, val nightsHome: Int)
+
+/** Every visit slept away from home, in record order, with its nights. */
+fun sleptAway(data: Record): SleptAway {
+    val away = ArrayList<Sleep>()
+    var nightsHome = 0
     for (v in data.visits) {
         if (v.lvl != 0) continue
         val n = nightsIn(v)
         if (n == 0) continue
+        if (isHome(data.places[v.placeId]) || distanceKm(homeOf(data, v.start), v) < 30) { nightsHome += n; continue }
+        away += Sleep(v, n)
+    }
+    return SleptAway(away, nightsHome)
+}
+
+/** Where you slept: nights per city away from home, like a tour's dates list. */
+fun tour(data: Record): Tour {
+    val byCity = LinkedHashMap<String, Stop>()
+    val (away, nightsHome) = sleptAway(data)
+    var nightsAway = 0
+    var headline: HeadlineAct? = null
+    val beds = HashMap<String, HashSet<String>>()
+    for ((v, n) in away) {
         val p = data.places[v.placeId]
-        if (isHome(p) || distanceKm(homeOf(data, v.start), v) < 30) { nightsHome += n; continue }
         nightsAway += n
         val city = p?.city ?: "Unknown city"
         val s = byCity.getOrPut(city) { Stop(city, p?.countryCode, 0, 0, v.start, v.end, v.lat, v.lng) }

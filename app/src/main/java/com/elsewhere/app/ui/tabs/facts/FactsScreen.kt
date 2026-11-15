@@ -82,15 +82,15 @@ private fun wide(f: Figure?) = f is Figure.Scale || f is Figure.Beds
 
 /** The doors and the key step come from the scaffold, which owns the range and the tabs; no second RangeViewModel here. */
 @Composable
-fun FactsTab(onOpen: OpenDoor = { _, _, _ -> }, onKeyStep: (() -> Unit)? = null, vm: FactsViewModel = hiltViewModel()) {
+fun FactsTab(onOpen: OpenDoor = { _, _, _ -> }, onKeyStep: (() -> Unit)? = null, vm: FactsViewModel = hiltViewModel(), passport: @Composable () -> Unit = { PassportTab() }) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     // A notification tap names the day its card was printed for; taken once, so the next visit is today's again.
     val pending = remember { PendingHighlight.date.value.also { PendingHighlight.date.value = null } }
-    ui?.let { FactsScreen(if (pending != null) it.copy(today = pending) else it, onOpen = onOpen, onKeyStep = onKeyStep) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
+    ui?.let { FactsScreen(if (pending != null) it.copy(today = pending) else it, onOpen = onOpen, onKeyStep = onKeyStep, passport = passport) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
 }
 
 @Composable
-fun FactsScreen(ui: FactsUi, modifier: Modifier = Modifier, scroll: Boolean = true, onOpen: OpenDoor = { _, _, _ -> }, onKeyStep: (() -> Unit)? = null) {
+fun FactsScreen(ui: FactsUi, modifier: Modifier = Modifier, scroll: Boolean = true, onOpen: OpenDoor = { _, _, _ -> }, onKeyStep: (() -> Unit)? = null, passport: (@Composable () -> Unit)? = null) {
     var seed by rememberSaveable { mutableIntStateOf(0) }
     var only by rememberSaveable { mutableStateOf<Kind?>(null) }
     val list = arrange(ui.rest, seed).filter { only == null || it.kind == only }
@@ -99,6 +99,8 @@ fun FactsScreen(ui: FactsUi, modifier: Modifier = Modifier, scroll: Boolean = tr
         Column(Modifier.padding(horizontal = 12.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             list.forEachIndexed { i, f -> FactPass(f, i + 1, list.size) }
         }
+        // The passport sits at the foot of Facts until the Play hub takes it.
+        passport?.invoke()
     }
 }
 

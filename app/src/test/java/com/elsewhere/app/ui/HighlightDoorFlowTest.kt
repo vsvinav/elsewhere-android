@@ -81,7 +81,7 @@ class HighlightDoorFlowTest {
         val range = RangeViewModel(store)
         val maps = Fakes.Maps()
         val facts = FactsViewModel(store, Fakes.Store(record), Fakes.lookups(maps, scope))
-        scaffold(range) { t, _, onOpen -> if (t == Tab.FACTS) FactsTab(onOpen = onOpen, vm = facts) else Text("page ${t.route}") }
+        scaffold(range) { t, _, onOpen -> if (t == Tab.FACTS) FactsTab(onOpen = onOpen, vm = facts, passport = {}) else Text("page ${t.route}") }
         rule.waitForIdle()
         val narrowed = Fx.utc(2024, 5, 1)..Fx.utc(2024, 5, 30)
         range.setRange(narrowed)
