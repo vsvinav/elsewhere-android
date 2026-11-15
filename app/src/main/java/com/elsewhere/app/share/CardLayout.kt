@@ -15,6 +15,8 @@ enum class ShareFormat(val suffix: String, val sheetWidth: Int, val sheetHeight:
 /** Every card is laid out at this width in dp; the density is then chosen so it fills its box on the sheet. */
 const val CARD_DP = 400f
 private const val FREE_PAD = 72
+/** A free sheet stops growing at this many widths; a longer card shrinks to fit instead. */
+private const val FREE_MAX_RATIO = 4
 private const val SHEET_PAD = 60
 /** The brand line under a story or post. */
 const val FOOT_PX = 120
@@ -32,13 +34,14 @@ fun cardPlacement(format: ShareFormat, cardHeightDp: Float): CardPlacement {
     val w = format.sheetWidth
     val h = format.sheetHeight
     if (h == null) {
-        val d = (w - FREE_PAD * 2) / CARD_DP
+        val d = min((w - FREE_PAD * 2) / CARD_DP, (w * FREE_MAX_RATIO - FREE_PAD * 2) / cardHeightDp)
+        val cw = (CARD_DP * d).roundToInt()
         val ch = (cardHeightDp * d).roundToInt()
-        return CardPlacement(d, FREE_PAD, FREE_PAD, w - FREE_PAD * 2, ch, w, ch + FREE_PAD * 2)
+        return CardPlacement(d, (w - cw) / 2, FREE_PAD, cw, ch, w, ch + FREE_PAD * 2)
     }
     val room = h - SHEET_PAD * 2 - FOOT_PX
     val d = min((w - SHEET_PAD * 2) / CARD_DP, room / cardHeightDp)
-    val cw = (CARD_DP * d).toInt()
+    val cw = (CARD_DP * d).roundToInt()
     val ch = (cardHeightDp * d).roundToInt()
     return CardPlacement(d, (w - cw) / 2, (h - FOOT_PX - ch) / 2, cw, ch, w, h)
 }

@@ -21,6 +21,14 @@ class CardLayoutTest {
         assertEquals(936, p.cardWidth); assertEquals(2340, p.cardHeight)
     }
 
+    @Test fun `a free card never runs past four times its width, shrinking and centring instead`() {
+        val p = cardPlacement(ShareFormat.FREE, cardHeightDp = 4000f)
+        assertEquals(1080, p.sheetWidth); assertEquals(4320, p.sheetHeight)
+        assertEquals(4320 - 144, p.cardHeight)
+        assertEquals(Math.round(4176 / 4000f * 400), p.cardWidth)
+        assertEquals((1080 - p.cardWidth) / 2, p.x); assertEquals(72, p.y)
+    }
+
     @Test fun `a short card on a story fills the width and sits centred above the footer`() {
         val p = cardPlacement(ShareFormat.STORY, cardHeightDp = 400f)
         assertEquals(1080, p.sheetWidth); assertEquals(1920, p.sheetHeight)

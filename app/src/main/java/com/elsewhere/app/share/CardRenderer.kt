@@ -30,8 +30,8 @@ object CardRenderer {
             setViewTreeSavedStateRegistryOwner(activity)
             setContent { ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { ShareCard(format, paper, ink, content) } } }
         }
-        host.addView(view, ViewGroup.LayoutParams(format.sheetWidth, ViewGroup.LayoutParams.WRAP_CONTENT))
         try {
+            host.addView(view, ViewGroup.LayoutParams(format.sheetWidth, ViewGroup.LayoutParams.WRAP_CONTENT))
             view.measure(
                 View.MeasureSpec.makeMeasureSpec(format.sheetWidth, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),

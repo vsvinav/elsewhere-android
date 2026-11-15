@@ -1,6 +1,7 @@
 package com.elsewhere.app.ui.world
 
 import android.content.Context
+import android.util.Log
 import android.content.ContextWrapper
 import android.graphics.drawable.BitmapDrawable
 import androidx.activity.ComponentActivity
@@ -37,11 +38,16 @@ import com.elsewhere.app.share.cardFileName
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // Port of the web's SaveMenu (web/src/world/index.tsx): a quiet "Save" on every bill and pass.
+
+/** How long the web's "Couldn't save" stays in the button. */
+private const val FAILED_FOR_MS = 2500L
 
 /** What a bill or pass offers to share: the name its file takes and, where there is one, a text version. */
 class Share(val name: String, val text: (() -> String)? = null)
@@ -63,6 +69,7 @@ fun SaveMenu(
     val printed by rememberUpdatedState(card)
     var open by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
 
     fun save(format: ShareFormat) {
         val activity = context.findActivity() ?: return
@@ -75,13 +82,20 @@ fun SaveMenu(
                 }
                 val uri = withContext(Dispatchers.IO) { ShareSheet.writeCard(activity, bitmap, cardFileName(share.name, format)) }
                 ShareSheet.shareImage(activity, uri)
-            } finally { busy = false }
+                busy = false
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SaveMenu", "Couldn't save ${share.name}", e)
+                busy = false; failed = true
+                delay(FAILED_FOR_MS); failed = false
+            }
         }
     }
 
     Box(modifier) {
         CapsText(
-            if (busy) "Saving…" else "Save ▾",
+            when { busy -> "Saving…"; failed -> "Couldn't save"; else -> "Save ▾" },
             Modifier.clickable(enabled = !busy, role = Role.Button) { open = true }.padding(8.dp).semantics { contentDescription = "Save this card" },
             color = color, size = 11.sp,
         )
