@@ -46,7 +46,8 @@ object Fakes {
 
     class Checker(var report: KeyReport = KeyReport(Probe.Ok, Probe.Ok)) : KeyChecker {
         val asked = ArrayList<String>()
-        override suspend fun run(key: String): KeyReport { asked += key; return report }
+        var onRun: () -> Unit = {}
+        override suspend fun run(key: String): KeyReport { asked += key; onRun(); return report }
     }
 
     /** Hands back a scripted name per leading place id and records what it was asked. */

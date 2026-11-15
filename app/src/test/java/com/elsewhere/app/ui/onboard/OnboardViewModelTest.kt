@@ -160,6 +160,25 @@ class OnboardViewModelTest {
         assertEquals(Step.Done, vm.state.value.step)
     }
 
+    @Test fun `a changed key loses the old verdict before its probes run`() = runTest(dispatcher) {
+        val (vm, _, maps) = imported()
+        maps.cur.value = Settings(mapsKey = "old", keyPlaces = true, keyTiles = true, keyCheckedAt = 5, limitedAccepted = true)
+        val seen = ArrayList<Settings>()
+        checker.onRun = { seen += maps.cur.value }
+        vm.saveKey("new", ""); run()
+        assertEquals(listOf(Settings(mapsKey = "new")), seen)
+        assertEquals(true, maps.cur.value.keyPlaces)
+    }
+
+    @Test fun `re-checking the same key keeps its verdict while the probes run`() = runTest(dispatcher) {
+        val (vm, _, maps) = imported()
+        maps.cur.value = Settings(mapsKey = "old", keyPlaces = true, keyTiles = true, keyCheckedAt = 5)
+        val seen = ArrayList<Settings>()
+        checker.onRun = { seen += maps.cur.value }
+        vm.saveKey("old", ""); run()
+        assertEquals(listOf(Settings(mapsKey = "old", keyPlaces = true, keyTiles = true, keyCheckedAt = 5)), seen)
+    }
+
     @Test fun `picking a home and printing saves one open-ended home from the record start`() = runTest(dispatcher) {
         val (vm, store, _) = imported()
         vm.skipKey(); vm.setLimitedAck(true); vm.acceptLimited(); run(); vm.next()

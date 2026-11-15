@@ -191,7 +191,10 @@ class OnboardViewModel @Inject constructor(
         if (_state.value.keyPhase == KeyPhase.Checking) return
         _state.update { it.copy(key = k, mapId = mapId.trim(), keyPhase = KeyPhase.Checking, keyReport = null, limitedAck = false) }
         viewModelScope.launch {
-            maps.saveSettings(maps.settings.first().copy(mapsKey = k, mapId = mapId.trim()))
+            val cur = maps.settings.first()
+            // A new key is unproven until its probes answer: nothing paid may run on it in the meantime.
+            val fresh = if (k == cur.mapsKey) cur else cur.copy(keyPlaces = false, keyTiles = false, keyCheckedAt = 0, limitedAccepted = false)
+            maps.saveSettings(fresh.copy(mapsKey = k, mapId = mapId.trim()))
             val report = checker.run(k)
             val now = maps.settings.first()
             maps.saveSettings(now.copy(keyPlaces = report.places == Probe.Ok, keyTiles = report.tiles == Probe.Ok, keyCheckedAt = System.currentTimeMillis()))
