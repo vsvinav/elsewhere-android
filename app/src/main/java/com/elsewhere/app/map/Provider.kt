@@ -28,12 +28,17 @@ fun resolve(s: Settings, sessionDown: Boolean = false): Provider = when (s.mapPr
     MapProvider.AUTO -> if (s.mapsKey.isNotBlank() && !s.googleRejected && !sessionDown) Provider.GOOGLE else Provider.OSM
 }
 
-/** Google flips to "down" for the process when its map won't start or load, like the web's `markGoogleDown`. */
+/**
+ * Google flips to "down" for the process when its map won't start or load, like the web's `markGoogleDown`,
+ * but only for the key that failed: a new key gets its own try.
+ */
 object GoogleDown {
-    var down by mutableStateOf(false)
+    var key by mutableStateOf<String?>(null)
         private set
-    fun mark() { down = true }
-    internal fun reset() { down = false }
+    val down: Boolean get() = key != null
+    fun isDown(mapsKey: String): Boolean = key == mapsKey
+    fun mark(mapsKey: String) { key = mapsKey }
+    fun reset() { key = null }
 }
 
 /**
@@ -43,18 +48,23 @@ object GoogleDown {
  * A host whose [GoogleMapHost.needsRestart] is set is running on a key the SDK already read; show a restart notice.
  */
 @Composable
-fun rememberMapHost(settings: Settings, initial: Cam = Cam(20.0, 0.0, 2f), onGoogleFailed: () -> Unit): MapHost {
+fun rememberMapHost(settings: Settings, initial: Cam = Cam(20.0, 0.0, 2f), onGoogleFailed: () -> Unit, onGoogleLoaded: () -> Unit = {}): MapHost {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
     val failed by rememberUpdatedState(onGoogleFailed)
-    val provider = resolve(settings, GoogleDown.down)
+    val loaded by rememberUpdatedState(onGoogleLoaded)
+    val provider = resolve(settings, GoogleDown.isDown(settings.mapsKey))
     // CameraState's constructor is internal to maplibre-compose, so the library remembers it for us.
     val libreState = rememberCameraState(initial.toLibre())
     return remember(provider, settings.mapsKey, settings.mapId) {
         when (provider) {
             Provider.GOOGLE -> {
                 val live = KeyInstaller.install(context, settings.mapsKey)
-                GoogleMapHost(scope, initial, settings.mapId, keyLive = live, onFailed = { GoogleDown.mark(); failed() })
+                // Counted once per process: a forced-Google user rebuilding the host per visit must not fail twice in one session.
+                GoogleMapHost(
+                    scope, initial, settings.mapId, keyLive = live,
+                    onFailed = { if (!GoogleDown.down) { GoogleDown.mark(settings.mapsKey); failed() } }, onLoaded = { loaded() },
+                )
             }
             Provider.OSM -> MapLibreHost(scope, initial, libreState)
         }

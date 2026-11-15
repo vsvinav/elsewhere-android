@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
  */
 class GoogleMapHost(
     private val scope: CoroutineScope, initial: Cam, private val mapId: String,
-    private val keyLive: Boolean, private val onFailed: () -> Unit,
+    private val keyLive: Boolean, private val onFailed: () -> Unit, private val onLoaded: () -> Unit = {},
 ) : MapHost {
     val needsRestart: Boolean get() = !keyLive
 
@@ -93,8 +93,8 @@ class GoogleMapHost(
             // With `keyLive` false the SDK still holds an older key, so there is nothing fair to judge.
             val code = runCatching { MapsInitializer.initialize(context.applicationContext, MapsInitializer.Renderer.LATEST) {} }
                 .getOrDefault(ConnectionResult.SERVICE_MISSING)
-            KeyInstaller.markStarted()
             if (code != ConnectionResult.SUCCESS) { if (keyLive) fail(); return@LaunchedEffect }
+            KeyInstaller.markStarted()
             ready = true
             if (!keyLive) return@LaunchedEffect
             delay(FAIL_MS)
@@ -131,7 +131,7 @@ class GoogleMapHost(
                     compassEnabled = false, indoorLevelPickerEnabled = false, mapToolbarEnabled = false,
                     myLocationButtonEnabled = false, tiltGesturesEnabled = false, zoomControlsEnabled = false,
                 ),
-                onMapLoaded = { loaded = true; pendingFit?.invoke(); pendingFit = null },
+                onMapLoaded = { loaded = true; pendingFit?.invoke(); pendingFit = null; if (keyLive) onLoaded() },
             )
             overlays()
         }

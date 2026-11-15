@@ -46,6 +46,11 @@ class MapHostViewModel @Inject constructor(private val maps: MapsSettings) : Vie
         }
     }
 
+    /** A session that loads wipes the slate, so "two failures" means two in a row, not two ever. */
+    fun googleLoaded() {
+        viewModelScope.launch { val s = maps.settings.first(); if (s.googleFailures != 0) maps.saveSettings(s.copy(googleFailures = 0)) }
+    }
+
     private companion object { const val REJECT_AFTER = 2 }
 }
 
@@ -56,12 +61,12 @@ fun MapHostDemo(vm: MapHostViewModel = hiltViewModel()) {
     val s = settings ?: return
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val host = rememberMapHost(s) {
+    val host = rememberMapHost(s, onGoogleLoaded = vm::googleLoaded, onGoogleFailed = {
         vm.googleFailed()
         // Only an automatic choice actually swaps to OSM; a forced Google stays Google, blank or not.
         val swapped = resolve(s, sessionDown = true) == Provider.OSM
         scope.launch { snackbar.showSnackbar(if (swapped) "Google refused the key — using OpenStreetMap" else "Google Maps didn't load") }
-    }
+    })
     Box(Modifier.fillMaxSize()) {
         host.Content(Modifier.fillMaxSize()) {}
         if ((host as? GoogleMapHost)?.needsRestart == true) {

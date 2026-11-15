@@ -3,9 +3,21 @@ package com.elsewhere.app.map
 import com.elsewhere.app.data.MapProvider
 import com.elsewhere.app.data.Settings
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 class ProviderTest {
+    @BeforeEach fun fresh() = GoogleDown.reset()
+
+    @Test fun `a session outage is pinned to the key that failed`() {
+        GoogleDown.mark("old")
+        assertTrue(GoogleDown.isDown("old")); assertFalse(GoogleDown.isDown("new"))
+        assertEquals(Provider.OSM, resolve(Settings(mapsKey = "old"), GoogleDown.isDown("old")))
+        assertEquals(Provider.GOOGLE, resolve(Settings(mapsKey = "new"), GoogleDown.isDown("new")))
+    }
+
     @Test fun `auto with a key is Google`() = assertEquals(Provider.GOOGLE, resolve(Settings(mapsKey = "AIza")))
     @Test fun `auto without a key is OSM`() = assertEquals(Provider.OSM, resolve(Settings(mapsKey = "  ")))
     @Test fun `auto with a refused key is OSM`() = assertEquals(Provider.OSM, resolve(Settings(mapsKey = "AIza", googleRejected = true)))
