@@ -9,7 +9,6 @@ import com.elsewhere.app.data.ReadyState
 import com.elsewhere.app.data.Ready
 import com.elsewhere.app.data.RecordSource
 import com.elsewhere.app.data.RecordStore
-import com.elsewhere.app.data.Units
 import com.elsewhere.app.data.shellReady
 import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.ingest.Progress
@@ -26,7 +25,7 @@ import javax.inject.Inject
 
 private const val REFRESH_TIMEOUT_MS = 15_000L
 
-/** What the masthead menu reads and does: the name on the record, units, usage, start over. */
+/** What the masthead menu reads and does: the name on the record, usage, start over. */
 @HiltViewModel
 class ShellViewModel @Inject constructor(
     private val repo: RecordStore, private val source: RecordSource, settings: MapsSettings, private val lookups: PlaceLookups, readyState: ReadyState = ReadyState(),
@@ -43,11 +42,6 @@ class ShellViewModel @Inject constructor(
     }
     val profile: StateFlow<Profile?> = repo.profile
     val counters: StateFlow<Counters> = settings.counters.stateIn(viewModelScope, SharingStarted.Eagerly, Counters())
-
-    fun toggleUnits() {
-        val p = profile.value ?: return
-        viewModelScope.launch { repo.saveProfile(p.copy(units = if (p.units == Units.KM) Units.MI else Units.KM)) }
-    }
 
     /** Pull to refresh: rebuild from Room (export plus device rows) and ask again for any names that failed. */
     fun refresh() {

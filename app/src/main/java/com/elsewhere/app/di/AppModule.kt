@@ -11,6 +11,7 @@ import com.elsewhere.app.data.RecordSource
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.LandLoader
 import com.elsewhere.app.data.LandSource
+import com.elsewhere.app.data.LlmSettings
 import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.data.db.ElsewhereDb
@@ -41,6 +42,8 @@ import com.elsewhere.app.ingest.Nominatim
 import com.elsewhere.app.ingest.PlaceNamer
 import com.elsewhere.app.ingest.KeyCheck
 import com.elsewhere.app.ingest.KeyChecker
+import com.elsewhere.app.ask.HttpLlmClient
+import com.elsewhere.app.ask.LlmClient
 import javax.inject.Singleton
 
 @Module
@@ -56,10 +59,12 @@ object AppModule {
 
     @Provides @Singleton fun http(): OkHttpClient = OkHttpClient()
     @Provides fun keyChecker(check: KeyCheck): KeyChecker = check
+    @Provides fun llmClient(http: OkHttpClient): LlmClient = HttpLlmClient(http)
 
     @Provides fun recordSource(repo: RecordRepository): RecordSource = repo
     @Provides fun recordStore(repo: RecordRepository): RecordStore = repo
     @Provides fun mapsSettings(store: SettingsStore): MapsSettings = store
+    @Provides fun llmSettings(store: SettingsStore): LlmSettings = store
     @Provides fun costMeter(store: SettingsStore): CostMeter = store
     @Provides fun addressBook(store: SettingsStore): AddressBook = store
     @Provides fun enrichmentStore(repo: RecordRepository): EnrichmentStore = repo
