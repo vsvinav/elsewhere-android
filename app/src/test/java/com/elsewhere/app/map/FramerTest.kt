@@ -37,4 +37,13 @@ class FramerTest {
         sharp.fit(paris, 80)
         assertEquals(camForBounds(paris, 512, 512, 40), moves.single().first)
     }
+
+    @Test fun `a host that frames bounds itself gets them in physical px, once the view has a size`() {
+        val asked = ArrayList<Triple<Bounds, IntSize, Int>>()
+        val own = Framer { b, size, pad -> asked += Triple(b, size, pad) }.apply { density = 2f }
+        own.fit(paris, 80)
+        assertEquals(emptyList<Triple<Bounds, IntSize, Int>>(), asked)
+        own.size = IntSize(1080, 1920)
+        assertEquals(listOf(Triple(paris, IntSize(1080, 1920), 80)), asked)
+    }
 }
