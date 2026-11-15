@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
 import kotlinx.coroutines.launch
+import com.elsewhere.app.ui.nav.Door
+import com.elsewhere.app.ui.nav.door
 
 /** A red rubber stamp, slammed onto the sheet on first composition. */
 @Composable
@@ -57,10 +59,10 @@ fun Stamp(text: String, modifier: Modifier = Modifier, color: Color = Poster.Red
  * tilted 9°. Red on stock; `color` swaps to ink or (on an ink bill) mustard.
  */
 @Composable
-fun RecordStamp(top: String, big: String, bottom: String? = null, modifier: Modifier = Modifier, color: Color = Poster.Red, size: Dp = 150.dp) {
+fun RecordStamp(top: String, big: String, bottom: String? = null, modifier: Modifier = Modifier, color: Color = Poster.Red, size: Dp = 150.dp, door: Door? = null) {
     val k = size / 150.dp
     Box(
-        modifier.size(size).rotate(-9f).border(5.dp * k, color, CircleShape).padding(6.dp * k).border(2.dp * k, color, CircleShape).padding(10.dp * k),
+        modifier.door(door).size(size).rotate(-9f).border(5.dp * k, color, CircleShape).padding(6.dp * k).border(2.dp * k, color, CircleShape).padding(10.dp * k),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

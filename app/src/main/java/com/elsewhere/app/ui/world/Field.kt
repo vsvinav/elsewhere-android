@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
+import com.elsewhere.app.ui.nav.Door
+import com.elsewhere.app.ui.nav.door
 
 /**
  * A printed input: ink on stock, a rule beneath instead of a box. `display` sets the headline
@@ -61,10 +63,10 @@ fun PosterTextField(
  * value prints as a ghost "not on record" (or "—" when big), as the web does.
  */
 @Composable
-fun Field(label: String, value: String?, modifier: Modifier = Modifier, big: Boolean = false) {
+fun Field(label: String, value: String?, modifier: Modifier = Modifier, big: Boolean = false, door: Door? = null) {
     val onInk = LocalContentColor.current == Poster.Stock
     val empty = value.isNullOrEmpty()
-    Column(modifier) {
+    Column(modifier.door(door)) {
         CapsText(label, size = 11.sp)
         Spacer(Modifier.height(6.dp))
         val color = if (empty) (if (onInk) Poster.Ink3 else Poster.Ghost) else LocalContentColor.current
