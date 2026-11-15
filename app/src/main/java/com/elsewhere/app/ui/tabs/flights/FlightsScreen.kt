@@ -1,5 +1,6 @@
 package com.elsewhere.app.ui.tabs.flights
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -38,10 +42,14 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.elsewhere.app.analytics.Port
 import com.elsewhere.app.ui.world.Bill
 import com.elsewhere.app.ui.world.CapsText
+import com.elsewhere.app.ui.world.DateRow
+import com.elsewhere.app.ui.world.DatesList
 import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.Field
+import com.elsewhere.app.ui.world.InkButton
 import com.elsewhere.app.ui.world.LocalMuted
 import com.elsewhere.app.ui.world.PList
 import com.elsewhere.app.ui.world.PRow
@@ -61,17 +69,19 @@ import com.elsewhere.app.ui.world.u
 fun FlightsTab(vm: FlightsViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
+    val pick by vm.pick.collectAsStateWithLifecycle()
     val u = ui
     if (u == null) { Box(Modifier.fillMaxSize().background(Poster.Stock)); return }
     // A new window reorders the routes, so the pick resets with it, as the web does.
     LaunchedEffect(u.byN) { vm.selected.value = null }
     var rotation by rememberSaveable(u.centre, stateSaver = RotationSaver) { mutableStateOf(u.centre) }
-    FlightsScreen(u, rotation, { rotation = it }, selected, vm::select)
+    FlightsScreen(u, rotation, { rotation = it }, selected, vm::select, pick, vm::pick)
 }
 
 @Composable
 fun FlightsScreen(
     ui: FlightsUi, rotation: Rotation, onRotate: (Rotation) -> Unit, selected: Int?, onSelect: (Int?) -> Unit,
+    pick: Int = 0, onPick: (Int) -> Unit = {},
     modifier: Modifier = Modifier, scroll: Boolean = true,
 ) {
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier)) {
@@ -84,6 +94,7 @@ fun FlightsScreen(
             return@Column
         }
         HeroBill(ui, rotation, onRotate, selected, onSelect)
+        FromBill(ui, pick, onPick)
         RoutesBill(ui, selected, onSelect)
         AirportsBill(ui)
     }
@@ -123,6 +134,57 @@ private fun HeroBill(ui: FlightsUi, rotation: Rotation, onRotate: (Rotation) -> 
 private fun Foot(left: String, right: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         CapsText(left, size = 11.sp); CapsText(right, size = 11.sp)
+    }
+}
+
+/**
+ * One airport at a time: its routes as a ledger, the airports they reach on a globe turned to face
+ * them, and a picker to change airport. Busiest first; the pick resets with the range.
+ */
+@Composable
+internal fun FromBill(ui: FlightsUi, pick: Int, onPick: (Int) -> Unit) {
+    val f = ui.from(pick) ?: return
+    val u = ui.units
+    val name = f.from.name
+    Bill {
+        // The web sets the name red beside "From", and drops it a line (`long`) past eight letters.
+        if (name.length > 8) {
+            DisplayText("From", 48.sp)
+            DisplayText(name, 40.sp, color = Poster.Red, maxLines = 2)
+        } else {
+            Row(verticalAlignment = Alignment.Bottom) { DisplayText("From", 48.sp); Spacer(Modifier.width(12.dp)); DisplayText(name, 48.sp, color = Poster.Red) }
+        }
+        Spacer(Modifier.height(18.dp))
+        AirportPicker(ui.named, pick, onPick)
+        Spacer(Modifier.height(18.dp))
+        DatesList(
+            f.shown.map { d -> DateRow(d.name, "${n0(u.cv(d.km))} ${u.u}", "${d.n}", plural(d.n, "flight")) },
+            Modifier.semantics { contentDescription = "Routes from $name" },
+            more = if (f.more > 0) ({ CapsText("+ ${f.more} more", color = Poster.Red, size = 12.sp) }) else null,
+        )
+        Spacer(Modifier.height(24.dp))
+        val centre = remember(f) { bestCentre(f.ports) }
+        Globe(f.hops, f.ports, ui.land, centre, onRotate = {}, selected = null, onSelect = {})
+        Spacer(Modifier.height(24.dp))
+        Foot("$name · ${f.legs} ${plural(f.legs, "flight")} · ${f.hops.size} ${plural(f.hops.size, "route")}", "${n0(u.cv(f.km))} ${u.u}")
+    }
+}
+
+/** The web's `<select>` of airports: a quiet ink button that opens a ruled menu, "<town> · n legs" a row. */
+@Composable
+private fun AirportPicker(named: List<Port>, pick: Int, onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val cur = named.getOrNull(pick.coerceIn(0, (named.size - 1).coerceAtLeast(0))) ?: return
+    Box {
+        InkButton("${cur.name} · ${cur.n} ${plural(cur.n, "leg")}  ▾", { open = true }, Modifier.semantics { contentDescription = "Airport" }, quiet = true)
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Poster.Stock, border = BorderStroke(2.dp, Poster.Ink), shape = RectangleShape) {
+            named.forEachIndexed { i, p ->
+                DropdownMenuItem(
+                    text = { Text("${p.name} · ${p.n} ${plural(p.n, "leg")}".uppercase(), color = if (i == pick) Poster.Red else Poster.Ink, style = PosterType.Caps.copy(fontSize = 11.sp)) },
+                    onClick = { open = false; onPick(i) },
+                )
+            }
+        }
     }
 }
 

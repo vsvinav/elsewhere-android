@@ -2,8 +2,10 @@ package com.elsewhere.app.ui.tabs.flights
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
@@ -28,10 +30,12 @@ class FlightsSnapshot {
     private val ui by lazy { flightsUi(SampleRecord.record, SampleRecord.profile, airports, land) }
     private val open get() = ui.byN.indexOfFirst { it.km > 8_000 }.takeIf { it >= 0 }
 
+    // Unbounded height, as a scrolling sheet would give: bills past the fold are laid out below it, not squeezed over it.
     private fun sheet(content: @Composable () -> Unit) = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { Column(Modifier.background(Poster.Stock)) { content() } } }
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { Column(Modifier.background(Poster.Stock).wrapContentHeight(Alignment.Top, unbounded = true)) { content() } } }
     }
 
     @Test fun globe() = sheet { FlightsScreen(ui, ui.centre, onRotate = {}, selected = open, onSelect = {}, scroll = false) }
     @Test fun ledger() = sheet { RoutesBill(ui, open) {}; AirportsBill(ui) }
+    @Test fun from() = sheet { FromBill(ui, 0) {} }
 }
