@@ -25,11 +25,22 @@ fun resolve(s: Settings, sdk: Boolean = Sdk.available): Provider = when (s.mapPr
     }
 }
 
-/** The one MapLibre host, kept across recompositions; the base map swaps underneath it as [Basemap] changes. */
+/**
+ * The host for the current base map, kept across recompositions: Google's SDK for [Basemap.Sdk], MapLibre for
+ * the rest, which swap their style underneath without a new host. Should the kind change mid-visit (a forced
+ * setting, say), the new host starts where the old one was looking so the view does not jump.
+ */
 @Composable
-fun rememberMapHost(initial: Cam = Cam(20.0, 0.0, 2f)): MapHost {
+fun rememberMapHost(basemap: Basemap, initial: Cam = Cam(20.0, 0.0, 2f)): MapHost {
     val scope = rememberCoroutineScope()
     // CameraState's constructor is internal to maplibre-compose, so the library remembers it for us.
     val libreState = rememberCameraState(initial.toLibre())
-    return remember { MapLibreHost(scope, initial, libreState) }
+    val previous = remember { arrayOfNulls<MapHost>(1) }
+    return remember(basemap is Basemap.Sdk) {
+        val cam = previous[0]?.camera?.value
+        val host: MapHost = if (basemap is Basemap.Sdk) GoogleMapHost(scope, cam ?: initial) else MapLibreHost(scope, cam ?: initial, libreState)
+        if (cam != null) host.moveTo(cam)
+        previous[0] = host
+        host
+    }
 }

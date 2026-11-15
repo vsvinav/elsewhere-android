@@ -107,7 +107,7 @@ fun ReplayTab(vm: PlaybackViewModel = hiltViewModel()) {
     val rec = data
     if (rec == null) { Box(Modifier.fillMaxSize().background(Poster.Stock)); return }
     val snackbar = remember { SnackbarHostState() }
-    val host = rememberMapHost()
+    val host = rememberMapHost(basemap)
     LaunchedEffect(tilesError) { tilesError?.let { snackbar.showSnackbar("Google refused the map tiles — using the free map. $it") } }
     LaunchedEffect(host) { host.viewport.collect { it?.let(vm::idle) } }
 

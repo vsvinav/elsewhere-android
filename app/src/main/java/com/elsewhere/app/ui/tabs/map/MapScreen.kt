@@ -104,7 +104,7 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
     val tilesError by vm.tilesError.collectAsStateWithLifecycle()
     val copyright by vm.copyright.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val host = rememberMapHost()
+    val host = rememberMapHost(basemap)
     LaunchedEffect(tilesError) { tilesError?.let { snackbar.showSnackbar("Google refused the map tiles — using the free map. $it") } }
     LaunchedEffect(host) { host.viewport.collect { it?.let(vm::idle) } }
     val density = LocalDensity.current
