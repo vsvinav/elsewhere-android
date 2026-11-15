@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
@@ -64,6 +66,7 @@ class RecordRepository @Inject constructor(
     private val settings: SettingsStore,
     private val cities: CitiesLoader,
     scope: CoroutineScope,
+    private val readyState: ReadyState = ReadyState(),
 ) : RecordSource, RecordStore, EnrichmentStore {
     private val importVersion = MutableStateFlow(0)
     private val placesVersion = MutableStateFlow(0)
@@ -89,13 +92,29 @@ class RecordRepository @Inject constructor(
     /** Photo URLs carry the key, so a key change re-prints the record. */
     private val photoKey = settings.settings.map { it.mapsKey }.distinctUntilChanged()
 
-    override val record: StateFlow<Record?> = combine(importVersion, shape, placesVersion, photoKey) { _, p, _, k -> p to k }
-        .mapLatest { (p, k) -> if (p == null || p.homes.isEmpty()) null else build(p, k) }
+    /** What a rebuild is for: a new import or a reshaped profile is "Working out trips"; names or photos landing are not. */
+    private data class Cause(val version: Int, val profile: Profile?, val placesVersion: Int, val key: String)
+
+    override val record: StateFlow<Record?> = combine(importVersion, shape, placesVersion, photoKey, ::Cause)
+        .runningFold(null as Pair<Cause?, Cause>?) { prev, c -> prev?.second to c }
+        .filterNotNull()
+        .mapLatest { (prev, c) ->
+            val p = c.profile
+            if (p == null || p.homes.isEmpty()) null
+            else if (prev != null && prev.version == c.version && prev.profile === c.profile) build(p, c.key)
+            else timed { build(p, c.key) }
+        }
         .flowOn(Dispatchers.Default)
         .stateIn(scope, SharingStarted.Eagerly, null)
 
     /** The record derived against a home at 0,0: enough for the onboarding suggestions, before any home is chosen. */
     override suspend fun provisionalRecord(): Record? = withContext(Dispatchers.Default) { build(PROVISIONAL, settings.settings.first().mapsKey) }
+
+    /** The readiness bar shows a rebuild as "Working out trips"; a failure leaves it cleared rather than stuck. */
+    private suspend inline fun timed(block: () -> Record?): Record? {
+        readyState.deriving()
+        return try { block().also { readyState.derived() } } catch (e: Throwable) { readyState.clear(); throw e }
+    }
 
     private suspend fun build(profile: Profile, key: String): Record? {
         val meta = db.importMeta().get() ?: return null
@@ -123,7 +142,10 @@ class RecordRepository @Inject constructor(
     }
 
     /** Parse `open()` once, hashing the bytes as they stream past, and replace whatever was stored. */
-    override suspend fun import(open: () -> InputStream, fileName: String, onProgress: (Float) -> Unit): ImportReport {
+    override suspend fun import(open: () -> InputStream, fileName: String, onProgress: (Float) -> Unit): ImportReport =
+        try { importInner(open, fileName) { onProgress(it); readyState.importing(it) } } catch (e: Throwable) { readyState.clear(); throw e }
+
+    private suspend fun importInner(open: () -> InputStream, fileName: String, onProgress: (Float) -> Unit): ImportReport {
         onProgress(0f)
         val digest = MessageDigest.getInstance("SHA-256")
         val parsed = withContext(Dispatchers.IO) {

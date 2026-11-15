@@ -42,7 +42,7 @@ class MapViewModelTest {
     private val maps = Fakes.Maps()
     private val tiles = Tiles()
     private val meter = MemoryCostMeter()
-    private fun vm() = MapViewModel(RangeStore(Fakes.Source(null), CoroutineScope(dispatcher)), maps, tiles, meter).also { run() }
+    private fun vm() = MapViewModel(RangeStore(Fakes.Source(null), CoroutineScope(dispatcher)), maps, tiles, meter, Fakes.lookups(maps, CoroutineScope(dispatcher))).also { run() }
 
     @Test fun `without a working key the base map is free and nothing is spent`() = runTest(dispatcher) {
         val vm = vm()

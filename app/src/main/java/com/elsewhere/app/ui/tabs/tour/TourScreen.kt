@@ -65,20 +65,20 @@ import kotlin.math.roundToInt
 @Composable
 fun TourTab(onGo: (Tab) -> Unit, vm: TourViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    ui?.let { TourScreen(it, onGo) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
+    ui?.let { TourScreen(it, onGo, onSeen = vm::seen) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
 }
 
 private fun lensColor(mode: String) = when (lensOf(mode)) { Lens.FLY -> Poster.Red; Lens.FOOT -> Poster.Mustard; else -> Poster.Ink }
 
 /** `scroll = false` lays the whole poster out at its full height, for snapshots. */
 @Composable
-fun TourScreen(ui: TourUi, onGo: (Tab) -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true) {
+fun TourScreen(ui: TourUi, onGo: (Tab) -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true, onSeen: (String) -> Unit = {}) {
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier)) {
         TourHero(ui, onGo)
         ui.nights?.let { NightsBill(it) }
         HeadlineBill(ui, onGo)
         SetlistBill(ui)
-        ResidencyBill(ui)
+        ResidencyBill(ui, onSeen)
         RecordsBill(ui)
         BackstageBill(ui)
     }
@@ -165,7 +165,7 @@ internal fun SetlistBill(ui: TourUi) {
 }
 
 @Composable
-internal fun ResidencyBill(ui: TourUi) {
+internal fun ResidencyBill(ui: TourUi, onSeen: (String) -> Unit = {}) {
     val f = ui.facts
     val hoursTotal = f.hours.home + f.hours.work + f.hours.other + f.hours.transit
     fun pct(h: Double) = (100 * h / max(1.0, hoursTotal)).roundToInt()
@@ -177,7 +177,7 @@ internal fun ResidencyBill(ui: TourUi) {
         Lede("${pct(f.hours.home)}% home · ${if (ui.hasWork) "${pct(f.hours.work)}% work · " else ""}${pct(f.hours.other)}% elsewhere · ${pct(f.hours.transit)}% moving. About ${toFixed(f.hours.other / max(1, f.days).toDouble(), 1)} hours a day somewhere else.")
         if (f.thirdPlaces.isNotEmpty()) {
             Spacer(Modifier.height(40.dp))
-            DatesList(f.thirdPlaces.map { DateRow(it.name, it.place.city, "${it.place.nVisits}", "visits") })
+            DatesList(f.thirdPlaces.map { DateRow(it.name, it.place.city, "${it.place.nVisits}", "visits", id = it.id.takeIf { _ -> it.place.name == null || it.place.photo == null }) }, onSeen = onSeen)
         }
     }
 }

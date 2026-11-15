@@ -2,6 +2,9 @@ package com.elsewhere.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -41,6 +44,7 @@ import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.NamingStamp
 import com.elsewhere.app.ui.world.Pass
 import com.elsewhere.app.ui.world.Poster
+import com.elsewhere.app.ui.world.ReadyBar
 
 private enum class Picking { FROM, TO }
 
@@ -82,12 +86,14 @@ fun AppScaffold(
     val profile by shell.profile.collectAsStateWithLifecycle()
     val counters by shell.counters.collectAsStateWithLifecycle()
     val naming by shell.naming.collectAsStateWithLifecycle()
+    val ready by shell.ready.collectAsStateWithLifecycle()
     val range by rangeVm.range.collectAsStateWithLifecycle()
     val bounds by rangeVm.bounds.collectAsStateWithLifecycle()
     val years by rangeVm.years.collectAsStateWithLifecycle()
     val from = dayOf(range.first); val to = dayOf(range.last)
     var picking by remember { mutableStateOf<Picking?>(null) }
 
+    Box {
     Scaffold(
         containerColor = Poster.Stock,
         topBar = {
@@ -110,6 +116,9 @@ fun AppScaffold(
             }
             NamingStamp(naming, Modifier.align(Alignment.TopEnd).padding(12.dp))
         }
+    }
+    // Along the very top edge, over the masthead, as the web fixes `.ready` at top 0.
+    ReadyBar(ready, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars))
     }
 
     val p = picking

@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.elsewhere.app.data.db.ElsewhereDb
 import com.elsewhere.app.data.db.decodePts
 import com.elsewhere.app.data.db.encodePts
+import com.elsewhere.app.ingest.Enrichment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +36,7 @@ class RecordRepositoryTest {
     private lateinit var scope: CoroutineScope
     private lateinit var repo: RecordRepository
     private lateinit var dir: File
+    private val ready = ReadyState()
 
     private val boston = Home(42.3632761, -71.0643721, "Boston", "US", 0, null)
     private val sf = Home(37.7749, -122.4194, "San Francisco", "US", 0, null)
@@ -46,7 +48,7 @@ class RecordRepositoryTest {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
         val store = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") }
-        repo = RecordRepository(db, SettingsStore(store), CitiesLoader(ctx), scope)
+        repo = RecordRepository(db, SettingsStore(store), CitiesLoader(ctx), scope, ready)
     }
 
     @After fun tearDown() { scope.cancel(); db.close(); dir.deleteRecursively() }
@@ -88,6 +90,24 @@ class RecordRepositoryTest {
         assertEquals(LatLng(sf.lat, sf.lng), second.profile.home)
         assertEquals(visitsBefore, db.visits().count())
         assertEquals(first.visits.size, second.visits.size)
+    }
+
+    @Test fun `a profile change reports deriving but a place lookup landing does not`() = runTest {
+        repo.import({ open() }, "mini_timeline.json")
+        repo.saveProfile(profile(boston))
+        val first = repo.record.first { it != null }!!
+        assertEquals(Ready("Working out trips", 100), ready.ready.value)
+
+        ready.clear()
+        repo.saveProfile(profile(sf))
+        repo.record.first { it != null && it.profile.home != first.profile.home }
+        assertEquals(Ready("Working out trips", 100), ready.ready.value)
+
+        ready.clear()
+        val id = first.places.keys.first()
+        repo.put(mapOf(id to Enrichment("Named stop", null, emptyList(), null, null)))
+        repo.record.first { it != null && it.places[id]?.name == "Named stop" }
+        assertNull(ready.ready.value)
     }
 
     @Test fun `pts round-trip through the blob codec`() {

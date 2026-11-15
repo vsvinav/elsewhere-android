@@ -15,6 +15,7 @@ import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.ui.shell.RangeStore
 import com.elsewhere.app.ui.world.NightsUi
 import com.elsewhere.app.ui.world.TrailLayout
@@ -60,7 +61,10 @@ fun tourUi(data: Record, raw: Record, profile: Profile?, land: FeatureCollection
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class TourViewModel @Inject constructor(range: RangeStore, store: RecordStore, landSource: LandSource) : ViewModel() {
+class TourViewModel @Inject constructor(private val range: RangeStore, store: RecordStore, landSource: LandSource, private val lookups: PlaceLookups) : ViewModel() {
+    /** A third-place row has scrolled into view: ask for its name and photo. */
+    fun seen(id: String) { range.filtered.value?.let { lookups.need(listOf(id), it.places) } }
+
     private data class In(val data: Record, val raw: Record, val profile: Profile?, val land: FeatureCollection?)
 
     val ui: StateFlow<TourUi?> = combine(range.filtered, range.raw, store.profile, flow { emit(landSource.get()) }) { data, raw, prof, l ->

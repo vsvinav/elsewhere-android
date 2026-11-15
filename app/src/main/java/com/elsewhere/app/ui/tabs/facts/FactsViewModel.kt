@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.analytics.Fact
 import com.elsewhere.app.analytics.Kind
 import com.elsewhere.app.analytics.facts
+import com.elsewhere.app.data.Place
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.ui.shell.RangeStore
 import com.elsewhere.app.ui.world.yearOf
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
@@ -47,6 +50,9 @@ data class FactsUi(val all: List<Fact>, val cards: List<Fact>, val rest: List<Fa
     fun count(k: Kind) = rest.count { it.kind == k }
 }
 
+/** The thirty most visited places, the ones the facts are likeliest to name. */
+fun busiest(places: Map<String, Place>, n: Int = 30): List<String> = places.entries.sortedByDescending { it.value.nVisits }.take(n).map { it.key }
+
 fun factsUi(data: Record, raw: Record, profile: Profile?): FactsUi {
     val units = profile?.units ?: Units.KM
     val all = facts(data, units, raw)
@@ -56,8 +62,10 @@ fun factsUi(data: Record, raw: Record, profile: Profile?): FactsUi {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class FactsViewModel @Inject constructor(range: RangeStore, store: RecordStore) : ViewModel() {
+class FactsViewModel @Inject constructor(range: RangeStore, store: RecordStore, lookups: PlaceLookups) : ViewModel() {
+    // The facts quote the busiest places by name, so the top thirty are asked for as the tab opens (Facts.tsx).
     val ui: StateFlow<FactsUi?> = combine(range.filtered, range.raw, store.profile) { data, raw, prof -> if (data == null || raw == null) null else Triple(data, raw, prof) }
+        .onEach { it?.second?.places?.let { ps -> lookups.need(busiest(ps), ps) } }
         .mapLatest { it?.let { (d, r, p) -> factsUi(d, r, p) } }
         .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 }

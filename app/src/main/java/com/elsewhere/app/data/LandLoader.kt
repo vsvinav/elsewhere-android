@@ -48,13 +48,13 @@ interface LandSource {
 
 /** Reads `assets/land.json` (world-atlas 1:110m countries, Antarctica dropped) once. */
 @Singleton
-class LandLoader @Inject constructor(@ApplicationContext private val context: Context) : LandSource {
+class LandLoader @Inject constructor(@ApplicationContext private val context: Context, private val readyState: ReadyState = ReadyState()) : LandSource {
     private val lock = Mutex()
     @Volatile private var cached: FeatureCollection? = null
 
     override suspend fun get(): FeatureCollection = cached ?: lock.withLock {
-        cached ?: withContext(Dispatchers.IO) {
+        cached ?: readyState.drawing { withContext(Dispatchers.IO) {
             FeatureCollection.fromJson(context.assets.open("land.json").bufferedReader().readText())
-        }.also { cached = it }
+        } }.also { cached = it }
     }
 }

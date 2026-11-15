@@ -83,7 +83,7 @@ private fun Entry(k: String, id: String, onKey: (String) -> Unit, onId: (String)
 }
 
 @Composable
-private fun Checking() {
+internal fun Checking() {
     DisplayText("Checking your key…", 56.sp)
     Spacer(Modifier.height(28.dp))
     Pass(Modifier.fillMaxWidth()) {
@@ -98,7 +98,7 @@ private fun Checking() {
 }
 
 @Composable
-private fun Result(report: KeyReport?, k: String, id: String, onKey: (String) -> Unit, ack: Boolean, actions: KeyActions) {
+internal fun Result(report: KeyReport?, k: String, id: String, onKey: (String) -> Unit, ack: Boolean, actions: KeyActions) {
     when {
         report == null -> {
             DisplayText("No key", 64.sp)

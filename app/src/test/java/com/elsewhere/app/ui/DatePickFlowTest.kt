@@ -12,7 +12,6 @@ import com.elsewhere.app.ui.shell.RangeStore
 import com.elsewhere.app.ui.shell.RangeViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import com.elsewhere.app.ingest.EnrichState
 import com.elsewhere.app.ui.shell.ShellViewModel
 import com.elsewhere.app.ui.shell.epoch
 import com.elsewhere.app.ui.world.ElsewhereTheme
@@ -33,7 +32,8 @@ class DatePickFlowTest {
         val record = Fx.record(range = Fx.utc(2024, 0, 1)..Fx.utc(2024, 11, 31))
         val range = RangeViewModel(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main)))
         rule.setContent {
-            val shell = remember { ShellViewModel(Fakes.Store(record), Fakes.Maps(), EnrichState()) }
+            val maps = Fakes.Maps()
+            val shell = remember { ShellViewModel(Fakes.Store(record), maps, Fakes.lookups(maps, CoroutineScope(Dispatchers.Main))) }
             ElsewhereTheme { AppScaffold({}, {}, shell, range, content = { t, _ -> Placeholder(t) }) }
         }
         rule.onNodeWithText("1 JAN 2024").performClick()

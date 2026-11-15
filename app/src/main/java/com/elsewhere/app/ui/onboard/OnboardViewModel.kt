@@ -12,16 +12,17 @@ import com.elsewhere.app.data.ImportReport
 import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
+import com.elsewhere.app.data.ReadyState
+import com.elsewhere.app.data.Ready
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.data.Work
 import com.elsewhere.app.ingest.Geocoder
-import com.elsewhere.app.ingest.KeyChecker
+import com.elsewhere.app.ingest.KeyVerifier
 import com.elsewhere.app.ingest.PlaceNamer
 import com.elsewhere.app.ingest.Progress
 import com.elsewhere.app.ingest.properName
 import com.elsewhere.app.ingest.KeyReport
-import com.elsewhere.app.ingest.Probe
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,7 +67,7 @@ data class OnboardState(
     val report: ImportReport? = null,
     val range: LongRange = 0L..0L,
     val sleep: List<Candidate> = emptyList(),
-    /** Set while the candidate cards are still being named. */
+    /** Set while the shared lookups are still naming candidate cards (the web's `useNaming`). */
     val naming: Progress? = null,
     val weekday: List<Candidate> = emptyList(),
     val moves: List<Move> = emptyList(),
@@ -110,11 +111,14 @@ fun monthOf(ts: Long): YearMonth = YearMonth.from(LocalDate.ofEpochDay(Math.floo
 
 @HiltViewModel
 class OnboardViewModel @Inject constructor(
-    private val store: RecordStore, private val maps: MapsSettings, private val checker: KeyChecker,
-    private val namer: PlaceNamer, private val geocoder: Geocoder,
+    private val store: RecordStore, private val maps: MapsSettings, private val verifier: KeyVerifier,
+    private val namer: PlaceNamer, private val geocoder: Geocoder, readyState: ReadyState = ReadyState(),
 ) : ViewModel(), OnboardActions, KeyActions {
+    val ready: StateFlow<Ready?> = readyState.ready
     private val _state = MutableStateFlow(OnboardState())
     val state: StateFlow<OnboardState> = _state
+
+    init { viewModelScope.launch { namer.progress.collect { p -> _state.update { it.copy(naming = p) } } } }
     /** Open the door at `step`: the import for a new record, a question or the key when editing. Resets what was there. */
     fun start(step: Step) {
         val editing = step != Step.Import
@@ -164,13 +168,7 @@ class OnboardViewModel @Inject constructor(
         val s = maps.settings.first()
         val paid = s.mapsKey.isNotBlank() && s.keyPlaces
         val todo = (_state.value.sleep + _state.value.weekday).filter { !it.named }.distinctBy { it.placeId }
-        if (todo.isEmpty()) return
-        _state.update { it.copy(naming = Progress(0, todo.size)) }
-        try {
-            todo.forEachIndexed { i, c -> name(c, rec, s.mapsKey, paid); _state.update { it.copy(naming = Progress(i + 1, todo.size)) } }
-        } finally {
-            _state.update { it.copy(naming = null) }
-        }
+        for (c in todo) name(c, rec, s.mapsKey, paid)
     }
 
     private suspend fun name(c: Candidate, rec: Record, key: String, paid: Boolean) {
@@ -191,13 +189,7 @@ class OnboardViewModel @Inject constructor(
         if (_state.value.keyPhase == KeyPhase.Checking) return
         _state.update { it.copy(key = k, mapId = mapId.trim(), keyPhase = KeyPhase.Checking, keyReport = null, limitedAck = false) }
         viewModelScope.launch {
-            val cur = maps.settings.first()
-            // A new key is unproven until its probes answer: nothing paid may run on it in the meantime.
-            val fresh = if (k == cur.mapsKey) cur else cur.copy(keyPlaces = false, keyTiles = false, keyCheckedAt = 0, limitedAccepted = false)
-            maps.saveSettings(fresh.copy(mapsKey = k, mapId = mapId.trim()))
-            val report = checker.run(k)
-            val now = maps.settings.first()
-            maps.saveSettings(now.copy(keyPlaces = report.places == Probe.Ok, keyTiles = report.tiles == Probe.Ok, keyCheckedAt = System.currentTimeMillis()))
+            val report = verifier.verify(k, mapId.trim())
             _state.update { it.copy(keyPhase = KeyPhase.Result, keyReport = report) }
         }
     }
@@ -222,7 +214,7 @@ class OnboardViewModel @Inject constructor(
     override fun acceptLimited() {
         if (!_state.value.limitedAck) return
         viewModelScope.launch {
-            maps.saveSettings(maps.settings.first().copy(limitedAccepted = true))
+            verifier.acceptLimited()
             leaveKey()
         }
     }

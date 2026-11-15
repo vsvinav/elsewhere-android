@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import com.elsewhere.app.ingest.KeyReport
+import com.elsewhere.app.ingest.KeyVerifier
 import com.elsewhere.app.ingest.Probe
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -53,7 +54,7 @@ class OnboardViewModelTest {
 
     private fun imported(): Triple<OnboardViewModel, Fakes.Store, Fakes.Maps> {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
-        val vm = OnboardViewModel(store, maps, checker, namer, geo)
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo)
         vm.start(Step.Import); run()
         vm.import({ ByteArrayInputStream("{}".toByteArray()) }, "Timeline.json"); run()
         return Triple(vm, store, maps)
@@ -76,7 +77,7 @@ class OnboardViewModelTest {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
         maps.cur.value = Settings(mapsKey = "k", keyPlaces = true, keyTiles = true)
         store.hasImport.value = true
-        val vm = OnboardViewModel(store, maps, checker, namer, geo)
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo)
         vm.start(Step.Name); run()
         assertEquals(listOf("The flat", "Barton Hills Bungalow"), vm.state.value.sleep.map { it.label })
         assertEquals(listOf(listOf("austin")), namer.asked) // the flat already has a proper name
@@ -150,7 +151,7 @@ class OnboardViewModelTest {
     @Test fun `editing the key from settings re-checks and closes the door`() = runTest(dispatcher) {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
         maps.cur.value = Settings(mapsKey = "old", keyPlaces = true, keyTiles = true, keyCheckedAt = 5)
-        val vm = OnboardViewModel(store, maps, checker, namer, geo)
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo)
         vm.start(Step.Key); run()
         assertEquals(KeyPhase.Entry, vm.state.value.keyPhase)
         vm.recheckKey(); run()

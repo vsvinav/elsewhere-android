@@ -29,7 +29,7 @@ import com.elsewhere.app.ingest.AddressBook
 import com.elsewhere.app.ingest.CostMeter
 import com.elsewhere.app.ingest.EnrichmentStore
 import com.elsewhere.app.ingest.Geocoder
-import com.elsewhere.app.ingest.Enricher
+import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.ingest.Nominatim
 import com.elsewhere.app.ingest.PlaceNamer
 import com.elsewhere.app.ingest.KeyCheck
@@ -57,7 +57,7 @@ object AppModule {
     @Provides fun addressBook(store: SettingsStore): AddressBook = store
     @Provides fun enrichmentStore(repo: RecordRepository): EnrichmentStore = repo
     @Provides fun geocoder(n: Nominatim): Geocoder = n
-    @Provides fun placeNamer(e: Enricher): PlaceNamer = e
+    @Provides fun placeNamer(l: PlaceLookups): PlaceNamer = l
     @Provides fun tileService(t: GoogleTiles): TileService = t
     @Provides fun landSource(loader: LandLoader): LandSource = loader
 
