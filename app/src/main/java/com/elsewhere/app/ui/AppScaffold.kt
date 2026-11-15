@@ -67,7 +67,9 @@ fun AppScaffold(
     var selected by rememberSaveable { mutableStateOf(Tab.TOUR) }
     val go = { t: Tab ->
         selected = t
-        nav.navigate(t.route) { popUpTo(Tab.TOUR.route) { inclusive = t == Tab.TOUR }; launchSingleTop = true }
+        // Returning home pops back to the live Tour entry so its view model and scroll survive.
+        if (t == Tab.TOUR) { if (!nav.popBackStack(Tab.TOUR.route, inclusive = false)) nav.navigate(t.route) { launchSingleTop = true } }
+        else nav.navigate(t.route) { popUpTo(Tab.TOUR.route); launchSingleTop = true }
     }
     BackHandler(enabled = tab != Tab.TOUR) { go(Tab.TOUR) }
 

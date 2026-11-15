@@ -3,6 +3,8 @@ package com.elsewhere.app.ui.tabs.stops
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -149,7 +151,8 @@ internal fun StopsHeader(ui: StopsUi, onFilter: (StopsFilter) -> Unit) {
 private fun Chip(label: String, n: String?, on: Boolean, role: Role = Role.Checkbox, swatch: Color? = null, onClick: () -> Unit) {
     Row(
         Modifier.background(if (on) Poster.Ink else Poster.Stock).border(2.dp, Poster.Ink)
-            .clickable(role = role, onClick = onClick).semantics { contentDescription = label }
+            .then(if (role == Role.RadioButton) Modifier.selectable(selected = on, role = role, onClick = onClick) else Modifier.toggleable(value = on, role = role, onValueChange = { onClick() }))
+            .semantics { contentDescription = label }
             .padding(horizontal = 9.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

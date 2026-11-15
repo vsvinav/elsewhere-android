@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -135,7 +136,7 @@ internal fun FactsHero(ui: FactsUi, only: Kind?, onOnly: (Kind) -> Unit, onShuff
 private fun KindChip(label: String, n: Int, on: Boolean, onClick: () -> Unit) {
     Row(
         Modifier.background(if (on) Poster.Ink else Poster.Stock).border(2.dp, Poster.Ink)
-            .clickable(role = Role.Checkbox, onClick = onClick).semantics { contentDescription = "Show only $label" }
+            .toggleable(value = on, role = Role.Checkbox, onValueChange = { onClick() }).semantics { contentDescription = "Show only $label" }
             .padding(horizontal = 9.dp, vertical = 5.dp),
     ) {
         val style = PosterType.Display.copy(fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.02.em, lineHeight = 1.em)

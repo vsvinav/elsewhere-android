@@ -141,7 +141,7 @@ internal fun HeadlineBill(ui: TourUi, onGo: (Tab) -> Unit) {
         Box(Modifier.fillMaxWidth().padding(end = 12.dp), contentAlignment = Alignment.CenterEnd) {
             PlaceSticker(
                 ui.actPlace, ui.actName ?: act.city, ui.actSub, Modifier.fillMaxWidth(0.78f), tilt = 2f, onClick = { onGo(Tab.STOPS) },
-                stamp = { RecordStamp("", "${(u.cv(act.km) / 100).roundToInt() / 10.0}k", "${u.u} out", size = 84.dp) },
+                stamp = { RecordStamp("", "${toFixed((u.cv(act.km) / 100).roundToInt() / 10.0, 1).removeSuffix(".0")}k", "${u.u} out", size = 84.dp) },
             )
         }
     }

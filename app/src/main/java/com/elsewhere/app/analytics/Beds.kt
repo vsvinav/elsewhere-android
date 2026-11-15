@@ -13,7 +13,7 @@ data class Run(val from: String, val to: String, val n: Int)
 private const val NIGHT_HOUR = 3
 private const val HOME_RADIUS_KM = 30
 
-internal fun dayKey(ts: Long): String = LocalDate.ofEpochDay(Math.floorDiv(ts, 86400L)).toString()
+fun dayKey(ts: Long): String = LocalDate.ofEpochDay(Math.floorDiv(ts, 86400L)).toString()
 
 /** Each local 03:00 instant inside a stay, with the local date it belongs to. */
 private fun nightsOf(v: Visit): List<String> {

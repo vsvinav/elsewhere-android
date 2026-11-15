@@ -63,7 +63,7 @@ fun tourUi(data: Record, raw: Record, profile: Profile?, land: FeatureCollection
 class TourViewModel @Inject constructor(range: RangeStore, store: RecordStore, landSource: LandSource) : ViewModel() {
     private data class In(val data: Record, val raw: Record, val profile: Profile?, val land: FeatureCollection?)
 
-    val ui: StateFlow<TourUi?> = combine(range.filtered, range.raw, store.profile, flow { emit(null); emit(landSource.get()) }) { data, raw, prof, l ->
+    val ui: StateFlow<TourUi?> = combine(range.filtered, range.raw, store.profile, flow { emit(landSource.get()) }) { data, raw, prof, l ->
         if (data == null || raw == null) null else In(data, raw, prof, l)
     }.mapLatest { it?.run { tourUi(data, raw, profile, land) } }
         .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)

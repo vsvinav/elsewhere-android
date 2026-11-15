@@ -30,7 +30,7 @@ class DatesSnapshot {
                 Column(Modifier.fillMaxWidth().background(Poster.Stock).padding(12.dp)) {
                     TripsHeader(ui)
                     androidx.compose.foundation.layout.Spacer(Modifier.padding(12.dp))
-                    TripPass(ui.trips.first(), ui.units, open = true) {}
+                    TripPass(ui.trips.first(), ui.units, open = true, detail = tripDetail(ui.data, ui.strip, ui.trips.first().trip)) {}
                 }
             }
         }
