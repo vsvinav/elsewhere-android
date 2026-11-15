@@ -11,10 +11,12 @@ plugins {
 // The version comes from the release tag (CI passes -Pelsewhere.version=0.9.0); a local build is 0.0.0.
 val appVersion: String = (findProperty("elsewhere.version") as String?)?.removePrefix("v")?.takeIf { it.isNotBlank() } ?: "0.0.0"
 
-/** "1.2.3" → 10203, so every release installs over the one before. */
+/** "1.2.3" → 1020399, "2.0.0-alpha.3" → 2000003, so every release installs over the one before and pre-releases sit below their final. */
 fun versionCodeOf(v: String): Int {
-    val (a, b, c) = v.split(".").map { it.toInt() } + listOf(0, 0, 0)
-    return (a * 10_000 + b * 100 + c).coerceAtLeast(1)
+    val (base, pre) = v.split("-", limit = 2) + listOf("")
+    val (a, b, c) = base.split(".").map { it.toInt() } + listOf(0, 0, 0)
+    val n = pre.substringAfterLast('.', "").toIntOrNull() ?: 0
+    return (a * 1_000_000 + b * 10_000 + c * 100 + (if (pre.isEmpty()) 99 else n.coerceIn(0, 98))).coerceAtLeast(1)
 }
 
 // One keystore for every published APK, so an upgrade installs in place and keeps the phone's recorded data.
