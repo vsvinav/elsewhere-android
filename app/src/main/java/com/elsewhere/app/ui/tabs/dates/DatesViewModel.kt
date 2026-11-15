@@ -12,6 +12,7 @@ import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Trip
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.ui.shell.RangeStore
 import com.elsewhere.app.ui.world.NightsUi
 import com.elsewhere.app.ui.world.nightsUi
@@ -73,7 +74,10 @@ fun tripDetail(data: Record, strip: List<Night>, t: Trip): TripDetail {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class DatesViewModel @Inject constructor(range: RangeStore, store: RecordStore) : ViewModel() {
+class DatesViewModel @Inject constructor(private val range: RangeStore, store: RecordStore, private val lookups: PlaceLookups) : ViewModel() {
+    /** A stop on an open trip has scrolled into view: ask for its name and photo. */
+    fun seen(id: String) { range.filtered.value?.let { lookups.need(listOf(id), it.places) } }
+
     val ui: StateFlow<DatesUi?> = combine(range.filtered, range.raw, store.profile) { d, r, p -> if (d == null || r == null) null else Triple(d, r, p) }
         .mapLatest { it?.let { (d, r, p) -> datesUi(d, r, p) } }
         .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)

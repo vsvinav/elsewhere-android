@@ -19,7 +19,6 @@ import com.elsewhere.app.ui.shell.RangeStore
 import com.elsewhere.app.ui.shell.RangeViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import com.elsewhere.app.ingest.EnrichState
 import com.elsewhere.app.ui.shell.ShellViewModel
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import org.junit.Rule
@@ -47,7 +46,7 @@ class RootFlowTest {
         val onboard = OnboardViewModel(store, maps, Fakes.Checker(), Fakes.Namer(), Fakes.Geo())
         rule.setContent {
             val root = remember { RootViewModel(store, Fakes.Land) }
-            val shell = remember { ShellViewModel(store, maps, EnrichState()) }
+            val shell = remember { ShellViewModel(store, maps, Fakes.lookups(maps, CoroutineScope(Dispatchers.Main))) }
             val range = remember { RangeViewModel(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main))) }
             ElsewhereTheme {
                 Root(

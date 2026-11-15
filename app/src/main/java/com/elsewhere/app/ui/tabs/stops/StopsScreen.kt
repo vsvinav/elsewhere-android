@@ -63,6 +63,7 @@ import com.elsewhere.app.ui.world.countUp
 import com.elsewhere.app.ui.world.date
 import com.elsewhere.app.ui.world.hours
 import com.elsewhere.app.ui.world.n0
+import com.elsewhere.app.ui.world.onFirstVisible
 import kotlinx.coroutines.launch
 
 // Port of web/src/tabs/Places/Places.tsx: a luggage tag per place, filters up top, one open at a time.
@@ -72,11 +73,11 @@ private const val PAGE = 48
 @Composable
 fun StopsTab(vm: StopsViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    ui?.let { StopsScreen(it, vm::setFilter) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
+    ui?.let { StopsScreen(it, vm::setFilter, onSeen = vm::seen) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
 }
 
 @Composable
-fun StopsScreen(ui: StopsUi, onFilter: (StopsFilter) -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true) {
+fun StopsScreen(ui: StopsUi, onFilter: (StopsFilter) -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true, onSeen: (String) -> Unit = {}) {
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     var limit by rememberSaveable(ui.filter) { mutableIntStateOf(PAGE) }
     val sel = open?.let { id -> ui.list.firstOrNull { it.id == id } }
@@ -93,7 +94,7 @@ fun StopsScreen(ui: StopsUi, onFilter: (StopsFilter) -> Unit, modifier: Modifier
             Spacer(Modifier.height(20.dp))
             shown.chunked(2).forEachIndexed { r, pair ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    pair.forEachIndexed { c, s -> Tag(s, r * 2 + c, open == s.id, Modifier.weight(1f)) { open = s.id } }
+                    pair.forEachIndexed { c, s -> Tag(s, r * 2 + c, open == s.id, Modifier.weight(1f).seen(s, onSeen)) { open = s.id } }
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(16.dp))
@@ -106,13 +107,16 @@ fun StopsScreen(ui: StopsUi, onFilter: (StopsFilter) -> Unit, modifier: Modifier
         contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item(span = { GridItemSpan(2) }) { Column { header(); Spacer(Modifier.height(4.dp)) } }
-        itemsIndexed(shown, key = { _, s -> s.id }) { i, s -> Tag(s, i, open == s.id, onClick = { open = s.id; scope.launch { grid.animateScrollToItem(0) } }) }
+        itemsIndexed(shown, key = { _, s -> s.id }) { i, s -> Tag(s, i, open == s.id, Modifier.seen(s, onSeen)) { open = s.id; scope.launch { grid.animateScrollToItem(0) } } }
         if (limit < ui.list.size) item(span = { GridItemSpan(2) }) {
             val more = minOf(PAGE, ui.list.size - limit)
             Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) { InkButton("Print $more more tags", { limit += PAGE }) }
         }
     }
 }
+
+/** A tag still missing its name or photo asks for them the first time it is on screen (the web's `useInView`). */
+private fun Modifier.seen(s: Stop, onSeen: (String) -> Unit) = if (s.place.name == null || s.place.photo == null) onFirstVisible { onSeen(s.id) } else this
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

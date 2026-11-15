@@ -81,18 +81,19 @@ fun Legend(items: List<Pair<String, Color>>, modifier: Modifier = Modifier) {
 }
 
 /** One line of a .dates list: the place, a small note, the number and its unit. */
-data class DateRow(val where: String, val whereSmall: String? = null, val n: String, val nSmall: String? = null)
+/** `id` names the place the row prints, when it should be looked up as it scrolls in. */
+data class DateRow(val where: String, val whereSmall: String? = null, val n: String, val nSmall: String? = null, val id: String? = null)
 
 private val Small = PosterType.Caps.copy(fontSize = 11.sp, letterSpacing = 0.2.em)
 
 /** The web's `.dates` list: ruled rows set in bold display caps. `loud` sets the numbers red and bigger. */
 @Composable
-fun DatesList(rows: List<DateRow>, modifier: Modifier = Modifier, loud: Boolean = false, more: (@Composable () -> Unit)? = null) {
+fun DatesList(rows: List<DateRow>, modifier: Modifier = Modifier, loud: Boolean = false, more: (@Composable () -> Unit)? = null, onSeen: (String) -> Unit = {}) {
     val ink = LocalContentColor.current
     Column(modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(Rule).background(ink))
         for (r in rows) {
-            Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
+            Row(Modifier.fillMaxWidth().seenAs(r.id, onSeen).padding(top = 14.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     Text(r.where.uppercase(), Modifier.weight(1f, fill = false), style = PosterType.Display.copy(fontSize = if (loud) 34.sp else 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.01.em, lineHeight = 1.em), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (r.whereSmall != null) { Spacer(Modifier.width(10.dp)); Text(r.whereSmall.uppercase(), color = LocalMuted.current, style = Small, maxLines = 1) }
@@ -151,12 +152,12 @@ fun PTable(headers: List<String>, rows: List<List<String>>, modifier: Modifier =
 
 /** The web's `.plist`: rank in red, name over a note, figure at right. */
 @Composable
-fun PList(rows: List<PRow>, modifier: Modifier = Modifier) {
+fun PList(rows: List<PRow>, modifier: Modifier = Modifier, onSeen: (String) -> Unit = {}) {
     val ink = LocalContentColor.current
     Column(modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(Rule).background(ink))
         rows.forEachIndexed { i, r ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.Top) {
+            Row(Modifier.fillMaxWidth().seenAs(r.id, onSeen).padding(vertical = 14.dp), verticalAlignment = Alignment.Top) {
                 Text("${i + 1}", Modifier.width(36.dp).padding(top = 6.dp), color = Poster.Red, style = PosterType.Display.copy(fontSize = 14.sp, fontWeight = FontWeight.ExtraBold))
                 Column(Modifier.weight(1f)) {
                     Text(r.name.uppercase(), style = PosterType.Display.copy(fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -170,4 +171,7 @@ fun PList(rows: List<PRow>, modifier: Modifier = Modifier) {
     }
 }
 
-data class PRow(val name: String, val sub: String?, val n: String)
+data class PRow(val name: String, val sub: String?, val n: String, val id: String? = null)
+
+/** A row naming a place asks for its lookup once it is on screen; rows without an id are left alone. */
+private fun Modifier.seenAs(id: String?, onSeen: (String) -> Unit) = if (id == null) this else onFirstVisible { onSeen(id) }

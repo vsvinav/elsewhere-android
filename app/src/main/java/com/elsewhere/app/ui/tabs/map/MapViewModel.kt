@@ -7,6 +7,7 @@ import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.TileService
 import com.elsewhere.app.data.Viewport
 import com.elsewhere.app.ingest.CostMeter
+import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.map.Basemap
 import com.elsewhere.app.map.Basemaps
 import com.elsewhere.app.map.PinLayers
@@ -28,7 +29,8 @@ import javax.inject.Inject
 /** The Map tab's state: the pins of the record in the current window, what the chips and search leave of them, and the base map. */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class MapViewModel @Inject constructor(range: RangeStore, maps: MapsSettings, tiles: TileService, meter: CostMeter) : ViewModel() {
+class MapViewModel @Inject constructor(private val range: RangeStore, maps: MapsSettings, tiles: TileService, meter: CostMeter, private val lookups: PlaceLookups) : ViewModel() {
+    fun seen(id: String) { range.filtered.value?.let { lookups.need(listOf(id), it.places) } }
     private val basemaps = Basemaps(viewModelScope, maps, tiles, meter)
     val basemap: StateFlow<Basemap> get() = basemaps.basemap
     val copyright: StateFlow<String?> get() = basemaps.copyright

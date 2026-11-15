@@ -61,11 +61,11 @@ import kotlinx.coroutines.withContext
 @Composable
 fun DatesTab(vm: DatesViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    ui?.let { DatesScreen(it) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
+    ui?.let { DatesScreen(it, onSeen = vm::seen) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
 }
 
 @Composable
-fun DatesScreen(ui: DatesUi, modifier: Modifier = Modifier, scroll: Boolean = true, trips: Boolean = true) {
+fun DatesScreen(ui: DatesUi, modifier: Modifier = Modifier, scroll: Boolean = true, trips: Boolean = true, onSeen: (String) -> Unit = {}) {
     var open by rememberSaveable { mutableStateOf<Long?>(null) }
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier)) {
         ui.nights?.let { NightsBill(it, first = true) }
@@ -77,7 +77,7 @@ fun DatesScreen(ui: DatesUi, modifier: Modifier = Modifier, scroll: Boolean = tr
                 val detail by produceState<TripDetail?>(null, isOpen, ui) {
                     value = if (isOpen) withContext(Dispatchers.Default) { tripDetail(ui.data, ui.strip, t.trip) } else null
                 }
-                TripPass(t, ui.units, isOpen, detail) { open = if (isOpen) null else t.trip.start }
+                TripPass(t, ui.units, isOpen, detail, onSeen) { open = if (isOpen) null else t.trip.start }
             }
         }
     }
@@ -117,7 +117,7 @@ private fun Route(cities: List<String>, size: androidx.compose.ui.unit.TextUnit)
 }
 
 @Composable
-internal fun TripPass(t: TripUi, units: Units, open: Boolean, detail: TripDetail?, onToggle: () -> Unit) {
+internal fun TripPass(t: TripUi, units: Units, open: Boolean, detail: TripDetail?, onSeen: (String) -> Unit = {}, onToggle: () -> Unit) {
     val trip = t.trip
     val dest = trip.anchorCities.take(3)
     Pass(stub = {
@@ -158,7 +158,7 @@ internal fun TripPass(t: TripUi, units: Units, open: Boolean, detail: TripDetail
                     val visited = detail?.visited.orEmpty()
                     if (visited.isNotEmpty()) {
                         Spacer(Modifier.height(22.dp))
-                        PList(visited.map { PRow(placeName(it.place, it.id), it.place?.city ?: "", "${it.n}") })
+                        PList(visited.map { PRow(placeName(it.place, it.id), it.place?.city ?: "", "${it.n}", id = it.id.takeIf { _ -> it.place?.name == null || it.place.photo == null }) }, onSeen = onSeen)
                     }
                 }
             }

@@ -92,6 +92,8 @@ private val FIT_PAD = 48.dp
 data class MapActions(
     val toggle: (Cat) -> Unit = {}, val only: (Cat) -> Unit = {}, val showAll: () -> Unit = {},
     val search: (String) -> Unit = {}, val select: (String?) -> Unit = {}, val sizeBy: (SizeBy) -> Unit = {}, val fit: () -> Unit = {},
+    /** The open pin wants its name and photo. */
+    val seen: (String) -> Unit = {},
 )
 
 @Composable
@@ -125,7 +127,7 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
         }
     }
 
-    val acts = MapActions(vm::toggle, vm::only, vm::showAll, vm::search, vm::select, vm::sizeBy, fit = { layers?.let { fit(it, opts) } })
+    val acts = MapActions(vm::toggle, vm::only, vm::showAll, vm::search, vm::select, vm::sizeBy, fit = { layers?.let { fit(it, opts) } }, seen = vm::seen)
     MapScreen(layers, opts, acts, snackbar = snackbar) { m ->
         host.Content(m, basemap, copyright) {
             layers?.let { PinCanvas(host, it, opts, Modifier.fillMaxSize()) }
@@ -148,7 +150,10 @@ fun MapScreen(
         Box(Modifier.fillMaxWidth().weight(1f).border(2.dp, Poster.Ink)) {
             map(Modifier.fillMaxSize().padding(2.dp))
             val sel = opts.selected?.let { id -> layers?.all?.firstOrNull { it.id == id } ?: layers?.homes?.firstOrNull { it.id == id } }
-            if (sel != null) PinCard(sel, Modifier.align(Alignment.BottomCenter).padding(12.dp)) { acts.select(null) }
+            if (sel != null) {
+                LaunchedEffect(sel.id) { if (sel.place.name == null || sel.place.photo == null) acts.seen(sel.id) }
+                PinCard(sel, Modifier.align(Alignment.BottomCenter).padding(12.dp)) { acts.select(null) }
+            }
             if (snackbar != null) SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
         }
         PinHud(sum, opts.sizeBy, acts)

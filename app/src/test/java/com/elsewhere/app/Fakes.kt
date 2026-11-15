@@ -11,7 +11,14 @@ import com.elsewhere.app.data.RecordSource
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Settings
 import com.elsewhere.app.data.Place
+import com.elsewhere.app.ingest.DetailsSource
+import com.elsewhere.app.ingest.EnrichState
+import com.elsewhere.app.ingest.Enrichment
 import com.elsewhere.app.ingest.Geocoder
+import com.elsewhere.app.ingest.MemoryCostMeter
+import com.elsewhere.app.ingest.MemoryEnrichmentStore
+import com.elsewhere.app.ingest.PlaceLookups
+import kotlinx.coroutines.CoroutineScope
 import com.elsewhere.app.ingest.KeyChecker
 import com.elsewhere.app.ingest.PlaceNamer
 import com.elsewhere.app.ingest.KeyReport
@@ -53,6 +60,7 @@ object Fakes {
     /** Hands back a scripted name per leading place id and records what it was asked. */
     class Namer(val names: Map<String, String> = emptyMap()) : PlaceNamer {
         val asked = ArrayList<List<String>>()
+        override val progress = MutableStateFlow<com.elsewhere.app.ingest.Progress?>(null)
         override suspend fun name(ids: List<String>, all: Map<String, Place>, key: String): String? { asked += ids; return names[ids.first()] }
     }
 
@@ -64,6 +72,12 @@ object Fakes {
     class Source(initial: Record? = null) : RecordSource {
         override val record = MutableStateFlow(initial)
     }
+
+    /** Place lookups that never go out: a key-less pool over an empty store. */
+    fun lookups(maps: Maps, scope: CoroutineScope) = PlaceLookups(
+        object : DetailsSource { override suspend fun details(id: String, key: String) = Enrichment.NONE },
+        MemoryEnrichmentStore(), MemoryCostMeter(), EnrichState(), scope, maps.settings,
+    )
 
     object Land : LandSource {
         override suspend fun get() = FeatureCollection(emptyList())

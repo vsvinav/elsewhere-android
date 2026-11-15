@@ -66,7 +66,7 @@ data class OnboardState(
     val report: ImportReport? = null,
     val range: LongRange = 0L..0L,
     val sleep: List<Candidate> = emptyList(),
-    /** Set while the candidate cards are still being named. */
+    /** Set while the shared lookups are still naming candidate cards (the web's `useNaming`). */
     val naming: Progress? = null,
     val weekday: List<Candidate> = emptyList(),
     val moves: List<Move> = emptyList(),
@@ -115,6 +115,8 @@ class OnboardViewModel @Inject constructor(
 ) : ViewModel(), OnboardActions, KeyActions {
     private val _state = MutableStateFlow(OnboardState())
     val state: StateFlow<OnboardState> = _state
+
+    init { viewModelScope.launch { namer.progress.collect { p -> _state.update { it.copy(naming = p) } } } }
     /** Open the door at `step`: the import for a new record, a question or the key when editing. Resets what was there. */
     fun start(step: Step) {
         val editing = step != Step.Import
@@ -164,13 +166,7 @@ class OnboardViewModel @Inject constructor(
         val s = maps.settings.first()
         val paid = s.mapsKey.isNotBlank() && s.keyPlaces
         val todo = (_state.value.sleep + _state.value.weekday).filter { !it.named }.distinctBy { it.placeId }
-        if (todo.isEmpty()) return
-        _state.update { it.copy(naming = Progress(0, todo.size)) }
-        try {
-            todo.forEachIndexed { i, c -> name(c, rec, s.mapsKey, paid); _state.update { it.copy(naming = Progress(i + 1, todo.size)) } }
-        } finally {
-            _state.update { it.copy(naming = null) }
-        }
+        for (c in todo) name(c, rec, s.mapsKey, paid)
     }
 
     private suspend fun name(c: Candidate, rec: Record, key: String, paid: Boolean) {

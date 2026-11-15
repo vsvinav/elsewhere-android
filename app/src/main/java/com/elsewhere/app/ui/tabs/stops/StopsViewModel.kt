@@ -8,6 +8,7 @@ import com.elsewhere.app.analytics.placeName
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.Role
+import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.ui.shell.RangeStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -52,11 +53,14 @@ fun stopsUi(data: Record, filter: StopsFilter): StopsUi {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class StopsViewModel @Inject constructor(range: RangeStore) : ViewModel() {
+class StopsViewModel @Inject constructor(private val range: RangeStore, private val lookups: PlaceLookups) : ViewModel() {
     private val filter = MutableStateFlow(StopsFilter())
     val ui: StateFlow<StopsUi?> = combine(range.filtered, filter) { d, f -> d?.let { it to f } }
         .mapLatest { it?.let { (d, f) -> stopsUi(d, f) } }
         .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun setFilter(f: StopsFilter) = filter.update { f }
+
+    /** A tag has scrolled into view: ask for its name and photo. */
+    fun seen(id: String) { range.filtered.value?.let { lookups.need(listOf(id), it.places) } }
 }
