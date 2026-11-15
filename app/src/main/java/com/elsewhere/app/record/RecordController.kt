@@ -29,8 +29,8 @@ interface ServiceLink {
     fun resumeAt(seconds: Long)
 }
 
-class AndroidServiceLink @Inject constructor(@ApplicationContext private val ctx: Context) : ServiceLink {
-    override fun start() = RecordService.start(ctx)
+class AndroidServiceLink @Inject constructor(@ApplicationContext private val ctx: Context, private val gate: PermissionGate) : ServiceLink {
+    override fun start() = RecordService.start(ctx, gate)
     override fun stop() = RecordService.stop(ctx)
     override fun pause() = RecordService.pause(ctx)
     override fun schedule() { RecordWorker.schedule(ctx) }

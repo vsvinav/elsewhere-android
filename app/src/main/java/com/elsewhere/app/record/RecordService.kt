@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.elsewhere.app.MainActivity
 import com.elsewhere.app.R
 import com.elsewhere.app.data.Recording
@@ -34,6 +35,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
@@ -84,17 +89,26 @@ class RecordService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
-        if (!gate.granted(Manifest.permission.ACCESS_FINE_LOCATION)) {
-            // A location foreground service without location permission is a crash on API 34; stand down instead.
-            scope.launch { settings.saveRecording(Recording()) }
-            stopSelf()
-            return START_NOT_STICKY
-        }
+        if (!gate.granted(Manifest.permission.ACCESS_FINE_LOCATION)) return standDown()
         paused = intent?.action == ACTION_PAUSE
         if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         else startForeground(NOTIFICATION_ID, notification())
         if (paused) stopListening() else startListening()
         return START_STICKY
+    }
+
+    /**
+     * Location was revoked while we were off. A location foreground service would throw, and so would
+     * stopping before any `startForeground` after a `startForegroundService` launch: go foreground as a
+     * short service for a moment, switch recording off for good, then leave.
+     */
+    private fun standDown(): Int {
+        val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE else ServiceInfo.FOREGROUND_SERVICE_TYPE_MANIFEST
+        runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), type) }
+        runBlocking { withContext(NonCancellable) { settings.saveRecording(Recording()) } }
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        return START_NOT_STICKY
     }
 
     private fun stopListening() {
@@ -185,7 +199,11 @@ class RecordService : Service() {
          * From the background (a worker, a receiver) Android 12+ may refuse to start a foreground service.
          * Then the one legal path left is the user's tap: leave a notification whose tap starts it.
          */
-        fun start(ctx: Context) {
+        fun start(ctx: Context, gate: PermissionGate) {
+            if (!gate.granted(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                ctx.getSystemService(NotificationManager::class.java).cancel(NUDGE_ID)
+                return
+            }
             val ok = runCatching { ctx.startForegroundService(intent(ctx)) }.isSuccess
             if (!ok) nudge(ctx)
         }
