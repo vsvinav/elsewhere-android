@@ -2,7 +2,7 @@ package com.elsewhere.app.ui.shell
 
 import com.elsewhere.app.Fx
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 
 /** Same cases as web/src/app/yearWheel.test.ts. */
@@ -23,9 +23,11 @@ class YearWheelTest {
     }
 
     @Test fun `names the one year a selection covers, else null`() {
-        assertEquals(WheelState(2022, y2022.first, y2022.last), wheelState(record, y2022))
-        assertNull(wheelState(record, record).year)
-        assertNull(wheelState(record, Fx.utc(2022, 0, 1)..Fx.utc(2022, 5, 1)).year)
+        assertEquals(WheelState(2022, false, y2022.first, y2022.last), wheelState(record, y2022))
+        assertEquals(WheelState(null, true, record.first, record.last), wheelState(record, record))
+        // A hand-picked window is neither a year nor the whole record.
+        assertEquals(WheelState(null, false, Fx.utc(2022, 0, 1), Fx.utc(2022, 5, 1)), wheelState(record, Fx.utc(2022, 0, 1)..Fx.utc(2022, 5, 1)))
+        assertFalse(wheelState(record, (record.last - 90 * 86400)..record.last).all)
         // The first and last years count whether or not the chip cut them to the record.
         assertEquals(2019, wheelState(record, Fx.utc(2019, 0, 1)..(Fx.utc(2020, 0, 1) - 1)).year)
         assertEquals(2025, wheelState(record, yearSpan(record, 2025)).year)

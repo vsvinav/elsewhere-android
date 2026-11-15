@@ -41,8 +41,12 @@ class ShellSnapshot {
     private val years = (2019..2025).toList()
     private fun wheel(content: @Composable () -> Unit) = sheet { CompositionLocalProvider(LocalMotion provides false) { content() } }
 
-    @Test fun yearWheel() = wheel { YearWheelFace(years, 2024) }
-    @Test fun yearWheelAll() = wheel { YearWheelFace(years, null) }
+    private val record = LocalDate.of(2019, 3, 4).epoch()..(LocalDate.of(2025, 11, 16).epoch() - 1)
+
+    @Test fun yearWheel() = wheel { YearWheelFace(years, wheelState(record, yearSpan(record, 2024))) }
+    @Test fun yearWheelAll() = wheel { YearWheelFace(years, wheelState(record, record)) }
+    /** Last 90 days: a window that is neither a year nor the record. */
+    @Test fun yearWheelCustom() = wheel { YearWheelFace(years, wheelState(record, (record.last - 90 * DAY)..record.last)) }
     /** Mid-drag: the finger has pulled 2025 most of the way in and the row sits off centre. */
-    @Test fun yearWheelDragging() = wheel { YearWheelFace(years, 2025, shiftPx = -220f, dragging = true) }
+    @Test fun yearWheelDragging() = wheel { YearWheelFace(years, wheelState(record, yearSpan(record, 2025)), shiftPx = -220f, dragging = true) }
 }
