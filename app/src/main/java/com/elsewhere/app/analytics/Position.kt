@@ -41,6 +41,13 @@ private fun topVisits(data: Record): List<Visit> {
     return top
 }
 
+/** The top-level visit the playhead is inside, by binary search, so a frame can ask every tick. */
+fun visitAt(data: Record, t: Long): Visit? {
+    val visits = topVisits(data)
+    val vi = lastStarted(visits, t)
+    return if (vi >= 0 && t <= visits[vi].end) visits[vi] else null
+}
+
 fun whereaboutsAt(data: Record, t: Long): Whereabouts? {
     val visits = topVisits(data)
     val vi = lastStarted(visits, t)

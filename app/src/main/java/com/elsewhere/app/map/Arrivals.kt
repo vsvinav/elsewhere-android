@@ -2,6 +2,7 @@ package com.elsewhere.app.map
 
 import com.elsewhere.app.analytics.isHome
 import com.elsewhere.app.analytics.placeName
+import com.elsewhere.app.analytics.visitAt
 import com.elsewhere.app.data.Record
 
 // Port of the state behind web/src/map/ArrivalTags.tsx.
@@ -21,7 +22,7 @@ class Arrivals {
     /** Note where the playhead is; a fresh top-level visit away from home prints a tag. */
     fun at(data: Record, playhead: Long, playing: Boolean, nowMs: Long) {
         if (!playing) return
-        val v = data.visits.firstOrNull { it.lvl == 0 && it.start <= playhead && playhead <= it.end } ?: return
+        val v = visitAt(data, playhead) ?: return
         if (v.id == lastVisit) return
         lastVisit = v.id
         if (isHome(data.places[v.placeId])) return

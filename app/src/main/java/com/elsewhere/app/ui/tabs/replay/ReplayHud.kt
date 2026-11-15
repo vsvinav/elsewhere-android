@@ -50,6 +50,7 @@ import com.elsewhere.app.analytics.Lens
 import com.elsewhere.app.analytics.fmtTime
 import com.elsewhere.app.analytics.lensOf
 import com.elsewhere.app.analytics.placeName
+import com.elsewhere.app.analytics.visitAt
 import com.elsewhere.app.analytics.whereaboutsAt
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.data.Record
@@ -81,7 +82,7 @@ data class HudInfo(
 
 fun hudInfo(data: Record, playhead: Long): HudInfo {
     val w = whereaboutsAt(data, playhead)
-    val visit = if (w?.mode == "STILL") data.visits.firstOrNull { it.lvl == 0 && it.start <= playhead && playhead <= it.end } else null
+    val visit = if (w?.mode == "STILL") visitAt(data, playhead) else null
     val tz = visit?.tz ?: data.activities.firstOrNull { it.start <= playhead && playhead <= it.end }?.tz ?: 0
     val d = Instant.ofEpochSecond(playhead + tz * 60L).atOffset(ZoneOffset.UTC)
     val place = visit?.let { data.places[it.placeId] }
