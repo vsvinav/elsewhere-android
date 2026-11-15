@@ -42,6 +42,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val CHUNK = 5000
+private val PROVISIONAL = Profile(null, Units.KM, listOf(Home(0.0, 0.0, "", "", 0, null)), emptyList())
 private val strings = ListSerializer(String.serializer())
 private val counts = MapSerializer(String.serializer(), Int.serializer())
 
@@ -56,7 +57,7 @@ class RecordRepository @Inject constructor(
     private val settings: SettingsStore,
     private val cities: CitiesLoader,
     scope: CoroutineScope,
-) {
+) : RecordSource {
     private val importVersion = MutableStateFlow(0)
     private val placesVersion = MutableStateFlow(0)
 
@@ -66,10 +67,13 @@ class RecordRepository @Inject constructor(
         .map { db.importMeta().get() != null }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
-    val record: StateFlow<Record?> = combine(importVersion, profile, placesVersion) { _, p, _ -> p }
+    override val record: StateFlow<Record?> = combine(importVersion, profile, placesVersion) { _, p, _ -> p }
         .mapLatest { p -> if (p == null || p.homes.isEmpty()) null else build(p) }
         .flowOn(Dispatchers.Default)
         .stateIn(scope, SharingStarted.Eagerly, null)
+
+    /** The record derived against a home at 0,0: enough for the onboarding suggestions, before any home is chosen. */
+    suspend fun provisionalRecord(): Record? = withContext(Dispatchers.Default) { build(PROVISIONAL) }
 
     private suspend fun build(profile: Profile): Record? {
         val meta = db.importMeta().get() ?: return null
