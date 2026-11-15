@@ -8,8 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -78,8 +79,11 @@ fun trailLayout(data: Record, stops: List<Stop>, land: FeatureCollection?, heigh
     val sortedLats = lats.sortedArray()
     val k = cos(quantile(sortedLats, 0.5) * PI / 180)
     val xs = DoubleArray(n) { lngs[it] * k }.sortedArray()
-    val x0 = quantile(xs, 0.01); val x1 = quantile(xs, 0.99)
-    val y0 = quantile(sortedLats, 0.01); val y1 = quantile(sortedLats, 0.99)
+    // The cities slept in are always framed, however little of the record was logged there.
+    val x0 = min(quantile(xs, 0.01), stops.minOfOrNull { it.lng * k } ?: Double.MAX_VALUE)
+    val x1 = max(quantile(xs, 0.99), stops.maxOfOrNull { it.lng * k } ?: -Double.MAX_VALUE)
+    val y0 = min(quantile(sortedLats, 0.01), stops.minOfOrNull { it.lat } ?: Double.MAX_VALUE)
+    val y1 = max(quantile(sortedLats, 0.99), stops.maxOfOrNull { it.lat } ?: -Double.MAX_VALUE)
     val s = min((TRAIL_W - 2 * PAD) / max(1e-6, x1 - x0), (height - 2 * PAD) / max(1e-6, y1 - y0))
     val ox = (TRAIL_W - (x1 - x0) * s) / 2; val oy = (height - (y1 - y0) * s) / 2
     fun px(lng: Double) = ((lng * k - x0) * s + ox).toFloat()
@@ -94,19 +98,72 @@ fun trailLayout(data: Record, stops: List<Stop>, land: FeatureCollection?, heigh
         val cy = (ay + by) / 2 - abs(dx / len) * len * 0.22f
         floatArrayOf(ax, ay, cx, cy, bx, by)
     }
-    // Cities that would print on top of one another keep only the one with more nights.
+    // Cities that would print on top of one another keep only the one with more nights. The whole list is
+    // walked, not just the busiest few, so a year of suburbs does not hide the far ends of the record.
     val placed = ArrayList<TrailPin>()
-    for ((idx, st) in stops.take(9).withIndex()) {
+    for ((idx, st) in stops.withIndex()) {
+        if (placed.size >= MAX_PINS) break
         val x = px(st.lng); val y = py(st.lat)
         val clash = placed.any { q -> abs(q.x - x) < (q.city.length + st.city.length) * 7 + 24 && abs(q.y - y) < 24 }
         if (!clash) placed.add(TrailPin(st.city, x, y, idx == 0, x > TRAIL_W - 160))
     }
-    val landRings = land?.rings?.map { r -> FloatArray(r.size).also { out -> var j = 0; while (j + 1 < r.size) { out[j] = px(r[j]); out[j + 1] = py(r[j + 1]); j += 2 } } } ?: emptyList()
-    return TrailLayout(lines, flights, placed.take(7), landRings)
+    val landRings = land?.rings?.flatMap(::splitAntimeridian)?.map { r -> FloatArray(r.size).also { out -> var j = 0; while (j + 1 < r.size) { out[j] = px(r[j]); out[j + 1] = py(r[j + 1]); j += 2 } } } ?: emptyList()
+    return TrailLayout(lines, flights, placed, landRings)
+}
+
+private const val MAX_PINS = 7
+
+/**
+ * A ring that steps across the antimeridian (Russia, Fiji in the atlas) would print as a line the
+ * width of the sheet on a flat map, so it is cut into one closed ring per side; each piece closes
+ * along the meridian, which is where the coast is anyway.
+ */
+fun splitAntimeridian(ring: DoubleArray): List<DoubleArray> {
+    var crosses = false
+    var j = 2
+    while (j + 1 < ring.size) { if (abs(ring[j] - ring[j - 2]) > 180) { crosses = true; break }; j += 2 }
+    if (!crosses) return listOf(ring)
+    val runs = ArrayList<ArrayList<Double>>()
+    var side = 0.0
+    j = 0
+    while (j + 1 < ring.size) {
+        val s = sign(ring[j]).takeIf { it != 0.0 } ?: side
+        if (runs.isEmpty() || (s != side && abs(ring[j] - ring[j - 2]) > 180)) { runs.add(ArrayList()); side = s }
+        runs.last().add(ring[j]); runs.last().add(ring[j + 1])
+        j += 2
+    }
+    // The ring is a cycle, so a first and last run on the same side are one piece.
+    if (runs.size > 1 && sign(runs.first()[0]) == sign(runs.last()[0])) { runs.last().addAll(runs.removeAt(0)) }
+    return runs.filter { it.size >= 6 }.map { it.toDoubleArray() }
+}
+private val HALO = listOf(floatArrayOf(1f, 0f), floatArrayOf(-1f, 0f), floatArrayOf(0f, 1f), floatArrayOf(0f, -1f), floatArrayOf(0.7f, 0.7f), floatArrayOf(-0.7f, 0.7f), floatArrayOf(0.7f, -0.7f), floatArrayOf(-0.7f, -0.7f))
+
+/** A pin in canvas pixels with the size of its measured name. */
+data class LabelAnchor(val x: Float, val y: Float, val w: Float, val h: Float, val alignEnd: Boolean)
+
+/**
+ * Where each name prints, or null when there is no room. A name sits beside its pin on the side the
+ * layout asked for, slides to the other side if that would leave the sheet or cover a name already
+ * placed, and is dropped if neither side is clear. Boxes are nudged back inside the sheet vertically.
+ */
+fun labelBoxes(anchors: List<LabelAnchor>, width: Float, height: Float, gap: Float): List<Rect?> {
+    val kept = ArrayList<Rect>()
+    return anchors.map { a ->
+        val top = (a.y - a.h / 2).coerceIn(0f, max(0f, height - a.h))
+        val right = Rect(Offset(a.x + gap, top), Size(a.w, a.h))
+        val left = Rect(Offset(a.x - gap - a.w, top), Size(a.w, a.h))
+        val sheet = Rect(0f, 0f, width, height)
+        val order = if (a.alignEnd) listOf(left, right) else listOf(right, left)
+        order.firstOrNull { b -> b.left >= sheet.left && b.right <= sheet.right && kept.none { it.overlaps(b) } }?.also { kept.add(it) }
+    }
 }
 
 private val SheetFill = Color(0xFFE2D6B8)
 private val Coast = Color(0xFFB9AE92)
+/** Sheet-unit widths from the web's SVG; each is kept to at least one device pixel so it does not vanish. */
+private const val COAST_W = 0.8f
+private const val ROAD_W = 3.5f
+private const val FLIGHT_W = 1.6f
 
 /**
  * The record printed as a poster map: cream continents with an ink coast, roads as runs of red
@@ -130,31 +187,35 @@ fun TrailMap(layout: TrailLayout, modifier: Modifier = Modifier, height: Float =
     }
     // The web sets names in sheet units; on a phone the sheet is a third the size, so names keep a readable sp size instead.
     val labelStyle = TextStyle(fontFamily = DisplayFamily, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, letterSpacing = 0.04.em, lineHeight = 1.em)
+    val texts = remember(layout, measurer, labelStyle) { layout.pins.map { p -> measurer.measure(p.city.uppercase(), labelStyle) } }
+    // The sheet is clipped: the land and the arcs run well past the frame, as the SVG's viewBox cuts them on the web.
     Canvas(
-        modifier.fillMaxWidth().aspectRatio(TRAIL_W / height).background(SheetFill).border(2.dp, Poster.Ink)
+        modifier.fillMaxWidth().aspectRatio(TRAIL_W / height).clipToBounds().background(SheetFill).border(2.dp, Poster.Ink)
             .semantics { contentDescription = "Map of the record" },
     ) {
         val u = size.width / TRAIL_W
+        // Strokes are set in sheet units, so scaling them down must not take any below a device pixel.
+        fun w(sheet: Float) = max(sheet, 1f / u)
         scale(u, u, pivot = Offset.Zero) {
             drawPath(paths.first, Poster.Stock, style = Fill)
-            drawPath(paths.first, Coast, style = Stroke(0.8f))
-            drawPath(paths.second, Poster.Red, style = Stroke(3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(0.1f, 7f))))
-            drawPath(paths.third, Poster.Ink, style = Stroke(1.6f, cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 6f))))
+            drawPath(paths.first, Coast, style = Stroke(w(COAST_W)))
+            drawPath(paths.second, Poster.Red, style = Stroke(w(ROAD_W), cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(0.1f, 2 * w(ROAD_W)))))
+            drawPath(paths.third, Poster.Ink, style = Stroke(w(FLIGHT_W), cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 6f))))
             for (p in layout.pins) {
                 val c = Offset(p.x, p.y)
                 drawCircle(Poster.Red, if (p.first) 7f else 5f, c)
                 drawCircle(Poster.Stock, if (p.first) 7f else 5f, c, style = Stroke(2.5f))
             }
         }
-        for (p in layout.pins) {
-            val text = measurer.measure(p.city.uppercase(), labelStyle)
-            val gap = 9f * u
-            val x = if (p.alignEnd) p.x * u - gap - text.size.width else p.x * u + gap
-            val top = Offset(x, p.y * u - text.size.height / 2f)
-            // The web halos the name with a stock stroke; a stock chip under it reads the same over the dots.
-            val pad = 2.dp.toPx()
-            drawRoundRect(Poster.Stock, Offset(top.x - pad, top.y), Size(text.size.width + 2 * pad, text.size.height.toFloat()), CornerRadius(pad), alpha = 0.85f)
-            drawText(text, Poster.Ink, top)
+        // Names are set in sp, not sheet units, so where they fit is settled here in pixels. The web's
+        // `paint-order: stroke` halo is the same name printed in stock around the ink, eight ways.
+        val anchors = layout.pins.mapIndexed { i, p -> LabelAnchor(p.x * u, p.y * u, texts[i].size.width.toFloat(), texts[i].size.height.toFloat(), p.alignEnd) }
+        val boxes = labelBoxes(anchors, size.width, size.height, gap = 9f * u)
+        val halo = 1.5.dp.toPx()
+        boxes.forEachIndexed { i, box ->
+            if (box == null) return@forEachIndexed
+            for (d in HALO) drawText(texts[i], Poster.Stock, box.topLeft + Offset(d[0] * halo, d[1] * halo))
+            drawText(texts[i], Poster.Ink, box.topLeft)
         }
     }
 }
