@@ -153,15 +153,17 @@ class PinLayers(record: Record) {
     /** The box around every shown stop and every home; null when there is nothing to frame. */
     fun fitBounds(o: PinOpts): Bounds? = boundsAround(shownFor(o).dots + homes)
 
-    /** The box around the stops named, ignoring unknown ids; null when none is on the map. O(ids) after the first call. */
-    fun boundsOf(ids: Collection<String>): Bounds? = boundsAround(ids.mapNotNull { byId[it] })
+    /**
+     * The box around the stops named, ignoring unknown ids; null when none is on the map. O(ids) after the first
+     * call. A lone stop gets a box about a kilometre across, so a door onto it does not land at street level.
+     */
+    fun boundsOf(ids: Collection<String>): Bounds? {
+        val b = boundsAround(ids.mapNotNull { byId[it] }) ?: return null
+        return if (b.swLat == b.neLat && b.swLng == b.neLng) Bounds(b.swLat - LONE_PAD, b.swLng - LONE_PAD, b.neLat + LONE_PAD, b.neLng + LONE_PAD) else b
+    }
 }
 
-/** A lone stop gets a box about a kilometre across, so framing it does not land at street level. */
 private const val LONE_PAD = 0.005
 
-private fun boundsAround(pts: List<Located>): Bounds? {
-    if (pts.isEmpty()) return null
-    val b = Bounds(pts.minOf { it.lat }, pts.minOf { it.lng }, pts.maxOf { it.lat }, pts.maxOf { it.lng })
-    return if (b.swLat == b.neLat && b.swLng == b.neLng) Bounds(b.swLat - LONE_PAD, b.swLng - LONE_PAD, b.neLat + LONE_PAD, b.neLng + LONE_PAD) else b
-}
+private fun boundsAround(pts: List<Located>): Bounds? =
+    if (pts.isEmpty()) null else Bounds(pts.minOf { it.lat }, pts.minOf { it.lng }, pts.maxOf { it.lat }, pts.maxOf { it.lng })
