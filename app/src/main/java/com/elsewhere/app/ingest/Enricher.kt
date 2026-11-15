@@ -2,12 +2,14 @@ package com.elsewhere.app.ingest
 
 import com.elsewhere.app.analytics.isHome
 import com.elsewhere.app.data.Place
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,7 +49,7 @@ interface PlaceNamer {
 }
 
 class Enricher(
-    private val places: GooglePlaces,
+    private val places: DetailsSource,
     private val store: EnrichmentStore,
     private val meter: CostMeter,
     /** List-price ceiling on everything this phone has spent; lookups stop short of it. */
@@ -70,7 +72,7 @@ class Enricher(
 
     /**
      * Looks up what [wanted] picks, four at a time, writing to the store every twelve and at the end.
-     * `onProgress` gets (0, total) first, each landing, then null. A refusal throws after reporting null.
+     * `onProgress` gets (0, total) first, each landing, then null. A refusal or a dead network throws after reporting null.
      */
     suspend fun run(all: Map<String, Place>, key: String, onProgress: (Progress?) -> Unit) {
         if (key.isBlank()) return
@@ -83,7 +85,8 @@ class Enricher(
         val pending = LinkedHashMap<String, Enrichment>()
         var landed = 0
         onProgress(Progress(0, total))
-        suspend fun flush() { val rows = lock.withLock { val r = pending.toMap(); pending.clear(); r }; if (rows.isNotEmpty()) store.put(rows) }
+        // Every landing was billed, so whatever is pending reaches Room however the run ends, even mid-cancellation.
+        suspend fun flush() = withContext(NonCancellable) { val rows = lock.withLock { val r = pending.toMap(); pending.clear(); r }; if (rows.isNotEmpty()) store.put(rows) }
         try {
             coroutineScope {
                 List(CONCURRENCY) {
@@ -98,11 +101,9 @@ class Enricher(
                     }
                 }.forEach { it.await() }
             }
-        } catch (e: PlacesError) {
-            flush(); onProgress(null); throw e
+        } finally {
+            flush(); onProgress(null)
         }
-        flush()
-        onProgress(null)
     }
 
     /** The best name for a cluster of place ids; only pays for lookups that are not cached yet, at most `max` of them. */

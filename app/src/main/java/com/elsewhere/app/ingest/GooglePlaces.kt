@@ -22,7 +22,12 @@ class PlacesError(message: String, val code: Int) : IOException(message) {
 }
 
 @Singleton
-class GooglePlaces(client: OkHttpClient, private val base: String) {
+/** One paid Place Details call; the real one talks to Google, tests script answers. */
+interface DetailsSource {
+    suspend fun details(id: String, key: String): Enrichment
+}
+
+class GooglePlaces(client: OkHttpClient, private val base: String) : DetailsSource {
     @Inject constructor(client: OkHttpClient) : this(client, "https://places.googleapis.com")
 
     private val client = client
@@ -33,7 +38,7 @@ class GooglePlaces(client: OkHttpClient, private val base: String) {
     @Serializable private data class Details(val displayName: Text? = null, val formattedAddress: String? = null, val types: List<String> = emptyList(), val primaryType: String? = null, val photos: List<Photo> = emptyList())
 
     /** One paid Details call. A place Google no longer knows (400/404) is [Enrichment.NONE]; anything else not OK throws. */
-    suspend fun details(id: String, key: String): Enrichment {
+    override suspend fun details(id: String, key: String): Enrichment {
         val req = Request.Builder().url("$base/v1/places/${URLEncoder.encode(id, "UTF-8")}")
             .header("X-Goog-Api-Key", key).header("X-Goog-FieldMask", FIELDS).build()
         client.newCall(req).await().use { res ->

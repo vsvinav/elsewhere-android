@@ -3,6 +3,7 @@ package com.elsewhere.app.ingest
 import com.elsewhere.app.Fx
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.data.Role
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
@@ -48,6 +49,22 @@ class EnricherTest {
         val req = server.takeRequest()
         assertEquals("k", req.getHeader("X-Goog-Api-Key"))
         assertEquals("displayName,formattedAddress,types,primaryType,photos", req.getHeader("X-Goog-FieldMask"))
+    }
+
+    @Test fun `what landed before a network failure is kept, so it is never billed twice`() = runTest {
+        val threeLanded = CompletableDeferred<Unit>()
+        val src = object : DetailsSource {
+            override suspend fun details(id: String, key: String): Enrichment {
+                if (id == "d") { threeLanded.await(); throw java.io.IOException("reset by peer") }
+                return Enrichment(id.uppercase(), null, listOf("cafe"), "cafe", null)
+            }
+        }
+        val e = Enricher(src, store, meter, capDollars = 10.0, sleep = {})
+        val all = mapOf("a" to place(9), "b" to place(8), "c" to place(7), "d" to place(6))
+        assertThrows(java.io.IOException::class.java) {
+            kotlinx.coroutines.runBlocking { e.run(all, "k") { if (it == Progress(3, 4)) threeLanded.complete(Unit) } }
+        }
+        assertEquals(setOf("a", "b", "c"), store.rows.keys)
     }
 
     @Test fun `reports nothing without a key`() = runTest {
