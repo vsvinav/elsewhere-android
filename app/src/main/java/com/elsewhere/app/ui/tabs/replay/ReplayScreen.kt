@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.vector.PathParser
@@ -58,6 +59,7 @@ import com.elsewhere.app.map.Bounds
 import com.elsewhere.app.map.Cam
 import com.elsewhere.app.map.Eased
 import com.elsewhere.app.map.Follow
+import com.elsewhere.app.map.HeadingEase
 import com.elsewhere.app.map.HEAD_REAL_S
 import com.elsewhere.app.map.MapEvent
 import com.elsewhere.app.map.MapHost
@@ -72,6 +74,7 @@ import com.elsewhere.app.map.Trails
 import com.elsewhere.app.map.activeTrails
 import com.elsewhere.app.map.intersects
 import com.elsewhere.app.map.rememberMapHost
+import com.elsewhere.app.map.stampHeading
 import com.elsewhere.app.map.stampOf
 import com.elsewhere.app.map.trailHead
 import com.elsewhere.app.map.wakeLength
@@ -194,6 +197,7 @@ private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, stat
     val wake = remember { Eased(2000) }
     val ring = remember { Eased(180, 500) }
     val stamp = remember { StampHold() }
+    val heading = remember { HeadingEase() }
     val hairlines = remember { Hairlines() }
     val bands = remember { Array(FADE_BANDS) { Path() } }
     val texts = remember { HashMap<String, TextLayoutResult>() }
@@ -246,7 +250,7 @@ private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, stat
             drawText(t, color = Poster.Ink.copy(alpha = alpha), topLeft = Offset(x0, y0))
         }
 
-        // The stamp: a stock disc with the leg's ink ring and the vehicle inside, always upright like the web's.
+        // The stamp: a stock disc with the leg's ink ring and the vehicle inside, turned along a long leg and upright on a short one, like the web's.
         val w = whereaboutsAt(data, nowL) ?: return@Canvas
         val still = w.mode == "STILL"
         val head = if (still) null else trailHead(lensTrails, now)
@@ -258,8 +262,12 @@ private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, stat
         val o = proj.at(lat, lng)
         drawCircle(Poster.Stock, r, o); drawCircle(c, r, o, style = Stroke(3 * d))
         val sz = r * 1.3f
-        translate(o.x - sz / 2, o.y - sz / 2) {
-            scale(sz / 32f, pivot = Offset.Zero) { drawPath(icons[kind], c) }
+        // Compass heading is clockwise from north, as is a canvas rotation.
+        val angle = heading.at(stampHeading(seg, kind), tMs).toFloat()
+        rotate(angle, pivot = o) {
+            translate(o.x - sz / 2, o.y - sz / 2) {
+                scale(sz / 32f, pivot = Offset.Zero) { drawPath(icons[kind], c) }
+            }
         }
     }
 }
@@ -356,13 +364,14 @@ private fun Bounds.has(lat: Double, lng: Double): Boolean {
     return (lng in swLng..neLng) || (lng + 360 in swLng..neLng) || (lng - 360 in swLng..neLng)
 }
 
-/** The web's position markers, a 32-unit box each: a plane, a car, a tram, a walker, a dot, and fast-forward chevrons. */
+/** The web's position markers, a 32-unit box each: a plane, a car, a tram, footprints, a dot, and fast-forward chevrons. */
 private class StampIcons {
     private val paths = mapOf(
         Stamp.FLY to "M16 2c1.2 0 2 1 2 2.6V12l11 6.5v3l-11-3.4v6.2l3 2.2V29l-5-1.5L11 29v-2.5l3-2.2v-6.2L3 21.5v-3L14 12V4.6C14 3 14.8 2 16 2z",
-        Stamp.DRIVE to "M9 6h14l3 8h2a2 2 0 0 1 2 2v7h-3v2a2 2 0 0 1-4 0v-2H9v2a2 2 0 0 1-4 0v-2H2v-7a2 2 0 0 1 2-2h2l3-8zm1.5 2.5L8.6 14h14.8l-1.9-5.5h-11zM7 17.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm18 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z",
-        Stamp.TRANSIT to "M8 4h16a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3l2 3v1h-3l-2-3H11l-2 3H6v-1l2-3a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3zm0 4v6h7V8H8zm9 0v6h7V8h-7zM9.5 17a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm13 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z",
-        Stamp.FOOT to "M18 3a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm-3.5 6.5 3 .5 2 3.5 4 2v2.5l-4.5-2-1.5-2-1 5 3 3.5V30h-2.5l-3-5.5-3 5.5H9l3.5-7.5 1-6-2 1.5V22H9v-6l5.5-6.5z",
+        // Seen from above and travelling up the box, like the plane, so each still reads once turned along its leg.
+        Stamp.DRIVE to "M11 3h10a3 3 0 0 1 3 3v20a3 3 0 0 1-3 3H11a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3zm0 6-1 5h12l-1-5H11zm-1 11 1 5h10l1-5H10zM6 8h2v6H6zm18 0h2v6h-2zM6 19h2v6H6zm18 0h2v6h-2z",
+        Stamp.TRANSIT to "M12 2h8a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4h-8a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4zm0 4-1 4h10l-1-4h-8zm-1 7v3h10v-3H11zm0 6v3h10v-3H11zm0 6v2h10v-2H11z",
+        Stamp.FOOT to "M11 8.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm0 7a3.5 7 0 1 1 0 14 3.5 7 0 0 1 0-14zM21 0.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm0 7a3.5 7 0 1 1 0 14 3.5 7 0 0 1 0-14z",
         Stamp.STILL to "M16 16m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0",
         Stamp.FF to "M22 16a6 6 0 1 1-12 0 6 6 0 0 1 12 0zM2 13h8v2H2zm-2 2.5h9v1.5H0zM3 18h7v2H3z",
     ).mapValues { (_, d) -> PathParser().parsePathString(d).toPath() }
