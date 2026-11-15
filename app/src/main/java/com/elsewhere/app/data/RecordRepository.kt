@@ -34,12 +34,13 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
@@ -74,8 +75,8 @@ class RecordRepository @Inject constructor(
     val deviceVisits: StateFlow<Int> get() = deviceCount
     private val deviceCount = MutableStateFlow(0)
     private val placesVersion = MutableStateFlow(0)
-    /** How many times `record` has been built; `refresh()` waits on it, since an unchanged rebuild is equal and the StateFlow would not re-emit. */
-    private val builds = MutableStateFlow(0)
+    /** The import version the current `record` was built from; `refresh()` waits on it, since an unchanged rebuild is equal and the StateFlow would not re-emit. */
+    private val builtVersion = MutableStateFlow(0)
 
     private val profileRead = MutableStateFlow(false)
     private val importRead = MutableStateFlow(false)
@@ -102,18 +103,25 @@ class RecordRepository @Inject constructor(
     /** What a rebuild is for: a new import or a reshaped profile is "Working out trips"; names or photos landing are not. */
     private data class Cause(val version: Int, val profile: Profile?, val placesVersion: Int, val key: String)
 
-    override val record: StateFlow<Record?> = combine(importVersion, shape, placesVersion, photoKey, ::Cause)
-        .runningFold(null as Pair<Cause?, Cause>?) { prev, c -> prev?.second to c }
-        .filterNotNull()
-        .mapLatest { (prev, c) ->
-            val p = c.profile
-            if (p == null || p.homes.isEmpty()) null
-            else if (prev != null && prev.version == c.version && prev.profile === c.profile) build(p, c.key)
-            else timed { build(p, c.key) }
+    private val _record = MutableStateFlow<Record?>(null)
+    override val record: StateFlow<Record?> = _record
+
+    // Collected by hand rather than stateIn, so the version is marked built only after the record is in place.
+    init {
+        scope.launch(Dispatchers.Default) {
+            combine(importVersion, shape, placesVersion, photoKey, ::Cause)
+                .runningFold(null as Pair<Cause?, Cause>?) { prev, c -> prev?.second to c }
+                .filterNotNull()
+                .mapLatest { (prev, c) ->
+                    val p = c.profile
+                    val rec = if (p == null || p.homes.isEmpty()) null
+                    else if (prev != null && prev.version == c.version && prev.profile === c.profile) build(p, c.key)
+                    else timed { build(p, c.key) }
+                    rec to c.version
+                }
+                .collect { (rec, version) -> _record.value = rec; builtVersion.value = version }
         }
-        .onEach { builds.update { it + 1 } }
-        .flowOn(Dispatchers.Default)
-        .stateIn(scope, SharingStarted.Eagerly, null)
+    }
 
     /**
      * The record derived against a home at 0,0: enough for the onboarding suggestions, before any home is chosen.
@@ -239,9 +247,8 @@ class RecordRepository @Inject constructor(
 
     /** A pull to refresh: the same bump a new import or device batch makes, so `record` re-derives under "Working out trips". */
     override suspend fun refresh() {
-        val n = builds.value
-        importVersion.update { it + 1 }
-        builds.first { it != n }
+        val v = importVersion.updateAndGet { it + 1 }
+        builtVersion.first { it >= v }
     }
 
     override suspend fun reset() {

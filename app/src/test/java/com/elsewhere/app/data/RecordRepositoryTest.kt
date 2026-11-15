@@ -19,6 +19,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -172,7 +173,9 @@ class RecordRepositoryTest {
         ready.clear()
 
         repo.refresh()
-        val after = repo.record.first { it != null && it !== before }!!
+        // refresh() returns only once the rebuilt record is in place.
+        val after = repo.record.value!!
+        assertNotSame(before, after)
         assertEquals(before.visits.size + 1, after.visits.size)
         assertEquals(Ready("Working out trips", 100), ready.ready.value)
     }
