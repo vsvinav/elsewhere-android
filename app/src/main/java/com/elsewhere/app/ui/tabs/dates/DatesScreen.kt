@@ -18,12 +18,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -38,6 +44,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elsewhere.app.analytics.placeName
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.ui.nav.doorId
 import com.elsewhere.app.ui.world.Barcode
 import com.elsewhere.app.ui.world.Field
 import com.elsewhere.app.ui.world.NightsBill
@@ -56,6 +63,7 @@ import com.elsewhere.app.ui.world.label
 import com.elsewhere.app.ui.world.n0
 import com.elsewhere.app.ui.world.u
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // Port of web/src/world/Nights.tsx (the bed strip) followed by web/src/tabs/Trips/Trips.tsx.
@@ -69,17 +77,33 @@ fun DatesTab(vm: DatesViewModel = hiltViewModel()) {
 @Composable
 fun DatesScreen(ui: DatesUi, modifier: Modifier = Modifier, scroll: Boolean = true, trips: Boolean = true, onSeen: (String) -> Unit = {}) {
     var open by rememberSaveable { mutableStateOf<Long?>(null) }
-    Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier)) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val shown = remember(ui.cards, query) { searchCards(ui.cards, query) }
+    val kept = remember(shown) { shown.mapTo(HashSet()) { it.tripId } }
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    // Where each pass sits in the column, so a card can scroll its pass into view.
+    val passY = remember { HashMap<String, Int>() }
+    var topY by remember { mutableIntStateOf(0) }
+    Column(modifier.fillMaxWidth().background(Poster.Stock).onGloballyPositioned { topY = it.positionInRoot().y.toInt() }.then(if (scroll) Modifier.fillMaxSize().verticalScroll(scrollState) else Modifier)) {
         ui.nights?.let { NightsBill(it, first = true) }
         if (trips) Column(Modifier.padding(horizontal = 12.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+            DeckSearch(query, { query = it }, shown.size, ui.cards.size)
+            TripDeck(shown, ui.data, ui.units, ui.land, onOpen = { c ->
+                open = c.departed
+                passY[c.tripId]?.let { y -> scope.launch { scrollState.animateScrollTo(y) } }
+            })
             TripsHeader(ui)
-            for (t in ui.trips) {
-                val isOpen = open == t.trip.start
-                // Beds and stops are worked out only for the trip that is open, off the main thread.
-                val detail by produceState<TripDetail?>(null, isOpen, ui) {
-                    value = if (isOpen) withContext(Dispatchers.Default) { tripDetail(ui.data, ui.strip, t.trip) } else null
+            // Keyed by trip, so a search that drops a pass does not hand its remembered state to the next one down.
+            for (t in ui.trips) key(t.trip.doorId) {
+                if (t.trip.doorId in kept) {
+                    val isOpen = open == t.trip.start
+                    // Beds and stops are worked out only for the trip that is open, off the main thread.
+                    val detail by produceState<TripDetail?>(null, isOpen, ui) {
+                        value = if (isOpen) withContext(Dispatchers.Default) { tripDetail(ui.data, ui.strip, t.trip) } else null
+                    }
+                    TripPass(t, ui.units, isOpen, detail, onSeen, Modifier.onGloballyPositioned { passY[t.trip.doorId] = it.positionInRoot().y.toInt() - topY + scrollState.value }) { open = if (isOpen) null else t.trip.start }
                 }
-                TripPass(t, ui.units, isOpen, detail, onSeen) { open = if (isOpen) null else t.trip.start }
             }
         }
     }
@@ -119,12 +143,12 @@ private fun Route(cities: List<String>, size: androidx.compose.ui.unit.TextUnit)
 }
 
 @Composable
-internal fun TripPass(t: TripUi, units: Units, open: Boolean, detail: TripDetail?, onSeen: (String) -> Unit = {}, onToggle: () -> Unit) {
+internal fun TripPass(t: TripUi, units: Units, open: Boolean, detail: TripDetail?, onSeen: (String) -> Unit = {}, modifier: Modifier = Modifier, onToggle: () -> Unit) {
     val trip = t.trip
     val dest = trip.anchorCities.take(3)
     // The strip is only worked out for the open trip, so only an open trip offers its text.
     val text = detail?.let { d -> { bedText(d.beds, "${dest.joinToString(" → ").ifEmpty { "TRIP" }} · ${date(trip.start)}".uppercase()) } }
-    Pass(share = Share("trip ${date(trip.start)}", text), stub = {
+    Pass(modifier, share = Share("trip ${date(trip.start)}", text), stub = {
         Field("Nights", countUp(trip.nights.toDouble()), big = true)
         Field("Flights", "${t.flights}", big = true)
         Field("Farthest", "${n0(units.cv(trip.maxDistFromHomeKm))} ${units.u.uppercase()}", big = true)

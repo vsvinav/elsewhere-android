@@ -18,7 +18,8 @@ import org.junit.Test
 
 class DatesSnapshot {
     @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, theme = "android:Theme.Material.Light.NoActionBar")
-    private val ui = datesUi(SampleRecord.record, SampleRecord.record, SampleRecord.profile)
+    private val land = java.io.File("src/main/assets/land.json").takeIf { it.exists() }?.let { com.elsewhere.app.data.FeatureCollection.fromJson(it.readText()) }
+    private val ui = datesUi(SampleRecord.record, SampleRecord.record, SampleRecord.profile, land)
 
     @Test fun nights() = paparazzi.snapshot {
         ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { DatesScreen(ui, scroll = false, trips = false) } }
@@ -31,6 +32,18 @@ class DatesSnapshot {
                     TripsHeader(ui)
                     androidx.compose.foundation.layout.Spacer(Modifier.padding(12.dp))
                     TripPass(ui.trips.first(), ui.units, open = true, detail = tripDetail(ui.data, ui.strip, ui.trips.first().trip)) {}
+                }
+            }
+        }
+    }
+
+    @Test fun deck() = paparazzi.snapshot {
+        ElsewhereTheme {
+            CompositionLocalProvider(LocalMotion provides false) {
+                Column(Modifier.fillMaxWidth().background(Poster.Stock).padding(12.dp)) {
+                    DeckSearch("", {}, ui.cards.size, ui.cards.size)
+                    androidx.compose.foundation.layout.Spacer(Modifier.padding(12.dp))
+                    TripDeck(ui.cards, ui.data, ui.units, ui.land, onOpen = {}, page = 1, thumbs = ui.cards.associate { it.tripId to tripThumb(ui.data, it, ui.land) })
                 }
             }
         }

@@ -6,6 +6,8 @@ import com.elsewhere.app.analytics.Night
 import com.elsewhere.app.analytics.bedStrip
 import com.elsewhere.app.analytics.dayKey
 import com.elsewhere.app.analytics.isHome
+import com.elsewhere.app.data.FeatureCollection
+import com.elsewhere.app.data.LandSource
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
@@ -22,6 +24,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -39,17 +42,16 @@ data class TripDetail(val beds: List<Night>, val visited: List<TripStop>)
 data class DatesUi(
     val nights: NightsUi?, val trips: List<TripUi>, val nightsAway: Int, val flights: Int, val route: List<String>, val units: Units,
     val data: Record, val strip: List<Night>,
+    /** The deck's cards, in the same order as `trips`; the land outlines are for their trail thumbnails. */
+    val cards: List<Card> = emptyList(), val land: FeatureCollection? = null,
 )
 
-fun datesUi(data: Record, raw: Record, profile: Profile?): DatesUi {
+fun datesUi(data: Record, raw: Record, profile: Profile?, land: FeatureCollection? = null): DatesUi {
     val strip = bedStrip(raw, data.meta.range)
-    val trips = data.trips.sortedByDescending { it.start }.map { t ->
+    val cards = deckCards(data)
+    val trips = data.trips.sortedByDescending { it.start }.mapIndexed { i, t ->
         val km = t.totalKmByMode.entries.sortedByDescending { it.value }.map { it.key to it.value }
-        TripUi(
-            trip = t,
-            flights = data.activities.count { it.mode == "FLYING" && it.start >= t.start && it.start <= t.end },
-            modes = km.take(4), totalKm = km.sumOf { it.second },
-        )
+        TripUi(trip = t, flights = cards[i].flights, modes = km.take(4), totalKm = cards[i].km)
     }
     return DatesUi(
         nights = nightsUi(strip, data.meta.range, profile?.name ?: ""),
@@ -58,7 +60,7 @@ fun datesUi(data: Record, raw: Record, profile: Profile?): DatesUi {
         flights = data.activities.count { it.mode == "FLYING" },
         route = trips.mapNotNull { it.trip.anchorCities.firstOrNull() }.distinct().take(4),
         units = profile?.units ?: Units.KM,
-        data = data, strip = strip,
+        data = data, strip = strip, cards = cards, land = land,
     )
 }
 
@@ -74,11 +76,13 @@ fun tripDetail(data: Record, strip: List<Night>, t: Trip): TripDetail {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class DatesViewModel @Inject constructor(private val range: RangeStore, store: RecordStore, private val lookups: PlaceLookups) : ViewModel() {
+class DatesViewModel @Inject constructor(private val range: RangeStore, store: RecordStore, landSource: LandSource, private val lookups: PlaceLookups) : ViewModel() {
     /** A stop on an open trip has scrolled into view: ask for its name and photo. */
     fun seen(id: String) { range.filtered.value?.let { lookups.need(listOf(id), it.places) } }
 
-    val ui: StateFlow<DatesUi?> = combine(range.filtered, range.raw, store.profile) { d, r, p -> if (d == null || r == null) null else Triple(d, r, p) }
-        .mapLatest { it?.let { (d, r, p) -> datesUi(d, r, p) } }
+    private data class In(val data: Record, val raw: Record, val profile: Profile?, val land: FeatureCollection?)
+
+    val ui: StateFlow<DatesUi?> = combine(range.filtered, range.raw, store.profile, flow { emit(landSource.get()) }) { d, r, p, l -> if (d == null || r == null) null else In(d, r, p, l) }
+        .mapLatest { it?.run { datesUi(data, raw, profile, land) } }
         .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 }
