@@ -43,7 +43,7 @@ interface KeyActions {
     fun acceptLimited()
 }
 
-const val LIMITED_ACK = "I understand: free OpenStreetMap tiles, no place names or photos"
+const val LIMITED_ACK = "I understand maps and place names will be limited"
 
 /**
  * The optional Google key, checked the moment it is saved: the field, then "Checking your key…",
