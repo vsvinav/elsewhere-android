@@ -27,18 +27,39 @@ class PrintedPhotoTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
     private val place = Fx.place(name = "Louvre").copy(photo = "https://photos.example/louvre.jpg")
 
-    @Test fun `a photo on a shared card tells the card which url it shows`() {
+    @Test fun `a photo on a shared card tells the card which url it shows, by place`() {
         val photos = CardPhotos()
         rule.setContent { CompositionLocalProvider(LocalCardPhotos provides photos) { PlacePhoto(place) } }
         rule.waitForIdle()
-        assertEquals(setOf("https://photos.example/louvre.jpg"), photos.urls)
+        assertEquals(mapOf(photoKey(place) to "https://photos.example/louvre.jpg"), photos.urls)
+    }
+
+    @Test fun `a Commons photo found on screen prints too, though the off-screen card never gets to look it up`() {
+        val museum = Fx.place(name = "Louvre", lat = 48.86, lng = 2.34, primaryType = "museum")
+        val commons = PhotoSources(commons = { _, _ -> "https://commons.example/louvre.jpg" })
+        val photos = CardPhotos()
+        rule.setContent {
+            CompositionLocalProvider(LocalCardPhotos provides photos, LocalPhotoSources provides commons) { PlacePhoto(museum) }
+        }
+        rule.waitForIdle()
+        assertEquals(mapOf(photoKey(museum) to "https://commons.example/louvre.jpg"), photos.urls)
+
+        val red = Bitmap.createBitmap(4, 3, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFFFF0000.toInt()) }
+        val bmp = rule.runOnUiThread {
+            CardRenderer.render(rule.activity, ShareFormat.STORY) {
+                CompositionLocalProvider(LocalPhotoSources provides commons, LocalPrintedPhotos provides mapOf(photoKey(museum) to red.asImageBitmap())) {
+                    Box(Modifier.fillMaxWidth()) { PlacePhoto(museum) }
+                }
+            }
+        }
+        assertEquals(0xFFFF0000.toInt(), bmp.getPixel(540, (1920 - 120) / 2))
     }
 
     @Test fun `while printing, a pre-fetched bitmap is drawn in place of the network image`() {
         val red = Bitmap.createBitmap(4, 3, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFFFF0000.toInt()) }
         val bmp = rule.runOnUiThread {
             CardRenderer.render(rule.activity, ShareFormat.STORY) {
-                CompositionLocalProvider(LocalPrintedPhotos provides mapOf(place.photo!! to red.asImageBitmap())) {
+                CompositionLocalProvider(LocalPrintedPhotos provides mapOf(photoKey(place) to red.asImageBitmap())) {
                     Box(Modifier.fillMaxWidth()) { PlacePhoto(place) }
                 }
             }

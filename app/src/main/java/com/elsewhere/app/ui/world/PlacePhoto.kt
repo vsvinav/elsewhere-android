@@ -26,13 +26,22 @@ import com.elsewhere.app.analytics.Cat
 import com.elsewhere.app.analytics.categoryOf
 import com.elsewhere.app.data.Place
 
-/** The photo URLs a shareable card is showing, so its Save menu can fetch them before printing. */
-class CardPhotos { val urls: MutableSet<String> = linkedSetOf() }
+/** The photo each place on a shareable card resolved to on screen (by [photoKey]), so its Save menu can fetch them before printing. */
+class CardPhotos {
+    val urls: MutableMap<String, String> = linkedMapOf()
+    /** The URLs among [urls] that are Google photos, which cost a Photos SKU to fetch. */
+    val google: MutableSet<String> = linkedSetOf()
+}
 
 val LocalCardPhotos = staticCompositionLocalOf<CardPhotos?> { null }
 
-/** Photos already fetched for the card being printed, by URL; one synchronous draw cannot wait for the network. */
+/**
+ * Photos already fetched for the card being printed, by [photoKey]. Keyed by place rather than URL because a Commons
+ * picture is only looked up after first composition, which one synchronous off-screen draw never gets past.
+ */
 val LocalPrintedPhotos = staticCompositionLocalOf<Map<String, ImageBitmap>> { emptyMap() }
+
+fun photoKey(place: Place) = "${place.lat},${place.lng}"
 
 /** Kinds of place a geotagged Commons photo tends to actually show; web `PlacePhoto.tsx` FREE_FIRST. */
 val FREE_FIRST = setOf(Cat.CULTURE, Cat.TRANSIT, Cat.STAY)
@@ -44,6 +53,11 @@ val FREE_FIRST = setOf(Cat.CULTURE, Cat.TRANSIT, Cat.STAY)
  */
 @Composable
 fun PlacePhoto(place: Place?, modifier: Modifier = Modifier, blank: Boolean = false) {
+    val printed = place?.let { LocalPrintedPhotos.current[photoKey(it)] }
+    if (printed != null) {
+        Image(printed, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier.fillMaxWidth().aspectRatio(4f / 3f).background(Poster.Stock2))
+        return
+    }
     val sources = LocalPhotoSources.current
     val google = place?.photo
     val free = place != null && google == null && sources.commons != null && categoryOf(place) in FREE_FIRST
@@ -51,11 +65,8 @@ fun PlacePhoto(place: Place?, modifier: Modifier = Modifier, blank: Boolean = fa
     if (free) LaunchedEffect(place!!.lat, place.lng) { wiki = runCatching { sources.commons!!(place.lat, place.lng) }.getOrNull() }
     val url = google ?: wiki
     val card = LocalCardPhotos.current
-    if (url != null && card != null) SideEffect { card.urls += url }
-    val printed = url?.let { LocalPrintedPhotos.current[it] }
-    if (printed != null) {
-        Image(printed, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier.fillMaxWidth().aspectRatio(4f / 3f).background(Poster.Stock2))
-    } else if (url != null) {
+    if (url != null && card != null) SideEffect { card.urls[photoKey(place!!)] = url; if (google != null) card.google += url }
+    if (url != null) {
         AsyncImage(
             model = url, contentDescription = null, contentScale = ContentScale.Crop,
             // Only a fetch that went out to Google is billed; a disk or memory hit costs nothing.

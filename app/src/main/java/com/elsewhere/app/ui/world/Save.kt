@@ -36,6 +36,7 @@ import com.elsewhere.app.share.ShareFormat
 import com.elsewhere.app.share.ShareSheet
 import com.elsewhere.app.share.cardFileName
 import coil.imageLoader
+import coil.decode.DataSource
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import kotlinx.coroutines.CancellationException
@@ -76,7 +77,7 @@ fun SaveMenu(
         open = false; busy = true
         scope.launch {
             try {
-                val pictures = photos.urls.toList().associateWith { url -> fetchPhoto(activity, url) }.filterValues { it != null }.mapValues { it.value!! }
+                val pictures = photos.urls.toMap().mapValues { (_, url) -> fetchPhoto(activity, url, url in photos.google, sources) }.filterValues { it != null }.mapValues { it.value!! }
                 val bitmap = CardRenderer.render(activity, format, paper, ink) {
                     CompositionLocalProvider(LocalPhotoSources provides sources, LocalPrintedPhotos provides pictures) { printed() }
                 }
@@ -111,10 +112,14 @@ fun SaveMenu(
     }
 }
 
-/** A software bitmap (the sheet is drawn off-screen, where hardware bitmaps cannot be read) or null when the fetch fails. */
-private suspend fun fetchPhoto(context: Context, url: String): ImageBitmap? {
-    val result = context.imageLoader.execute(ImageRequest.Builder(context).data(url).allowHardware(false).build())
-    return ((result as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap?.asImageBitmap()
+/**
+ * A software bitmap (the sheet is drawn off-screen, where hardware bitmaps cannot be read) or null when the fetch fails.
+ * A Google photo that had to go out to the network is billed, as on screen.
+ */
+private suspend fun fetchPhoto(context: Context, url: String, google: Boolean, sources: PhotoSources): ImageBitmap? {
+    val result = context.imageLoader.execute(ImageRequest.Builder(context).data(url).allowHardware(false).build()) as? SuccessResult ?: return null
+    if (google && result.dataSource == DataSource.NETWORK) sources.onGooglePhoto()
+    return (result.drawable as? BitmapDrawable)?.bitmap?.asImageBitmap()
 }
 
 private tailrec fun Context.findActivity(): ComponentActivity? = when (this) {
