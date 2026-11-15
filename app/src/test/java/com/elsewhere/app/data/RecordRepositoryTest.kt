@@ -56,6 +56,13 @@ class RecordRepositoryTest {
 
     private fun open() = javaClass.classLoader!!.getResourceAsStream("mini_timeline.json")!!
 
+    @Test fun `the home suggestions finish the readiness bar, so it does not wait on the user`() = runTest {
+        repo.import({ open() }, "mini_timeline.json")
+        assertEquals(Ready("Finding cities", 60), ready.ready.value)
+        repo.provisionalRecord()
+        assertEquals(Ready("Working out trips", 100), ready.ready.value)
+    }
+
     @Test fun `import then saveProfile yields a record`() = runTest {
         val report = repo.import({ open() }, "mini_timeline.json")
         assertTrue(repo.hasImport.first { it })
