@@ -13,7 +13,10 @@ import com.elsewhere.app.Fx
 import com.elsewhere.app.data.Visit
 import com.elsewhere.app.ui.onboard.OnboardViewModel
 import com.elsewhere.app.ui.onboard.OnboardingGraph
+import com.elsewhere.app.ui.shell.RangeStore
 import com.elsewhere.app.ui.shell.RangeViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import com.elsewhere.app.ui.shell.ShellViewModel
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import org.junit.Rule
@@ -42,12 +45,12 @@ class RootFlowTest {
         rule.setContent {
             val root = remember { RootViewModel(store, Fakes.Land) }
             val shell = remember { ShellViewModel(store, maps) }
-            val range = remember { RangeViewModel(Fakes.Source(record)) }
+            val range = remember { RangeViewModel(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main))) }
             ElsewhereTheme {
                 Root(
                     vm = root,
                     door = { step, close -> OnboardingGraph(step, close, onboard) },
-                    app = { answers, key -> AppScaffold(answers, key, shell, range) },
+                    app = { answers, key -> AppScaffold(answers, key, shell, range, content = { t, _ -> Placeholder(t) }) },
                 )
             }
         }

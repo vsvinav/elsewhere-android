@@ -8,12 +8,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -51,5 +53,23 @@ fun PosterTextField(
             },
         )
         Box(Modifier.fillMaxWidth().height(rule).background(Poster.Ink))
+    }
+}
+
+/**
+ * The web's `Field`: a caps label over a value. `big` sets the value in display numerals; an empty
+ * value prints as a ghost "not on record" (or "—" when big), as the web does.
+ */
+@Composable
+fun Field(label: String, value: String?, modifier: Modifier = Modifier, big: Boolean = false) {
+    val onInk = LocalContentColor.current == Poster.Stock
+    val empty = value.isNullOrEmpty()
+    Column(modifier) {
+        CapsText(label, size = 11.sp)
+        Spacer(Modifier.height(6.dp))
+        val color = if (empty) (if (onInk) Poster.Ink3 else Poster.Ghost) else LocalContentColor.current
+        val shown = if (empty) (if (big) "—" else "not on record") else value!!
+        if (big) Text(shown.uppercase(), color = color, style = PosterType.Display.copy(fontSize = 44.sp, lineHeight = 0.9.em), maxLines = 1)
+        else Text(shown, color = color, style = PosterType.Lede.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, lineHeight = 1.2.em))
     }
 }

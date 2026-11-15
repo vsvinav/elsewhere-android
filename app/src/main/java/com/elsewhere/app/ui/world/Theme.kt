@@ -3,6 +3,8 @@ package com.elsewhere.app.ui.world
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /** The poster palette: a sheet of stock, printed in ink and a red plate, with one mustard spot. */
@@ -27,6 +29,12 @@ private val Scheme = lightColorScheme(
     surfaceVariant = Poster.Stock2, onSurfaceVariant = Poster.Ink2, outline = Poster.Ink, outlineVariant = Poster.Ghost,
     error = Poster.Red2, onError = Poster.Stock,
 )
+
+/** Whether count-ups and slams play; snapshot tests turn it off to print the settled frame. */
+val LocalMotion = staticCompositionLocalOf { true }
+
+/** The quiet colour for captions on the current sheet: ink-3 on stock, stock-3 on an ink bill. */
+val LocalMuted = compositionLocalOf { Poster.Ink3 }
 
 /** Always the light sheet: a poster does not have a dark mode. */
 @Composable

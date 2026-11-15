@@ -68,6 +68,6 @@ fun DisplayText(
 }
 
 @Composable
-fun CapsText(text: String, modifier: Modifier = Modifier, color: Color = Poster.Ink3, size: TextUnit = 13.sp) {
+fun CapsText(text: String, modifier: Modifier = Modifier, color: Color = LocalMuted.current, size: TextUnit = 13.sp) {
     Text(text.uppercase(), modifier, color = color, style = PosterType.Caps.copy(fontSize = size))
 }

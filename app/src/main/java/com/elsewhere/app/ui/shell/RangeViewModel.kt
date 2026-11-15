@@ -3,13 +3,10 @@ package com.elsewhere.app.ui.shell
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.data.Record
-import com.elsewhere.app.data.RecordSource
-import com.elsewhere.app.data.filterData
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -38,19 +35,17 @@ sealed interface Preset {
  * app/RangeBar.tsx: it starts as the whole record and never leaves the record's bounds.
  */
 @HiltViewModel
-class RangeViewModel @Inject constructor(source: RecordSource) : ViewModel() {
+class RangeViewModel @Inject constructor(store: RangeStore) : ViewModel() {
     private val _bounds = MutableStateFlow(0L..0L)
-    private val _range = MutableStateFlow(0L..0L)
+    private val _range = store.range
     /** The whole record's span. */
     val bounds: StateFlow<LongRange> = _bounds
     val range: StateFlow<LongRange> = _range
 
-    init { source.record.onEach { it?.let(::adopt) }.launchIn(viewModelScope) }
+    init { store.raw.onEach { it?.let(::adopt) }.launchIn(viewModelScope) }
 
     /** The record cut to `range`; the whole record passes through untouched. */
-    val filtered: StateFlow<Record?> = combine(source.record, _range) { rec, r ->
-        if (rec == null || r == rec.meta.range) rec else filterData(rec, r)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val filtered: StateFlow<Record?> = store.filtered
 
     /** Every calendar year the record touches, for the year chips. */
     val years: StateFlow<List<Int>> = _bounds.map { b ->

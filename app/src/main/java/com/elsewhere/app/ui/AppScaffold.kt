@@ -29,17 +29,31 @@ import com.elsewhere.app.ui.shell.RangeViewModel
 import com.elsewhere.app.ui.shell.ShellViewModel
 import com.elsewhere.app.ui.shell.TicketStrip
 import com.elsewhere.app.ui.shell.dayOf
+import com.elsewhere.app.ui.tabs.numbers.NumbersTab
+import com.elsewhere.app.ui.tabs.tour.TourTab
 import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.Pass
 import com.elsewhere.app.ui.world.Poster
 
 private enum class Picking { FROM, TO }
 
-/** The printed app: masthead on top, range bar and ticket strip below, one section in between. */
+/** The section each ticket opens on. Tabs not yet ported print a placeholder. */
+@Composable
+fun TabContent(tab: Tab, go: (Tab) -> Unit) = when (tab) {
+    Tab.TOUR -> TourTab(onGo = go)
+    Tab.NUMBERS -> NumbersTab()
+    else -> Placeholder(tab)
+}
+
+/**
+ * The printed app: masthead on top, range bar and ticket strip below, one section in between.
+ * `content` renders a tab; tests pass a stand-in so no section needs its own injected ViewModel.
+ */
 @Composable
 fun AppScaffold(
     onChangeAnswers: () -> Unit, onMapsKey: () -> Unit,
     shell: ShellViewModel = hiltViewModel(), rangeVm: RangeViewModel = hiltViewModel(),
+    content: @Composable (tab: Tab, go: (Tab) -> Unit) -> Unit = { t, g -> TabContent(t, g) },
 ) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -76,7 +90,7 @@ fun AppScaffold(
         },
     ) { pad ->
         NavHost(nav, startDestination = Tab.TOUR.route, Modifier.fillMaxSize().padding(pad)) {
-            for (t in Tab.entries) composable(t.route) { Placeholder(t) }
+            for (t in Tab.entries) composable(t.route) { content(t, go) }
         }
     }
 
@@ -96,6 +110,6 @@ fun AppScaffold(
 }
 
 @Composable
-private fun Placeholder(tab: Tab) {
+fun Placeholder(tab: Tab) {
     Box(Modifier.fillMaxSize().padding(20.dp)) { Pass { DisplayText(tab.label, 48.sp, misreg = true) } }
 }

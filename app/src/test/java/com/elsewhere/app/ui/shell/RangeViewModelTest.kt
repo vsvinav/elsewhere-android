@@ -3,6 +3,7 @@ package com.elsewhere.app.ui.shell
 import com.elsewhere.app.Fx
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordSource
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,7 +35,7 @@ class RangeViewModelTest {
     @BeforeEach fun up() = Dispatchers.setMain(dispatcher)
     @AfterEach fun down() = Dispatchers.resetMain()
 
-    private fun vm() = RangeViewModel(Fake(rec)).also { dispatcher.scheduler.runCurrent() }
+    private fun vm() = RangeViewModel(RangeStore(Fake(rec), CoroutineScope(dispatcher))).also { dispatcher.scheduler.runCurrent() }
 
     @Test fun `opens on the whole record`() = runTest(dispatcher) {
         val vm = vm()
@@ -74,7 +75,7 @@ class RangeViewModelTest {
     @Test fun `the filtered record is cut to the window`() = runTest(dispatcher) {
         val a = Fx.visit(start + Fx.D, start + 2 * Fx.D, "a"); val b = Fx.visit(end - 2 * Fx.H, end - Fx.H, "b")
         val src = Fake(Fx.record(visits = listOf(a, b), range = start..end))
-        val vm = RangeViewModel(src).also { dispatcher.scheduler.runCurrent() }
+        val vm = RangeViewModel(RangeStore(src, CoroutineScope(dispatcher))).also { dispatcher.scheduler.runCurrent() }
         assertEquals(2, vm.filtered.value!!.visits.size)
         vm.preset(Preset.Last90); dispatcher.scheduler.runCurrent()
         assertEquals(listOf(b), vm.filtered.value!!.visits)
