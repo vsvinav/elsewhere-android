@@ -90,7 +90,8 @@ class RecordService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
         if (!gate.granted(Manifest.permission.ACCESS_FINE_LOCATION)) return standDown()
-        paused = intent?.action == ACTION_PAUSE
+        // A redelivery after the system killed us carries no action: the settings know whether we were paused.
+        paused = pausedFor(intent?.action, if (intent == null) runBlocking { settings.recording.first() } else Recording(), System.currentTimeMillis() / 1000)
         if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         else startForeground(NOTIFICATION_ID, notification())
         if (paused) stopListening() else startListening()
