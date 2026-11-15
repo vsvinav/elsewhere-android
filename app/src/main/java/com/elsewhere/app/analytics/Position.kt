@@ -61,22 +61,25 @@ fun whereaboutsAt(data: Record, t: Long): Whereabouts? {
 enum class SegmentKind { VISIT, ACTIVITY, GAP }
 data class Segment(val kind: SegmentKind, val start: Long, val end: Long, val s: LatLng, val e: LatLng, val mode: String, val km: Double)
 
-/** The visit, activity or gap the playhead is inside, with both ends so a camera can frame it. */
+/** The visit, activity or gap the playhead is inside, with both ends so a camera can frame it. Binary search: safe to call hundreds of times a frame. */
 fun segmentAt(data: Record, t: Long): Segment {
-    var prev: LatLng? = null; var nextStart: Long? = null; var nextP: LatLng? = null; var prevEnd: Long? = null
-    for (v in data.visits) {
-        if (v.lvl != 0) continue
-        if (v.start > t) { nextStart = v.start; nextP = LatLng(v.lat, v.lng); break }
-        val p = LatLng(v.lat, v.lng)
-        if (t <= v.end) return Segment(SegmentKind.VISIT, v.start, v.end, p, p, "STILL", 0.0)
-        if (prevEnd == null || v.end > prevEnd) { prevEnd = v.end; prev = p }
+    val visits = topVisits(data); val acts = data.activities
+    val vi = lastStarted(visits, t); val ai = lastStarted(acts, t)
+    if (vi >= 0 && t <= visits[vi].end) { val v = visits[vi]; val p = LatLng(v.lat, v.lng); return Segment(SegmentKind.VISIT, v.start, v.end, p, p, "STILL", 0.0) }
+    if (ai >= 0 && t <= acts[ai].end) { val a = acts[ai]; return Segment(SegmentKind.ACTIVITY, a.start, a.end, LatLng(a.sLat, a.sLng), LatLng(a.eLat, a.eLng), a.mode, a.m / 1000) }
+    val pv = visits.getOrNull(vi); val pa = acts.getOrNull(ai)
+    val prevEnd: Long? = listOfNotNull(pv?.end, pa?.end).maxOrNull()
+    val prev: LatLng? = when {
+        pv != null && pa != null -> if (pv.end >= pa.end) LatLng(pv.lat, pv.lng) else LatLng(pa.eLat, pa.eLng)
+        pv != null -> LatLng(pv.lat, pv.lng)
+        pa != null -> LatLng(pa.eLat, pa.eLng)
+        else -> null
     }
-    for (a in data.activities) {
-        if (a.start > t) { if (nextStart == null || a.start < nextStart) { nextStart = a.start; nextP = LatLng(a.sLat, a.sLng) }; break }
-        val s = LatLng(a.sLat, a.sLng); val e = LatLng(a.eLat, a.eLng)
-        if (t <= a.end) return Segment(SegmentKind.ACTIVITY, a.start, a.end, s, e, a.mode, a.m / 1000)
-        if (prevEnd == null || a.end > prevEnd) { prevEnd = a.end; prev = e }
-    }
+    val nv = visits.getOrNull(vi + 1); val na = acts.getOrNull(ai + 1)
+    val nextStart: Long?; val nextP: LatLng?
+    if (nv != null && (na == null || nv.start <= na.start)) { nextStart = nv.start; nextP = LatLng(nv.lat, nv.lng) }
+    else if (na != null) { nextStart = na.start; nextP = LatLng(na.sLat, na.sLng) }
+    else { nextStart = null; nextP = null }
     val s = prev ?: nextP ?: data.profile.home; val e = nextP ?: s
     val start = prevEnd ?: min(t, data.meta.range.first)
     return Segment(SegmentKind.GAP, start, nextStart ?: (t + 6 * 3600), s, e, "GAP", distanceKm(s, e))

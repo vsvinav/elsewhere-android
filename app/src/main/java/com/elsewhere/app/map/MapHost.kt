@@ -1,12 +1,14 @@
 package com.elsewhere.app.map
 
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.log2
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.tan
 
 /** Where the camera sits. `zoom` is in Google's 256px-tile convention on every provider; mirrors web/src/map/cam.ts. */
@@ -22,6 +24,44 @@ sealed interface MapEvent {
     data object DragStart : MapEvent
     data object Idle : MapEvent
 }
+
+/**
+ * Tells a hand on the map from the camera the app writes itself. A follow-cam writes every frame, so neither
+ * "the camera changed" nor "the map went quiet" can mean a drag on its own: a drag is a gesture-reasoned change that
+ * is not what we last wrote, reported once until a programmatic move or an idle spell ends it.
+ */
+class MoveWatch {
+    private var written: Cam? = null
+    private var settled = true
+    private var inGesture = false
+
+    fun wrote(cam: Cam) { written = cam }
+
+    /** Events for a camera the SDK reports, given what it showed before and whether the SDK blames a gesture. */
+    fun saw(cam: Cam, prev: Cam, gesture: Boolean): List<MapEvent> {
+        if (cam == prev) return emptyList()
+        val out = ArrayList<MapEvent>(3)
+        val ours = written?.let { cam.near(it) } == true
+        if (ours) written = null
+        if (ours || !gesture) inGesture = false
+        else {
+            settled = false
+            if (!inGesture) { inGesture = true; out.add(MapEvent.DragStart) }
+        }
+        out.add(MapEvent.Move)
+        if (cam.zoom != prev.zoom) out.add(MapEvent.Zoom)
+        return out
+    }
+
+    /** The quiet spell: Idle once per unsettled stretch. */
+    fun idle(): MapEvent? {
+        if (settled) return null
+        settled = true; inGesture = false
+        return MapEvent.Idle
+    }
+}
+
+private fun Cam.near(o: Cam) = abs(lat - o.lat) < 1e-7 && abs(lng - o.lng) < 1e-7 && abs(zoom - o.zoom) < 1e-3 && abs(bearing - o.bearing) < 1e-3
 
 /** A tap on the bare map, in degrees; overlays decide what it hit. */
 data class Tap(val lat: Double, val lng: Double)
@@ -39,6 +79,23 @@ private fun mercY(lat: Double): Double {
 }
 
 private fun unmercY(y: Double): Double = (2 * atan(exp(y)) - PI / 2) * 180 / PI
+
+/** The box a camera shows in a viewport of `widthPx`×`heightPx`; the inverse of [camForBounds]. Longitudes may run past ±180 near the date line. */
+fun viewBounds(cam: Cam, widthPx: Int, heightPx: Int): Bounds {
+    val world = TILE * 2.0.pow(cam.zoom.toDouble())
+    val dLng = widthPx / world * 360.0
+    val dy = heightPx / world * 2 * PI
+    val cy = mercY(cam.lat)
+    return Bounds(unmercY(cy - dy / 2), cam.lng - dLng / 2, unmercY(cy + dy / 2), cam.lng + dLng / 2)
+}
+
+/** Whether a normalised box `o` touches this one, allowing this box's longitudes to run past the date line. */
+fun Bounds.intersects(o: Bounds): Boolean {
+    if (o.neLat < swLat || o.swLat > neLat) return false
+    if (neLng - swLng >= 360.0) return true
+    for (shift in doubleArrayOf(0.0, 360.0, -360.0)) if (o.neLng + shift >= swLng && o.swLng + shift <= neLng) return true
+    return false
+}
 
 /**
  * The camera that frames `b` inside a viewport of `widthPx`×`heightPx` with `paddingPx` kept clear on each side.

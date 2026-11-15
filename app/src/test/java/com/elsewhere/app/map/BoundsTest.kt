@@ -1,6 +1,9 @@
 package com.elsewhere.app.map
 
+import com.elsewhere.app.analytics.Lens
+import com.elsewhere.app.data.LatLng
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -40,5 +43,33 @@ class BoundsTest {
 
     @Test fun `a single point caps at the max zoom`() {
         assertEquals(21f, camForBounds(Bounds(48.8, 2.3, 48.8, 2.3), 800, 800, 20).zoom)
+    }
+}
+
+class ViewportTest {
+    @Test fun `the view of a camera round-trips through camForBounds`() {
+        val cam = Cam(42.36, -71.06, 11f)
+        val b = viewBounds(cam, 1080, 1920)
+        val back = camForBounds(b, 1080, 1920, 0)
+        assertEquals(cam.lat, back.lat, 1e-6); assertEquals(cam.lng, back.lng, 1e-6); assertEquals(cam.zoom, back.zoom, 1e-3f)
+        assertTrue(b.swLat < cam.lat && cam.lat < b.neLat); assertTrue(b.swLng < cam.lng && cam.lng < b.neLng)
+    }
+
+    @Test fun `a trail is kept when its box touches the view, across the date line too`() {
+        val view = Bounds(40.0, -75.0, 45.0, -70.0)
+        assertTrue(view.intersects(Bounds(44.0, -80.0, 50.0, -74.0)))
+        assertFalse(view.intersects(Bounds(46.0, -75.0, 47.0, -70.0)))
+        assertFalse(view.intersects(Bounds(40.0, -69.0, 45.0, -60.0)))
+        // A view past 180° still catches a trail printed at -179°.
+        val wrapped = viewBounds(Cam(0.0, 179.5, 6f), 1080, 1920)
+        assertTrue(wrapped.neLng > 180.0)
+        assertTrue(wrapped.intersects(Bounds(-1.0, -179.9, 1.0, -179.0)))
+        assertFalse(wrapped.intersects(Bounds(-1.0, -150.0, 1.0, -140.0)))
+        assertTrue(viewBounds(Cam(0.0, 0.0, 0f), 2000, 2000).intersects(Bounds(0.0, 100.0, 1.0, 101.0)))
+    }
+
+    @Test fun `a trail knows its box`() {
+        val t = Trail(listOf(LatLng(1.0, 5.0), LatLng(-2.0, 7.0), LatLng(0.5, 3.0)), doubleArrayOf(0.0, 1.0, 2.0), Lens.DRIVE, false)
+        assertEquals(Bounds(-2.0, 3.0, 1.0, 7.0), t.box)
     }
 }

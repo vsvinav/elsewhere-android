@@ -15,7 +15,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
@@ -35,6 +34,7 @@ import com.elsewhere.app.ui.tabs.facts.FactsTab
 import com.elsewhere.app.ui.tabs.flights.FlightsTab
 import com.elsewhere.app.ui.tabs.map.MapTab
 import com.elsewhere.app.ui.tabs.numbers.NumbersTab
+import com.elsewhere.app.ui.tabs.replay.ReplayTab
 import com.elsewhere.app.ui.tabs.stops.StopsTab
 import com.elsewhere.app.ui.tabs.tour.TourTab
 import com.elsewhere.app.ui.world.DisplayText
@@ -44,7 +44,7 @@ import com.elsewhere.app.ui.world.Poster
 
 private enum class Picking { FROM, TO }
 
-/** The section each ticket opens on. Replay still prints a placeholder. */
+/** The section each ticket opens on. */
 @Composable
 fun TabContent(tab: Tab, go: (Tab) -> Unit) = when (tab) {
     Tab.TOUR -> TourTab(onGo = go)
@@ -54,7 +54,7 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit) = when (tab) {
     Tab.DATES -> DatesTab()
     Tab.FLIGHTS -> FlightsTab()
     Tab.MAP -> MapTab()
-    else -> Placeholder(tab)
+    Tab.REPLAY -> ReplayTab()
 }
 
 /**
@@ -125,9 +125,4 @@ fun AppScaffold(
             onDismiss = { picking = null },
         )
     }
-}
-
-@Composable
-fun Placeholder(tab: Tab) {
-    Box(Modifier.fillMaxSize().padding(20.dp)) { Pass { DisplayText(tab.label, 48.sp, misreg = true) } }
 }

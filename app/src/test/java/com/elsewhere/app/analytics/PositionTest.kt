@@ -34,6 +34,25 @@ class PositionTest {
         assertNull(positionAt(Fx.record(), 5))
     }
 
+    @Test fun `segmentAt at the edges - empty, before, after, and the exact boundaries`() {
+        val empty = segmentAt(Fx.record(home = LatLng(5.0, 5.0)), 7)
+        assertEquals(SegmentKind.GAP, empty.kind); assertEquals(LatLng(5.0, 5.0), empty.s); assertEquals(7 + 6 * 3600L, empty.end)
+
+        val before = segmentAt(data, -5)
+        assertEquals(SegmentKind.GAP, before.kind); assertEquals(0L, before.end); assertEquals(LatLng(1.0, 1.0), before.e)
+
+        val after = segmentAt(data, 100)
+        assertEquals(SegmentKind.GAP, after.kind); assertEquals(40L, after.start); assertEquals(LatLng(3.0, 3.0), after.s); assertEquals(after.s, after.e)
+
+        assertEquals(SegmentKind.VISIT, segmentAt(data, 0).kind)
+        assertEquals(SegmentKind.VISIT, segmentAt(data, 10).kind)
+        assertEquals(SegmentKind.ACTIVITY, segmentAt(data, 11).kind)
+        assertEquals(SegmentKind.ACTIVITY, segmentAt(data, 29).kind)
+        assertEquals(SegmentKind.VISIT, segmentAt(data, 30).kind) // a visit starting as the activity ends wins, as on the web
+        assertEquals(SegmentKind.VISIT, segmentAt(data, 40).kind)
+        assertEquals(SegmentKind.GAP, segmentAt(data, 41).kind)
+    }
+
     @Test fun `distanceKm Boston to SF`() {
         val d = distanceKm(LatLng(42.3601, -71.0589), LatLng(37.7749, -122.4194))
         assertTrue(d > 4330); assertTrue(d < 4350)
