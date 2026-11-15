@@ -185,8 +185,11 @@ class OnboardViewModel @Inject constructor(
         val prev = naming
         naming = viewModelScope.launch {
             prev?.cancelAndJoin()
+            val todo = (_state.value.sleep + _state.value.weekday).filter { !it.named }.distinctBy { it.placeId }
+            if (todo.isEmpty()) return@launch
             _state.update { it.copy(asking = true) }
-            try { nameCandidates(rec, key, key.isNotBlank() && keyPlaces) } finally { _state.update { it.copy(asking = false) } }
+            // Only the run still on record lowers the flag, so an older job's unwind cannot clear a newer run's.
+            try { nameCandidates(todo, rec, key, key.isNotBlank() && keyPlaces) } finally { if (naming === coroutineContext[Job]) _state.update { it.copy(asking = false) } }
         }
     }
 
@@ -194,8 +197,7 @@ class OnboardViewModel @Inject constructor(
      * Cards that only say a city get a better line, as the web's Onboarding does: a Places name when the key
      * works, else a street and neighbourhood from Nominatim. Each lands as it arrives.
      */
-    private suspend fun nameCandidates(rec: Record, key: String, paid: Boolean) {
-        val todo = (_state.value.sleep + _state.value.weekday).filter { !it.named }.distinctBy { it.placeId }
+    private suspend fun nameCandidates(todo: List<Candidate>, rec: Record, key: String, paid: Boolean) {
         for (c in todo) name(c, rec, key, paid)
     }
 
