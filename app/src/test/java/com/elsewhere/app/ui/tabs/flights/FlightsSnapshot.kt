@@ -12,10 +12,14 @@ import app.cash.paparazzi.Paparazzi
 import com.elsewhere.app.SampleRecord
 import com.elsewhere.app.analytics.Airports
 import com.elsewhere.app.data.FeatureCollection
-import com.elsewhere.app.share.LocalPrinting
+import com.android.ide.common.rendering.api.SessionParams.RenderingMode
+import com.android.resources.Density
+import com.elsewhere.app.share.ShareCard
+import com.elsewhere.app.share.ShareFormat
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import com.elsewhere.app.ui.world.LocalMotion
 import com.elsewhere.app.ui.world.Poster
+import com.elsewhere.app.ui.world.Tone
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
@@ -40,12 +44,19 @@ class FlightsSnapshot {
     @Test fun ledger() = sheet { RoutesBill(ui, open) {}; AirportsBill(ui) }
     @Test fun from() = sheet { FromBill(ui, 0) {} }
 
-    // The saved card: the globe turned 90° east of its default and the open route kept, the drag hint and the Save menu gone.
-    @Test fun printedGlobe() = paparazzi.snapshot {
-        ElsewhereTheme {
-            CompositionLocalProvider(LocalMotion provides false, LocalPrinting provides true) {
-                Column(Modifier.wrapContentHeight(Alignment.Top, unbounded = true)) {
-                    FlightsScreen(ui, Rotation(ui.centre.lng + 90.0, ui.centre.lat), onRotate = {}, selected = open, onSelect = {}, scroll = false)
+    // The saved card, on the story sheet it is shared from: the globe turned 90° east of its default and the open route
+    // kept, the drag hint and the Save menu gone. One output pixel per golden pixel.
+    @Test fun printedGlobe() {
+        paparazzi.unsafeUpdateConfig(
+            deviceConfig = DeviceConfig.PIXEL_6.copy(screenWidth = 1080, screenHeight = 1920, density = Density.MEDIUM, softButtons = false),
+            renderingMode = RenderingMode.SHRINK,
+        )
+        paparazzi.snapshot {
+            ElsewhereTheme {
+                CompositionLocalProvider(LocalMotion provides false) {
+                    ShareCard(ShareFormat.STORY, paper = Tone.INK.fill, ink = Tone.INK.text) {
+                        HeroBill(ui, Rotation(ui.centre.lng + 90.0, ui.centre.lat), onRotate = {}, selected = open, onSelect = {})
+                    }
                 }
             }
         }
