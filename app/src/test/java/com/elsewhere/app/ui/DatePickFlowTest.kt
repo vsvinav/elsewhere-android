@@ -35,7 +35,7 @@ class DatePickFlowTest {
         rule.setContent {
             val maps = Fakes.Maps()
             val shell = remember { ShellViewModel(Fakes.Store(record), Fakes.Source(record), maps, Fakes.lookups(maps, CoroutineScope(Dispatchers.Main)), DoorNav(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main)), CoroutineScope(Dispatchers.Main))) }
-            ElsewhereTheme { AppScaffold({}, {}, {}, shell, range, content = { t, _ -> Placeholder(t) }) }
+            ElsewhereTheme { AppScaffold({}, {}, {}, shell, range, content = { t, _, _ -> Placeholder(t) }) }
         }
         rule.onNodeWithText("1 JAN 2024").performClick()
         rule.onNode(isSelectable() and hasText("15")).performClick()

@@ -52,7 +52,7 @@ class DoorFlowTest {
             val maps = Fakes.Maps()
             val shell = remember { ShellViewModel(Fakes.Store(record), source, maps, Fakes.lookups(maps, CoroutineScope(Dispatchers.Main)), doors) }
             ElsewhereTheme {
-                AppScaffold({}, {}, {}, shell, range, content = { t, _ ->
+                AppScaffold({}, {}, {}, shell, range, content = { t, _, _ ->
                     // Every bill prints one figure as a door; the map wears the stub it came in on.
                     Column {
                         com.elsewhere.app.ui.nav.Door(Door.Range(Fx.utc(2024, 2, 1), Fx.utc(2024, 2, 31), "${t.label} figure")) { Text("${t.label} figure") }

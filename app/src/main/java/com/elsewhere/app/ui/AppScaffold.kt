@@ -81,7 +81,7 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}, onMapsKey
 fun AppScaffold(
     onChangeAnswers: () -> Unit, onMapsKey: () -> Unit, onRecord: () -> Unit = {},
     shell: ShellViewModel = hiltViewModel(), rangeVm: RangeViewModel = hiltViewModel(),
-    content: @Composable (tab: Tab, go: (Tab) -> Unit) -> Unit = { t, g -> TabContent(t, g, onRecord, onMapsKey) { r, _, _ -> rangeVm.setRange(r); g(Tab.MAP) } },
+    content: @Composable (tab: Tab, go: (Tab) -> Unit, onOpen: OpenDoor) -> Unit = { t, g, o -> TabContent(t, g, onRecord, onMapsKey, o) },
 ) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -135,6 +135,8 @@ fun AppScaffold(
     // One lambda for the life of the shell, so the bills do not recompose on every tick of the shell's state.
     val tabState = rememberUpdatedState(tab)
     val open = remember(shell) { { d: Door -> shell.doors.go(d, tabState.value) } }
+    // A highlight is a door onto its day, so the map wears the same stub and the way back is the same.
+    val openHighlight: OpenDoor = remember(open) { { r, _, _ -> open(Door.Range(r.first, r.last, "On this day")) } }
     CompositionLocalProvider(LocalOpenDoor provides open) {
     Box {
     Scaffold(
@@ -164,7 +166,7 @@ fun AppScaffold(
                     for (t in Tab.entries) composable(t.route) {
                         // Inside the host, so it outranks the host's own pop: Back on a map opened through a door goes back through it.
                         if (t == Tab.MAP) BackHandler(enabled = origin != null) { shell.doors.back() }
-                        content(t, go)
+                        content(t, go, openHighlight)
                     }
                 }
             }
