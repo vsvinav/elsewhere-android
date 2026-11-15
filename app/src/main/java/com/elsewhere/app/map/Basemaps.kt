@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -26,12 +27,13 @@ import kotlinx.coroutines.launch
 import java.io.IOException
 
 /**
- * The base map every map-bearing screen draws on: Google's tiles through one Map Tiles session per key (counted
- * as one map load, as the web counts one Maps JS load) or the free style when there is no accepted key or Google
- * refuses the session. One per view model, so each screen is its own map session.
+ * The base map every map-bearing screen draws on: Google's native SDK when this build carries its key (no
+ * session, nothing counted: dynamic maps are free), else Google's tiles through one Map Tiles session per key
+ * (counted as one map load, as the web counts one Maps JS load), else the free style when there is no accepted
+ * key or Google refuses the session. One per view model, so each screen is its own map session.
  */
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
-class Basemaps(scope: CoroutineScope, maps: MapsSettings, private val tiles: TileService, meter: CostMeter) {
+class Basemaps(scope: CoroutineScope, maps: MapsSettings, private val tiles: TileService, meter: CostMeter, sdk: Boolean = Sdk.available) {
     private val _tilesError = MutableStateFlow<String?>(null)
     /** Google's own words when the tile session could not be opened; the screen says so once. */
     val tilesError: StateFlow<String?> = _tilesError
@@ -42,7 +44,7 @@ class Basemaps(scope: CoroutineScope, maps: MapsSettings, private val tiles: Til
     private val viewports = MutableSharedFlow<Viewport>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private val session: StateFlow<Pair<String, TileSession>?> = maps.settings
-        .map { s -> if (resolve(s) == Provider.GOOGLE) s.mapsKey else null }.distinctUntilChanged()
+        .map { s -> if (resolve(s, sdk) == Provider.GOOGLE) s.mapsKey else null }.distinctUntilChanged()
         .mapLatest { key ->
             if (key == null) return@mapLatest null
             try {
@@ -58,9 +60,14 @@ class Basemaps(scope: CoroutineScope, maps: MapsSettings, private val tiles: Til
         }
         .stateIn(scope, SharingStarted.Eagerly, null)
 
-    val basemap: StateFlow<Basemap> = session.map { ks ->
-        ks?.let { (key, s) -> Basemap.Google(rasterStyle(tileTemplate(s, key))) } ?: Basemap.Free
-    }.stateIn(scope, SharingStarted.Eagerly, Basemap.Free)
+    // Starts as the SDK on an SDK build so the first frame already has the right map underneath; the Map ID follows.
+    val basemap: StateFlow<Basemap> = combine(maps.settings, session) { s, ks ->
+        when {
+            resolve(s, sdk) == Provider.SDK -> Basemap.Sdk(s.mapId)
+            ks != null -> Basemap.Google(rasterStyle(tileTemplate(ks.second, ks.first)))
+            else -> Basemap.Free
+        }
+    }.stateIn(scope, SharingStarted.Eagerly, if (sdk) Basemap.Sdk("") else Basemap.Free)
 
     init {
         // The attribution Google's terms want follows the camera, a second after it settles.

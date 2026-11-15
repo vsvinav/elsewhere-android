@@ -2,12 +2,17 @@ package com.elsewhere.app.ingest
 
 import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.Settings
+import com.elsewhere.app.map.Sdk
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Is the visitor allowed past the key? Not while a key is stored but unproven on both APIs and limited maps are not yet accepted (web `useKeyGate`). */
-fun keyGated(s: Settings): Boolean = s.mapsKey.isNotBlank() && !(s.keyPlaces && s.keyTiles) && !s.limitedAccepted
+/**
+ * Is the visitor allowed past the key? Not while a key is stored but unproven on the APIs this build needs and
+ * limited maps are not yet accepted (web `useKeyGate`). A build with the Maps SDK draws Google's map itself, so
+ * only Places has to answer.
+ */
+fun keyGated(s: Settings, sdk: Boolean = Sdk.available): Boolean = s.mapsKey.isNotBlank() && !(s.keyPlaces && (s.keyTiles || sdk)) && !s.limitedAccepted
 
 /** Saves a key and records Google's verdict on it; the onboarding door and the startup gate both go through here. */
 @Singleton

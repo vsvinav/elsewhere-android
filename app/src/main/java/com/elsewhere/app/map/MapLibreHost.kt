@@ -45,10 +45,14 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
-/** What the base map is drawn from: the free style's URL, or Google's raster tiles with the text their terms want shown. */
+/**
+ * What the base map is drawn from: the free style's URL, Google's raster tiles with the text their terms want
+ * shown, or Google's native SDK styled by the user's Map ID (blank for Google's default look).
+ */
 sealed interface Basemap {
     data object Free : Basemap
     data class Google(val styleJson: String) : Basemap
+    data class Sdk(val mapId: String) : Basemap
 }
 
 /**
@@ -77,22 +81,21 @@ private fun styleFileFor(dir: File, styleJson: String): File {
  * roadmap raster tiles through a Map Tiles session. Both providers' terms need attribution kept on screen, so the
  * ornament stays and Google's copyright line prints beside it. Zooms convert to Google's convention.
  */
-class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val state: CameraState) {
+class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val state: CameraState) : MapHost {
     private val _camera = MutableStateFlow(initial)
-    val camera: StateFlow<Cam> = _camera.asStateFlow()
+    override val camera: StateFlow<Cam> = _camera.asStateFlow()
     private val _events = MutableSharedFlow<MapEvent>(extraBufferCapacity = 64)
-    val events: SharedFlow<MapEvent> = _events.asSharedFlow()
+    override val events: SharedFlow<MapEvent> = _events.asSharedFlow()
     private val _taps = MutableSharedFlow<Tap>(extraBufferCapacity = 8)
-    val taps: SharedFlow<Tap> = _taps.asSharedFlow()
+    override val taps: SharedFlow<Tap> = _taps.asSharedFlow()
     private val _viewport = MutableStateFlow<Viewport?>(null)
-    /** What the camera shows once it has settled; null before the map has laid out. */
-    val viewport: StateFlow<Viewport?> = _viewport.asStateFlow()
+    override val viewport: StateFlow<Viewport?> = _viewport.asStateFlow()
 
     private var density = 1f
     private val framer = Framer { cam, ms -> moveTo(cam, ms) }
     private val watch = MoveWatch()
 
-    fun moveTo(cam: Cam, animateMs: Int = 0) {
+    override fun moveTo(cam: Cam, animateMs: Int) {
         watch.wrote(cam)
         if (animateMs <= 0) { state.position = cam.toLibre(); _camera.value = cam }
         // animateTo waits for the map to exist and cancels any move still running, so it always lands.
@@ -100,31 +103,30 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
     }
 
     /** maplibre-compose 0.5.0 has no fitBounds, so the frame is solved in Mercator once the view has a size. */
-    fun fit(bounds: Bounds, paddingPx: Int) = framer.fit(bounds, paddingPx)
+    override fun fit(bounds: Bounds, paddingPx: Int) = framer.fit(bounds, paddingPx)
 
     /** The library answers in dp and throws before the map exists, so scale here and treat "no map yet" as null. */
-    fun project(lat: Double, lng: Double): Offset? =
+    override fun project(lat: Double, lng: Double): Offset? =
         runCatching { state.screenLocationFromPosition(Position(lng, lat)) }.getOrNull()?.let { Offset(it.x.value * density, it.y.value * density) }
 
-    /** Where a point lands on screen, in px from [Content]'s top-left; null before the map has laid out. */
     private fun visible(): Viewport? = runCatching { state.queryVisibleBoundingBox() }.getOrNull()?.let {
         Viewport(_camera.value.zoom.toInt(), north = it.northeast.latitude, south = it.southwest.latitude, east = it.northeast.longitude, west = it.southwest.longitude)
     }
 
     @OptIn(FlowPreview::class)
     @Composable
-    fun Content(modifier: Modifier, basemap: Basemap = Basemap.Free, copyright: String? = null, overlays: @Composable () -> Unit) {
+    override fun Content(modifier: Modifier, basemap: Basemap, copyright: String?, overlays: @Composable () -> Unit) {
         density = LocalDensity.current.density
         framer.density = density
         val cacheDir = LocalContext.current.cacheDir
         // A style written on an earlier visit is used from the first frame, so a verified key never flashes the free map.
         val styleUri by produceState(
-            when (basemap) { Basemap.Free -> STYLE; is Basemap.Google -> cachedStyleFile(cacheDir, basemap.styleJson)?.toURI()?.toString() ?: STYLE },
+            when (basemap) { is Basemap.Google -> cachedStyleFile(cacheDir, basemap.styleJson)?.toURI()?.toString() ?: STYLE; else -> STYLE },
             basemap,
         ) {
             value = when (basemap) {
-                Basemap.Free -> STYLE
                 is Basemap.Google -> withContext(Dispatchers.IO) { styleFile(cacheDir, basemap.styleJson).toURI().toString() }
+                else -> STYLE
             }
         }
         LaunchedEffect(Unit) {

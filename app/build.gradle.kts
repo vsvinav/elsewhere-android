@@ -21,6 +21,10 @@ fun versionCodeOf(v: String): Int {
 // CI writes it to ELSEWHERE_KEYSTORE; without it the build signs with the default debug key.
 val keystorePath: String? = System.getenv("ELSEWHERE_KEYSTORE")?.takeIf { File(it).isFile }
 
+// Google's Maps SDK reads its key from the manifest, so it belongs to whoever builds the APK, not the user:
+// -Pelsewhere.mapsSdkKey=… or MAPS_SDK_KEY (CI). Without one the map falls back to tiles or the free style.
+val mapsSdkKey: String = (findProperty("elsewhere.mapsSdkKey") as String?)?.takeIf { it.isNotBlank() } ?: System.getenv("MAPS_SDK_KEY").orEmpty()
+
 android {
     namespace = "com.elsewhere.app"
     compileSdk = 35
@@ -31,6 +35,8 @@ android {
         versionName = appVersion
         versionCode = versionCodeOf(appVersion)
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["mapsSdkKey"] = mapsSdkKey
+        buildConfigField("boolean", "HAS_MAPS_SDK", mapsSdkKey.isNotBlank().toString())
     }
     signingConfigs {
         if (keystorePath != null) create("elsewhere") {
@@ -46,7 +52,7 @@ android {
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isIncludeAndroidResources = true; unitTests.all { it.useJUnitPlatform() } }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
@@ -67,6 +73,7 @@ dependencies {
     implementation(libs.retrofit); implementation(libs.retrofit.serialization); implementation(libs.okhttp)
     implementation(libs.coil.compose); implementation(libs.work.runtime)
     implementation(libs.maplibre.compose); implementation(libs.play.location)
+    implementation(libs.play.maps); implementation(libs.maps.compose)
     testImplementation(libs.junit5.api); testImplementation(libs.junit5.params); testRuntimeOnly(libs.junit5.engine)
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.3")
     testImplementation(libs.coroutines.test); testImplementation(libs.okhttp.mockwebserver)

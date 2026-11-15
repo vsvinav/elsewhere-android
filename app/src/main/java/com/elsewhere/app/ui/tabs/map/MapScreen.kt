@@ -62,7 +62,7 @@ import com.elsewhere.app.map.Cam
 import com.elsewhere.app.map.ClusterPin
 import com.elsewhere.app.map.Dot
 import com.elsewhere.app.map.LABEL_PX
-import com.elsewhere.app.map.MapLibreHost
+import com.elsewhere.app.map.MapHost
 import com.elsewhere.app.map.Pin
 import com.elsewhere.app.map.PinLayers
 import com.elsewhere.app.map.PinOpts
@@ -104,15 +104,15 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
     val tilesError by vm.tilesError.collectAsStateWithLifecycle()
     val copyright by vm.copyright.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val host = rememberMapHost()
+    val host = rememberMapHost(basemap)
     LaunchedEffect(tilesError) { tilesError?.let { snackbar.showSnackbar("Google refused the map tiles — using the free map. $it") } }
     LaunchedEffect(host) { host.viewport.collect { it?.let(vm::idle) } }
     val density = LocalDensity.current
     val fit = { l: PinLayers, o: PinOpts -> l.fitBounds(o)?.let { host.fit(it, with(density) { FIT_PAD.roundToPx() }) } != null }
 
     // Framed once, when the screen first has pins, and again only on "Fit pins": a range change under the
-    // user swaps the pins but leaves the camera where they put it.
-    var fitted by remember(host) { mutableStateOf(false) }
+    // user swaps the pins but leaves the camera where they put it, as does a host swap carrying the camera over.
+    var fitted by remember { mutableStateOf(false) }
     // An empty window has nothing to frame yet; the latch waits for the first fit that actually happens.
     LaunchedEffect(host, layers) { val l = layers; if (!fitted && l != null && fit(l, vm.opts.value)) fitted = true }
 
@@ -262,7 +262,7 @@ private fun PinCard(d: Dot, modifier: Modifier = Modifier, onClose: () -> Unit) 
  * clusters behind it are regridded only when the half-zoom bucket changes.
  */
 @Composable
-private fun PinCanvas(host: MapLibreHost, layers: PinLayers, opts: PinOpts, modifier: Modifier = Modifier) {
+private fun PinCanvas(host: MapHost, layers: PinLayers, opts: PinOpts, modifier: Modifier = Modifier) {
     val cam by host.camera.collectAsState()
     val measurer = rememberTextMeasurer()
     val shapes = remember { PinShapes() }
@@ -341,7 +341,7 @@ private sealed interface Hit {
 }
 
 /** What a tap landed on: a cluster disc, else the nearest pin whose icon covers the finger (a 16dp floor). */
-private fun hitTest(host: MapLibreHost, layers: PinLayers, opts: PinOpts, tap: Tap, d: Float): Hit? {
+private fun hitTest(host: MapHost, layers: PinLayers, opts: PinOpts, tap: Tap, d: Float): Hit? {
     val at = host.project(tap.lat, tap.lng) ?: return null
     val scene = layers.scene(host.camera.value.zoom.toDouble(), opts)
     for (c in scene.clusters) {

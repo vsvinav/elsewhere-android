@@ -27,6 +27,7 @@ import com.elsewhere.app.ui.onboard.OnboardState
 import com.elsewhere.app.ui.onboard.Result
 import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.Poster
+import com.elsewhere.app.map.Sdk
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.ReadyBar
 
@@ -38,7 +39,7 @@ fun KeyGate(vm: KeyGateViewModel = hiltViewModel(), ready: Ready? = null) {
 }
 
 @Composable
-fun KeyGateScreen(state: OnboardState, actions: KeyActions, ready: Ready? = null) {
+fun KeyGateScreen(state: OnboardState, actions: KeyActions, ready: Ready? = null, sdk: Boolean = Sdk.available) {
     var k by rememberSaveable(state.key) { mutableStateOf(state.key) }
     Box {
         OnboardFrame(question = null, onCancel = null) {
@@ -48,8 +49,8 @@ fun KeyGateScreen(state: OnboardState, actions: KeyActions, ready: Ready? = null
             Text("Checking your Google key before we print your record.", color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 18.sp))
             Spacer(Modifier.height(40.dp))
             when (state.keyPhase) {
-                KeyPhase.Result -> Result(state.keyReport, k, state.mapId, { k = it }, state.limitedAck, actions)
-                else -> Checking()
+                KeyPhase.Result -> Result(state.keyReport, k, state.mapId, { k = it }, state.limitedAck, actions, sdk)
+                else -> Checking(sdk)
             }
         }
         ReadyBar(ready, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars))

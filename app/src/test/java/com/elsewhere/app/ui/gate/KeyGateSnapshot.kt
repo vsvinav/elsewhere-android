@@ -27,7 +27,7 @@ class KeyGateSnapshot {
     }
 
     private fun shoot(state: OnboardState) = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { KeyGateScreen(state, NoOp) } }
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { KeyGateScreen(state, NoOp, sdk = false) } }
     }
 
     @Test fun busy() = shoot(OnboardState(key = "AIzaSyExample", keyPhase = KeyPhase.Checking))
@@ -35,7 +35,7 @@ class KeyGateSnapshot {
     @Test fun refused() = shoot(
         OnboardState(
             key = "AIzaSyExample", keyPhase = KeyPhase.Result,
-            keyReport = KeyReport(Probe.Failed("API key not valid. Please pass a valid API key.", "INVALID_ARGUMENT", "The key was typed wrong or deleted."), Probe.Ok),
+            keyReport = KeyReport(Probe.Failed("API key not valid. Please pass a valid API key.", "INVALID_ARGUMENT", "The key was typed wrong or deleted."), Probe.Ok, sdk = false),
         ),
     )
 }

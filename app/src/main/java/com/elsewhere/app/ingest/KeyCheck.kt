@@ -1,5 +1,6 @@
 package com.elsewhere.app.ingest
 
+import com.elsewhere.app.map.Sdk
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -27,8 +28,9 @@ sealed interface Probe {
     data class Failed(val message: String, val status: String?, val hint: String?) : Probe
 }
 
-data class KeyReport(val places: Probe, val tiles: Probe) {
-    val accepted: Boolean get() = places == Probe.Ok && tiles == Probe.Ok
+/** Both probes' verdicts; `sdk` is whether this build draws Google's map itself, which spares the key the Map Tiles API. */
+data class KeyReport(val places: Probe, val tiles: Probe, val sdk: Boolean = Sdk.available) {
+    val accepted: Boolean get() = places == Probe.Ok && (tiles == Probe.Ok || sdk)
 }
 
 /** Two probes run with a key; the real one talks to Google, tests hand in a canned report. */

@@ -58,6 +58,13 @@ class KeyCheckTest {
         assertTrue(tiles.body.readUtf8().contains("\"mapType\":\"roadmap\""))
     }
 
+    @Test fun `with the Maps SDK built in, Map Tiles need not answer but Places still must`() {
+        val no = Probe.Failed("Map Tiles API has not been used", "PERMISSION_DENIED", null)
+        assertTrue(KeyReport(Probe.Ok, no, sdk = true).accepted)
+        assertEquals(false, KeyReport(Probe.Ok, no, sdk = false).accepted)
+        assertEquals(false, KeyReport(no, Probe.Ok, sdk = true).accepted)
+    }
+
     @Test fun `a referrer-restricted key is explained`() = runTest {
         serve(googleError("PERMISSION_DENIED", "Requests from referer <empty> are blocked."), googleError("PERMISSION_DENIED", "Requests from referer <empty> are blocked."))
         val r = check.run("AIza-web")
