@@ -76,7 +76,7 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}, onMapsKey
 fun AppScaffold(
     onChangeAnswers: () -> Unit, onSettings: () -> Unit, onRecord: () -> Unit = {},
     shell: ShellViewModel = hiltViewModel(), rangeVm: RangeViewModel = hiltViewModel(),
-    content: @Composable (tab: Tab, go: (Tab) -> Unit) -> Unit = { t, g -> TabContent(t, g, onRecord, onMapsKey) { r, _, _ -> rangeVm.setRange(r); g(Tab.MAP) } },
+    content: @Composable (tab: Tab, go: (Tab) -> Unit) -> Unit = { t, g -> TabContent(t, g, onRecord, onSettings) { r, _, _ -> rangeVm.setRange(r); g(Tab.MAP) } },
 ) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
