@@ -44,7 +44,7 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Key verification · place names and photos | ✅ |
 | Lazy place lookups · readiness bar · startup key gate | ✅ |
 | Share cards | ⏳ |
-| Recording new location on-device | ⏳ |
+| Recording new location on-device | ✅ |
 
 ## What you get
 
@@ -101,6 +101,20 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 ./gradlew testDebugUnitTest        # JUnit twins of the web app's vitest suite
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+## Recording on this phone
+
+Google is winding down Timeline exports, so Elsewhere can keep the record itself. Open the menu (the **E**) → **Record on this phone**, or tap *Record new travel →* on the Tour hero.
+
+<img src="docs/screenshots/record.png" width="180" alt="Recording: status bill with fixes, stays and permission ledger">
+
+**What is collected.** A location fix roughly once a minute while you move (every five minutes while the phone is still), plus the activity-recognition hint (walking, cycling, in a vehicle). Fixes are folded on-device into the same ledger your export filled: a stay of five minutes or more within 75 m becomes a stop, the leg between two stops becomes a route with a mode and distance. Raw fixes are kept for 90 days so segmentation can be re-run; stops and routes are kept for good and survive re-imports of an export.
+
+**What Android asks for.** Precise location, then "Allow all the time" (background location, granted from Settings), physical activity, and notifications for the persistent "Elsewhere is recording" entry. Nothing is uploaded; there is no account and no server.
+
+**Battery.** The recorder runs as a foreground service with balanced-power location and drops to low power when the phone is still. If your phone restricts background apps, the screen offers a button to exempt Elsewhere from battery optimisation; without it some makers will kill the service and you will see gaps.
+
+**How to stop.** The notification has a **Stop** action; the screen has **Stop** and **Pause for 24 h**. Stopping keeps what was recorded. *Start over* in the menu deletes everything, including recorded data.
 
 ## Your data
 
