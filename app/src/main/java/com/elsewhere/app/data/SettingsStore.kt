@@ -20,7 +20,7 @@ data class Settings(
 data class Counters(val detailsCalls: Int = 0, val photoCalls: Int = 0, val mapLoads: Int = 0)
 
 @Singleton
-class SettingsStore @Inject constructor(private val store: DataStore<Preferences>) {
+class SettingsStore @Inject constructor(private val store: DataStore<Preferences>) : MapsSettings {
     private object K {
         val profile = stringPreferencesKey("profile")
         val mapsKey = stringPreferencesKey("mapsKey")
@@ -39,7 +39,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         p[K.profile]?.let { runCatching { json.decodeFromString<Profile>(it) }.getOrNull() }
     }
 
-    val settings: Flow<Settings> = store.data.map { p ->
+    override val settings: Flow<Settings> = store.data.map { p ->
         Settings(
             mapsKey = p[K.mapsKey] ?: "", mapId = p[K.mapId] ?: "",
             mapProvider = p[K.mapProvider]?.let { runCatching { MapProvider.valueOf(it) }.getOrNull() } ?: MapProvider.AUTO,
@@ -55,7 +55,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         store.edit { if (profile == null) it.remove(K.profile) else it[K.profile] = json.encodeToString(Profile.serializer(), profile) }
     }
 
-    suspend fun saveSettings(s: Settings) {
+    override suspend fun saveSettings(s: Settings) {
         store.edit {
             it[K.mapsKey] = s.mapsKey; it[K.mapId] = s.mapId
             it[K.mapProvider] = s.mapProvider.name; it[K.googleRejected] = s.googleRejected

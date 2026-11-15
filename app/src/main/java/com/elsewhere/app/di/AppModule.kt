@@ -8,6 +8,9 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.room.Room
 import com.elsewhere.app.data.RecordRepository
 import com.elsewhere.app.data.RecordSource
+import com.elsewhere.app.data.RecordStore
+import com.elsewhere.app.data.MapsSettings
+import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.data.db.ElsewhereDb
 import dagger.Module
 import dagger.Provides
@@ -31,6 +34,8 @@ object AppModule {
     @Provides @Singleton fun appScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     @Provides fun recordSource(repo: RecordRepository): RecordSource = repo
+    @Provides fun recordStore(repo: RecordRepository): RecordStore = repo
+    @Provides fun mapsSettings(store: SettingsStore): MapsSettings = store
 
     @Provides fun visits(db: ElsewhereDb) = db.visits()
     @Provides fun activities(db: ElsewhereDb) = db.activities()

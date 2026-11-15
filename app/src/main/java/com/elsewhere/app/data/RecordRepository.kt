@@ -57,13 +57,13 @@ class RecordRepository @Inject constructor(
     private val settings: SettingsStore,
     private val cities: CitiesLoader,
     scope: CoroutineScope,
-) : RecordSource {
+) : RecordSource, RecordStore {
     private val importVersion = MutableStateFlow(0)
     private val placesVersion = MutableStateFlow(0)
 
-    val profile: StateFlow<Profile?> = settings.profile.stateIn(scope, SharingStarted.Eagerly, null)
+    override val profile: StateFlow<Profile?> = settings.profile.stateIn(scope, SharingStarted.Eagerly, null)
 
-    val hasImport: StateFlow<Boolean> = importVersion
+    override val hasImport: StateFlow<Boolean> = importVersion
         .map { db.importMeta().get() != null }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
@@ -73,7 +73,7 @@ class RecordRepository @Inject constructor(
         .stateIn(scope, SharingStarted.Eagerly, null)
 
     /** The record derived against a home at 0,0: enough for the onboarding suggestions, before any home is chosen. */
-    suspend fun provisionalRecord(): Record? = withContext(Dispatchers.Default) { build(PROVISIONAL) }
+    override suspend fun provisionalRecord(): Record? = withContext(Dispatchers.Default) { build(PROVISIONAL) }
 
     private suspend fun build(profile: Profile): Record? {
         val meta = db.importMeta().get() ?: return null
@@ -100,7 +100,7 @@ class RecordRepository @Inject constructor(
     }
 
     /** Parse `open()` once, hashing the bytes as they stream past, and replace whatever was stored. */
-    suspend fun import(open: () -> InputStream, fileName: String, onProgress: (Float) -> Unit = {}): ImportReport {
+    override suspend fun import(open: () -> InputStream, fileName: String, onProgress: (Float) -> Unit): ImportReport {
         onProgress(0f)
         val digest = MessageDigest.getInstance("SHA-256")
         val parsed = withContext(Dispatchers.IO) {
@@ -113,6 +113,7 @@ class RecordRepository @Inject constructor(
             }
         }
         val sha = digest.digest().joinToString("") { "%02x".format(it) }
+        if (parsed.visits.isEmpty() && parsed.activities.isEmpty()) throw NotATimelineExport()
         onProgress(0.5f)
 
         val visits = parsed.visits.map { VisitEntity(it.id, it.start, it.end, it.tz, it.placeId, it.lat, it.lng, it.type, it.p, it.lvl, it.city, it.cc, it.dist) }
@@ -147,7 +148,7 @@ class RecordRepository @Inject constructor(
         db.frequentPlaces().clear(); db.placeEnrichment().clear(); db.importMeta().clear()
     }
 
-    suspend fun saveProfile(p: Profile) = settings.saveProfile(p)
+    override suspend fun saveProfile(p: Profile) = settings.saveProfile(p)
 
     suspend fun saveEnrichment(row: PlaceEnrichmentEntity) { db.placeEnrichment().upsert(row); bumpPlacesVersion() }
 
