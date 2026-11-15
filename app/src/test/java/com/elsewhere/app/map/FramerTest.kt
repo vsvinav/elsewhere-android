@@ -31,4 +31,10 @@ class FramerTest {
         assertEquals(2, moves.size)
         assertEquals(camForBounds(paris, 800, 600, 10), moves[0].first)
     }
+
+    @Test fun `the frame is solved in dp, so a sharper screen does not zoom in tighter`() {
+        val sharp = Framer { cam, _ -> moves += cam to 0 }.apply { density = 2f; size = IntSize(1024, 1024) }
+        sharp.fit(paris, 80)
+        assertEquals(camForBounds(paris, 512, 512, 40), moves.single().first)
+    }
 }

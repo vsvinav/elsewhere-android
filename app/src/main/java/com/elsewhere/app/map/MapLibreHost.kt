@@ -106,6 +106,7 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
     @Composable
     fun Content(modifier: Modifier, basemap: Basemap = Basemap.Free, copyright: String? = null, overlays: @Composable () -> Unit) {
         density = LocalDensity.current.density
+        framer.density = density
         val cacheDir = LocalContext.current.cacheDir
         val styleUri by produceState(STYLE, basemap) {
             value = when (basemap) {
