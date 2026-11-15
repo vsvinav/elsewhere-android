@@ -104,7 +104,7 @@ fun FlightsScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun HeroBill(ui: FlightsUi, rotation: Rotation, onRotate: (Rotation) -> Unit, selected: Int?, onSelect: (Int?) -> Unit) {
+internal fun HeroBill(ui: FlightsUi, rotation: Rotation, onRotate: (Rotation) -> Unit, selected: Int?, onSelect: (Int?) -> Unit) {
     val u = ui.units
     val longest = ui.longest?.let { "the longest ${n0(u.cv(it.km))} ${u.u}, ${ui.name(it.s)} to ${ui.name(it.t)}" }
     val share = Share("globe") {
