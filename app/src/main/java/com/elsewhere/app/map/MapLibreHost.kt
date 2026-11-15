@@ -56,13 +56,20 @@ sealed interface Basemap {
  * named by a hash of its content: a new session or key is a new URI. Written whole, then renamed into place.
  */
 fun styleFile(dir: File, styleJson: String): File {
-    val hash = MessageDigest.getInstance("SHA-1").digest(styleJson.toByteArray()).joinToString("") { "%02x".format(it) }
-    val file = File(dir, "google-tiles-$hash.json")
-    if (file.isFile) return file
+    cachedStyleFile(dir, styleJson)?.let { return it }
+    val file = styleFileFor(dir, styleJson)
     val tmp = File(dir, "${file.name}.tmp")
     tmp.writeText(styleJson)
     if (!tmp.renameTo(file)) { tmp.delete(); file.writeText(styleJson) }
     return file
+}
+
+/** The style file for this content if an earlier visit already wrote it; null means it still has to be written. */
+fun cachedStyleFile(dir: File, styleJson: String): File? = styleFileFor(dir, styleJson).takeIf { it.isFile }
+
+private fun styleFileFor(dir: File, styleJson: String): File {
+    val hash = MessageDigest.getInstance("SHA-1").digest(styleJson.toByteArray()).joinToString("") { "%02x".format(it) }
+    return File(dir, "google-tiles-$hash.json")
 }
 
 /**
@@ -108,7 +115,11 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
         density = LocalDensity.current.density
         framer.density = density
         val cacheDir = LocalContext.current.cacheDir
-        val styleUri by produceState(STYLE, basemap) {
+        // A style written on an earlier visit is used from the first frame, so a verified key never flashes the free map.
+        val styleUri by produceState(
+            when (basemap) { Basemap.Free -> STYLE; is Basemap.Google -> cachedStyleFile(cacheDir, basemap.styleJson)?.toURI()?.toString() ?: STYLE },
+            basemap,
+        ) {
             value = when (basemap) {
                 Basemap.Free -> STYLE
                 is Basemap.Google -> withContext(Dispatchers.IO) { styleFile(cacheDir, basemap.styleJson).toURI().toString() }

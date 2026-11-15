@@ -2,6 +2,7 @@ package com.elsewhere.app.map
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -20,5 +21,12 @@ class StyleFileTest {
         assertTrue(a.name.startsWith("google-tiles-") && a.name.endsWith(".json"), a.name)
         assertEquals(a, styleFile(dir, """{"tiles":["a"]}"""))
         assertEquals(setOf(a.name, b.name), dir.list()!!.toSet()) // no temp files left behind
+    }
+
+    @Test fun `a style already on disk is known without writing, so the map can start on it`() {
+        assertNull(cachedStyleFile(dir, """{"tiles":["a"]}"""))
+        val a = styleFile(dir, """{"tiles":["a"]}""")
+        assertEquals(a, cachedStyleFile(dir, """{"tiles":["a"]}"""))
+        assertNull(cachedStyleFile(dir, """{"tiles":["b"]}"""))
     }
 }
