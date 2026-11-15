@@ -84,8 +84,10 @@ import com.elsewhere.app.ui.world.hours
 import com.elsewhere.app.ui.world.n0
 import com.elsewhere.app.ui.world.plural
 import kotlinx.coroutines.launch
+import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 // Port of web/src/map/Pins.tsx (PinHud) over MapView.tsx's pin pass: every stop in the window as a pin.
 
@@ -113,12 +115,13 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
         scope.launch { snackbar.showSnackbar(if (swapped) "Google refused the key — using OpenStreetMap" else "Google Maps didn't load") }
     })
     val density = LocalDensity.current
-    val fit = { l: PinLayers, o: PinOpts -> l.fitBounds(o)?.let { host.fit(it, with(density) { FIT_PAD.roundToPx() }) } }
+    val fit = { l: PinLayers, o: PinOpts -> l.fitBounds(o)?.let { host.fit(it, with(density) { FIT_PAD.roundToPx() }) } != null }
 
     // Framed once, when the screen first has pins, and again only on "Fit pins": a range change under the
     // user swaps the pins but leaves the camera where they put it.
     var fitted by remember(host) { mutableStateOf(false) }
-    LaunchedEffect(host, layers) { val l = layers; if (!fitted && l != null) { fitted = true; fit(l, vm.opts.value) } }
+    // An empty window has nothing to frame yet; the latch waits for the first fit that actually happens.
+    LaunchedEffect(host, layers) { val l = layers; if (!fitted && l != null && fit(l, vm.opts.value)) fitted = true }
 
     LaunchedEffect(host) {
         host.taps.collect { tap ->
@@ -273,19 +276,24 @@ private fun PinCanvas(host: MapHost, layers: PinLayers, opts: PinOpts, modifier:
     val cam by host.camera.collectAsState()
     val measurer = rememberTextMeasurer()
     val shapes = remember { PinShapes() }
+    // Measured once per text and half-point size; cleared when the cluster bucket changes so a long session never grows it.
     val texts = remember { HashMap<String, TextLayoutResult>() }
+    val textsBucket = remember { doubleArrayOf(Double.NaN) }
     val labelStyle = PosterType.Label.copy(fontSize = LABEL_PX.sp, fontWeight = FontWeight.Bold, color = Poster.Ink, letterSpacing = 0.02.em)
     val countStyle = PosterType.Label.copy(fontWeight = FontWeight.Bold, color = Poster.Stock)
     Canvas(modifier) {
         val scene = layers.scene(cam.zoom.toDouble(), opts)
         val k = scene.k; val d = density
+        val bucket = floor(cam.zoom * 2.0) / 2
+        if (bucket != textsBucket[0]) { textsBucket[0] = bucket; texts.clear() }
+        val countSize = (scene.countSize * 2).roundToInt() / 2f
         fun at(l: Located) = host.project(l.lat, l.lng)
         fun text(key: String, build: () -> TextLayoutResult) = texts.getOrPut(key, build)
         for (c in scene.clusters) {
             val o = at(c) ?: continue
             val r = clusterRadius(c, k) * d
             drawCircle(Poster.Ink, r, o); drawCircle(Poster.Stock, r, o, style = Stroke(2 * d))
-            val t = text("${c.count}@${scene.countSize}") { measurer.measure(c.count.toString(), countStyle.copy(fontSize = scene.countSize.sp)) }
+            val t = text("${c.count}@$countSize") { measurer.measure(c.count.toString(), countStyle.copy(fontSize = countSize.sp)) }
             drawText(t, topLeft = Offset(o.x - t.size.width / 2f, o.y - t.size.height / 2f))
         }
         for (p in scene.pins) {
