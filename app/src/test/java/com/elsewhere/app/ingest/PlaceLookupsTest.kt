@@ -3,6 +3,7 @@ package com.elsewhere.app.ingest
 import com.elsewhere.app.Fakes
 import com.elsewhere.app.Fx
 import com.elsewhere.app.data.Role
+import com.elsewhere.app.data.MapProvider
 import com.elsewhere.app.data.Settings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -109,6 +110,36 @@ class PlaceLookupsTest {
         assertNull(state.error.value)
         l.need(listOf("c"), places + ("c" to place())); settle()
         assertEquals(listOf("a", "b", "c"), src.asked)
+    }
+
+    @Test fun `an unrelated settings change keeps a refused pool stopped`() = runTest(dispatcher) {
+        val l = lookups(); settle()
+        src.fails("a", PlacesError("PERMISSION_DENIED", 403))
+        l.need(listOf("a"), places); settle()
+        assertEquals("PERMISSION_DENIED", state.error.value)
+        maps.cur.value = maps.cur.value.copy(mapProvider = MapProvider.FREE); settle()
+        assertEquals("PERMISSION_DENIED", state.error.value)
+        l.need(listOf("b"), places); settle()
+        assertEquals(listOf("a"), src.asked)
+    }
+
+    @Test fun `ids asked for before the settings are read wait for them`() = runTest(dispatcher) {
+        val l = lookups()
+        l.need(listOf("a"), places)
+        assertTrue(src.asked.isEmpty())
+        settle()
+        assertEquals(listOf("a"), src.asked)
+        assertNull(l.progress.value)
+    }
+
+    @Test fun `ids asked for before the settings are read are dropped when there is no key`() = runTest(dispatcher) {
+        maps.cur.value = Settings()
+        val l = lookups()
+        l.need(listOf("a"), places)
+        assertEquals(Progress(0, 1), l.progress.value)
+        settle()
+        assertTrue(src.asked.isEmpty())
+        assertNull(l.progress.value)
     }
 
     @Test fun `a passing failure gets one more go after a backoff, and the pool goes on`() = runTest(dispatcher) {

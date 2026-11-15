@@ -104,6 +104,8 @@ class PlaceLookups(
     private var keyPlaces = false
     private var stopped = false
     private var paused = false
+    /** Until the settings have been read, ids wait in the queue rather than being refused outright. */
+    private var settled = false
 
     // Only the key and Places' verdict on it matter here; a map-provider toggle must not clear a refusal.
     init { scope.launch { settings.map { it.mapsKey to it.keyPlaces }.distinctUntilChanged().collect { (k, p) -> setKey(k, p) } } }
@@ -123,7 +125,7 @@ class PlaceLookups(
      */
     fun need(ids: List<String>, places: Map<String, Place>) {
         synchronized(lock) {
-            if (!canSpend()) return
+            if (settled && !canSpend()) return
             var added = 0
             for (id in ids) {
                 if (id in cache || id in queued) continue
@@ -147,7 +149,7 @@ class PlaceLookups(
 
     /** The key lookups pay with (blank: none). A new key clears a stopped pool and picks up whatever is still waiting. */
     fun setKey(k: String, places: Boolean = true) {
-        synchronized(lock) { key = k; keyPlaces = places; stopped = false; if (!canSpend()) dropQueue() }
+        synchronized(lock) { key = k; keyPlaces = places; stopped = false; settled = true; if (!canSpend()) dropQueue() }
         state.fail(null)
         emit(); pump()
     }
