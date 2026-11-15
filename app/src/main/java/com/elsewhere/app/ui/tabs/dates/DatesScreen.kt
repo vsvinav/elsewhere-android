@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -93,14 +94,16 @@ fun DatesScreen(ui: DatesUi, modifier: Modifier = Modifier, scroll: Boolean = tr
                 passY[c.tripId]?.let { y -> scope.launch { scrollState.animateScrollTo(y) } }
             })
             TripsHeader(ui)
-            for (t in ui.trips) {
-                if (t.trip.doorId !in kept) continue
-                val isOpen = open == t.trip.start
-                // Beds and stops are worked out only for the trip that is open, off the main thread.
-                val detail by produceState<TripDetail?>(null, isOpen, ui) {
-                    value = if (isOpen) withContext(Dispatchers.Default) { tripDetail(ui.data, ui.strip, t.trip) } else null
+            // Keyed by trip, so a search that drops a pass does not hand its remembered state to the next one down.
+            for (t in ui.trips) key(t.trip.doorId) {
+                if (t.trip.doorId in kept) {
+                    val isOpen = open == t.trip.start
+                    // Beds and stops are worked out only for the trip that is open, off the main thread.
+                    val detail by produceState<TripDetail?>(null, isOpen, ui) {
+                        value = if (isOpen) withContext(Dispatchers.Default) { tripDetail(ui.data, ui.strip, t.trip) } else null
+                    }
+                    TripPass(t, ui.units, isOpen, detail, onSeen, Modifier.onGloballyPositioned { passY[t.trip.doorId] = it.positionInRoot().y.toInt() - topY + scrollState.value }) { open = if (isOpen) null else t.trip.start }
                 }
-                TripPass(t, ui.units, isOpen, detail, onSeen, Modifier.onGloballyPositioned { passY[t.trip.doorId] = it.positionInRoot().y.toInt() - topY + scrollState.value }) { open = if (isOpen) null else t.trip.start }
             }
         }
     }
