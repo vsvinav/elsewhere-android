@@ -17,6 +17,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.elsewhere.app.ui.Root
 import com.elsewhere.app.ui.world.ElsewhereTheme
+import com.elsewhere.app.highlights.HighlightWorker
+import com.elsewhere.app.highlights.PendingHighlight
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint class MainActivity : ComponentActivity() {
@@ -35,6 +37,8 @@ import dagger.hilt.android.AndroidEntryPoint
             onGooglePhoto = { appScope.launch { meter.tally(Kind.PHOTOS) } },
             commons = { lat, lng -> wikimedia.photo(lat, lng) },
         )
+        // A tap on the daily highlight lands here with the day; the Facts tab prints that card first.
+        intent?.getStringExtra(HighlightWorker.EXTRA_OPEN)?.let { PendingHighlight.date.value = it }
         setContent { CompositionLocalProvider(LocalPhotoSources provides photos) { ElsewhereTheme { Root() } } }
     }
 }
