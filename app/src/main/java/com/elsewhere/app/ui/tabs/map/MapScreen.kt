@@ -11,16 +11,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -34,7 +38,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -43,6 +49,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.TextLayoutResult
@@ -50,6 +57,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -61,6 +69,9 @@ import com.elsewhere.app.data.Role as PlaceRole
 import com.elsewhere.app.map.Cam
 import com.elsewhere.app.map.ClusterPin
 import com.elsewhere.app.map.Dot
+import com.elsewhere.app.map.HEAT_STOPS
+import com.elsewhere.app.map.HeatCache
+import com.elsewhere.app.map.HeatKey
 import com.elsewhere.app.map.LABEL_PX
 import com.elsewhere.app.map.MapHost
 import com.elsewhere.app.map.Pin
@@ -92,6 +103,7 @@ private val FIT_PAD = 48.dp
 data class MapActions(
     val toggle: (Cat) -> Unit = {}, val only: (Cat) -> Unit = {}, val showAll: () -> Unit = {},
     val search: (String) -> Unit = {}, val select: (String?) -> Unit = {}, val sizeBy: (SizeBy) -> Unit = {}, val fit: () -> Unit = {},
+    val heat: (Boolean) -> Unit = {},
     /** The open pin wants its name and photo. */
     val seen: (String) -> Unit = {},
 )
@@ -127,7 +139,7 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
         }
     }
 
-    val acts = MapActions(vm::toggle, vm::only, vm::showAll, vm::search, vm::select, vm::sizeBy, fit = { layers?.let { fit(it, opts) } }, seen = vm::seen)
+    val acts = MapActions(vm::toggle, vm::only, vm::showAll, vm::search, vm::select, vm::sizeBy, fit = { layers?.let { fit(it, opts) } }, seen = vm::seen, heat = vm::heat)
     MapScreen(layers, opts, acts, snackbar = snackbar) { m ->
         host.Content(m, basemap, copyright) {
             layers?.let { PinCanvas(host, it, opts, Modifier.fillMaxSize()) }
@@ -156,7 +168,7 @@ fun MapScreen(
             }
             if (snackbar != null) SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
         }
-        PinHud(sum, opts.sizeBy, acts)
+        PinHud(sum, opts.sizeBy, opts.heat, acts)
     }
 }
 
@@ -196,8 +208,9 @@ private fun CatChips(counts: Map<Cat, Int>, hidden: Set<Cat>, acts: MapActions) 
 
 private val ChipStyle get() = PosterType.Display.copy(fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.03.em, lineHeight = 1.em)
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PinHud(sum: PinSummary, sizeBy: SizeBy, acts: MapActions) {
+private fun PinHud(sum: PinSummary, sizeBy: SizeBy, heat: Boolean, acts: MapActions) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
@@ -205,23 +218,48 @@ private fun PinHud(sum: PinSummary, sizeBy: SizeBy, acts: MapActions) {
                 color = Poster.Ink, style = PosterType.Label.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("SIZE BY", color = Poster.Ink3, style = PosterType.Caps.copy(fontSize = 10.sp))
+            // Wraps so the heat legend drops under the chips on a narrow phone instead of squeezing them.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("SIZE BY", color = Poster.Ink3, style = PosterType.Caps.copy(fontSize = 10.sp), modifier = Modifier.align(Alignment.CenterVertically))
                 for (s in SizeBy.entries) {
                     val on = s == sizeBy
                     Text(
                         s.label.uppercase(), color = if (on) Poster.Stock else Poster.Ink, style = ChipStyle.copy(fontSize = 13.sp),
-                        modifier = Modifier.background(if (on) Poster.Ink else Poster.Stock).border(1.dp, Poster.Ink)
+                        modifier = Modifier.align(Alignment.CenterVertically).background(if (on) Poster.Ink else Poster.Stock).border(1.dp, Poster.Ink)
                             .selectable(selected = on, role = Role.RadioButton) { acts.sizeBy(s) }
                             .semantics { contentDescription = "Size by ${s.label}" }.padding(horizontal = 7.dp, vertical = 4.dp),
                     )
                 }
+                Text(
+                    "HEAT", color = if (heat) Poster.Stock else Poster.Ink, style = ChipStyle.copy(fontSize = 13.sp),
+                    modifier = Modifier.align(Alignment.CenterVertically).background(if (heat) Poster.Ink else Poster.Stock).border(1.dp, Poster.Ink)
+                        .toggleable(value = heat, role = Role.Switch, onValueChange = acts.heat)
+                        .semantics { stateDescription = if (heat) "Heat on" else "Heat off" }.padding(horizontal = 7.dp, vertical = 4.dp),
+                )
+                if (heat) HeatLegend(Modifier.align(Alignment.CenterVertically))
             }
         }
         Spacer(Modifier.width(12.dp))
         InkButton("Fit pins", acts.fit, quiet = true)
     }
 }
+
+private val HeatColors = HEAT_STOPS.map { (r, g, b, a) -> Color(r, g, b, a) }
+
+/** The palette as a bar, cold at the left: what the warm patches on the map mean. */
+@Composable
+private fun HeatLegend(modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("COOL", color = Poster.Ink3, style = PosterType.Caps.copy(fontSize = 10.sp))
+        Box(
+            Modifier.requiredSize(72.dp, 8.dp).background(Brush.horizontalGradient(HeatColors)).border(1.dp, Poster.Ink)
+                .semantics { contentDescription = "Cool to warm: warmest where you go most" },
+        )
+        Text("WARM", color = Poster.Ink3, style = PosterType.Caps.copy(fontSize = 10.sp))
+    }
+}
+
+private operator fun IntArray.component4() = this[3]
 
 /** The open pin's tag: what and where, two figures, a way to close it. */
 @Composable
@@ -271,9 +309,16 @@ private fun PinCanvas(host: MapHost, layers: PinLayers, opts: PinOpts, modifier:
     val textsBucket = remember { doubleArrayOf(Double.NaN) }
     val labelStyle = PosterType.Label.copy(fontSize = LABEL_PX.sp, fontWeight = FontWeight.Bold, color = Poster.Ink, letterSpacing = 0.02.em)
     val countStyle = PosterType.Label.copy(fontWeight = FontWeight.Bold, color = Poster.Stock)
+    val heat = remember { HeatCache() }
     Canvas(modifier) {
         val scene = layers.scene(cam.zoom.toDouble(), opts)
         val k = scene.k; val d = density
+        if (opts.heat) {
+            val w = size.width.toInt(); val h = size.height.toInt()
+            heat.image(HeatKey(cam, layers.shown(opts), w, h), d)?.let { img ->
+                drawImage(img, dstSize = IntSize(w, h), filterQuality = FilterQuality.Low)
+            }
+        }
         val bucket = floor(cam.zoom * 2.0) / 2
         if (bucket != textsBucket[0]) { textsBucket[0] = bucket; texts.clear() }
         val countSize = (scene.countSize * 2).roundToInt() / 2f
