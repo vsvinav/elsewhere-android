@@ -81,6 +81,8 @@ fun degPerPx(zoom: Int): Double = 360 / (256 * 2.0.pow(zoom))
 class Trail(val path: List<LatLng>, val ts: DoubleArray, val lens: Lens, val guessed: Boolean) {
     val t0: Double get() = ts[0]
     val t1: Double get() = ts[ts.size - 1]
+    /** The box the whole leg fits in, so a paused frame can skip legs off screen before projecting a point. */
+    val box: Bounds by lazy { Bounds(path.minOf { it.lat }, path.minOf { it.lng }, path.maxOf { it.lat }, path.maxOf { it.lng }) }
 }
 
 /** Trails in record order, with the longest span kept so a window search knows how far back an enclosing leg can start. */

@@ -13,6 +13,7 @@ import kotlin.math.ln
 import kotlin.math.log2
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.tan
 
 /** Where the camera sits. `zoom` is in Google's 256px-tile convention on every provider; mirrors web/src/map/cam.ts. */
@@ -95,6 +96,23 @@ private fun mercY(lat: Double): Double {
 }
 
 private fun unmercY(y: Double): Double = (2 * atan(exp(y)) - PI / 2) * 180 / PI
+
+/** The box a camera shows in a viewport of `widthPx`×`heightPx`; the inverse of [camForBounds]. Longitudes may run past ±180 near the date line. */
+fun viewBounds(cam: Cam, widthPx: Int, heightPx: Int): Bounds {
+    val world = TILE * 2.0.pow(cam.zoom.toDouble())
+    val dLng = widthPx / world * 360.0
+    val dy = heightPx / world * 2 * PI
+    val cy = mercY(cam.lat)
+    return Bounds(unmercY(cy - dy / 2), cam.lng - dLng / 2, unmercY(cy + dy / 2), cam.lng + dLng / 2)
+}
+
+/** Whether a normalised box `o` touches this one, allowing this box's longitudes to run past the date line. */
+fun Bounds.intersects(o: Bounds): Boolean {
+    if (o.neLat < swLat || o.swLat > neLat) return false
+    if (neLng - swLng >= 360.0) return true
+    for (shift in doubleArrayOf(0.0, 360.0, -360.0)) if (o.neLng + shift >= swLng && o.swLng + shift <= neLng) return true
+    return false
+}
 
 /**
  * The camera that frames `b` inside a viewport of `widthPx`×`heightPx` with `paddingPx` kept clear on each side.

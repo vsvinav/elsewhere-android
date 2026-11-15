@@ -26,6 +26,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -59,6 +60,8 @@ import com.elsewhere.app.data.Record
 import com.elsewhere.app.map.Arrival
 import com.elsewhere.app.map.Arrivals
 import com.elsewhere.app.map.BIG_KM
+import com.elsewhere.app.map.Bounds
+import com.elsewhere.app.map.Cam
 import com.elsewhere.app.map.Eased
 import com.elsewhere.app.map.Follow
 import com.elsewhere.app.map.GoogleMapHost
@@ -71,21 +74,24 @@ import com.elsewhere.app.map.ReplayTrails
 import com.elsewhere.app.map.Stamp
 import com.elsewhere.app.map.StampHold
 import com.elsewhere.app.map.Trail
+import com.elsewhere.app.map.Trails
 import com.elsewhere.app.map.activeTrails
+import com.elsewhere.app.map.intersects
 import com.elsewhere.app.map.rememberMapHost
 import com.elsewhere.app.map.resolve
 import com.elsewhere.app.map.stampOf
 import com.elsewhere.app.map.trailHead
+import com.elsewhere.app.map.viewBounds
 import com.elsewhere.app.map.wakeLength
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
-import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlinx.coroutines.launch
 
 // Port of web/src/map/MapScreen.tsx in Play mode over MapView.tsx's replay pass: the record runs along its trails.
 
@@ -124,7 +130,7 @@ fun ReplayTab(vm: PlaybackViewModel = hiltViewModel()) {
     LaunchedEffect(host) { host.events.collect { if (it == MapEvent.DragStart) vm.setFollow(false) } }
 
     LaunchedEffect(host, rec) {
-        var last = 0L
+        var last = 0L; var lastHead = Double.NaN; var lastPlaying = false; var lastLens: Lens? = null; var animUntil = 0L
         while (true) withFrameNanos { t ->
             val dt = if (last == 0L) 0.0 else min(0.25, (t - last) / 1e9); last = t
             val tMs = t / 1_000_000
@@ -136,8 +142,13 @@ fun ReplayTab(vm: PlaybackViewModel = hiltViewModel()) {
                 follow.tick(rec, now, st.rate, st.speed, dt, tMs, viewport.width, viewport.height, host.camera.value)?.let { host.moveTo(it) }
             } else follow.reset()
             arrivals.at(rec, now, st.playing, tMs)
-            if (arrivals.prune(tMs) || arrivals.tags !== tags) tags = arrivals.tags
-            frame.longValue = tMs
+            val newTags = arrivals.prune(tMs) || arrivals.tags !== tags
+            if (newTags) tags = arrivals.tags
+            // The canvas redraws per frame only while the clock runs or something eased is still settling; a paused
+            // map redraws on camera and state changes alone.
+            val changed = st.playhead != lastHead || st.playing != lastPlaying || st.lens != lastLens
+            if (changed) { animUntil = tMs + SETTLE_MS; lastHead = st.playhead; lastPlaying = st.playing; lastLens = st.lens }
+            if (st.playing || tMs < animUntil || newTags) frame.longValue = tMs
         }
     }
 
@@ -202,6 +213,7 @@ private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, stat
     val wake = remember { Eased(2000) }
     val ring = remember { Eased(180, 500) }
     val stamp = remember { StampHold() }
+    val hairlines = remember { Hairlines() }
     val texts = remember { HashMap<String, TextLayoutResult>() }
     val labelStyle = PosterType.Label.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Poster.Ink, letterSpacing = 0.02.em)
     Canvas(modifier) {
@@ -212,11 +224,8 @@ private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, stat
         fun at(lat: Double, lng: Double) = host.project(lat, lng)
 
         if (!state.playing) {
-            // Paused: the whole record as hairlines, like the strip printed on the pass.
-            for (t in lensTrails) {
-                val a = if (t.lens == Lens.FLY) 140 / 255f else if (t.guessed) 50 / 255f else 90 / 255f
-                polyline(t, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, ink(t.lens).copy(alpha = a), 1.5f * d, fade = false, dashed = null, ::at)
-            }
+            // Paused: the whole record as hairlines, like the strip printed on the pass; projected once per camera.
+            for ((path, color) in hairlines.of(cam, state.lens, size, lensTrails, ::at)) drawPath(path, color, style = Stroke(1.5f * d))
         }
         // A dotted wake that fades over ~16 s of screen time, then a solid head in the leg's own ink over only the live trails.
         val headLen = HEAD_REAL_S * rate; val wakeLen = wake.at(wakeLength(rate), tMs)
@@ -271,6 +280,44 @@ private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, stat
                 scale(sz / 32f, pivot = Offset.Zero) { drawPath(icons[kind], c) }
             }
         }
+    }
+}
+
+/** How long after the last change the canvas keeps redrawing, so the eased wake, ring and stamp hold can settle. */
+private const val SETTLE_MS = 2500L
+
+/**
+ * The paused record's hairlines as screen paths, one per ink, kept until the camera, lens or viewport changes: on a
+ * ten-year record the projection of every point each frame is what made a still map expensive. Legs whose box
+ * misses the view are skipped whole, and off-screen runs within a leg are not projected either.
+ */
+private class Hairlines {
+    private var key: Any? = null
+    private var paths: List<Pair<Path, Color>> = emptyList()
+
+    fun of(cam: Cam, lens: Lens, size: Size, trails: Trails, at: (Double, Double) -> Offset?): List<Pair<Path, Color>> {
+        val k = listOf(cam, lens, size, trails)
+        if (k == key) return paths
+        val view = viewBounds(cam, size.width.toInt(), size.height.toInt())
+        val pad = Bounds(view.swLat - (view.neLat - view.swLat) * 0.1, view.swLng - (view.neLng - view.swLng) * 0.1, view.neLat + (view.neLat - view.swLat) * 0.1, view.neLng + (view.neLng - view.swLng) * 0.1)
+        val byInk = LinkedHashMap<Color, Path>()
+        for (t in trails) {
+            if (!pad.intersects(t.box)) continue
+            val a = if (t.lens == Lens.FLY) 140 / 255f else if (t.guessed) 50 / 255f else 90 / 255f
+            val path = byInk.getOrPut(ink(t.lens).copy(alpha = a)) { Path() }
+            var pen = false
+            for (i in t.path.indices) {
+                val p = t.path[i]
+                val near = pad.intersects(Bounds(p.lat, p.lng, p.lat, p.lng)) ||
+                    (i + 1 < t.path.size && pad.intersects(Bounds(t.path[i + 1].lat, t.path[i + 1].lng, t.path[i + 1].lat, t.path[i + 1].lng)))
+                if (!near) { pen = false; continue }
+                val o = at(p.lat, p.lng)
+                if (o == null) { pen = false; continue }
+                if (pen) path.lineTo(o.x, o.y) else { path.moveTo(o.x, o.y); pen = true }
+            }
+        }
+        key = k; paths = byInk.map { (c, p) -> p to c }
+        return paths
     }
 }
 
