@@ -74,8 +74,22 @@ class RecordService : Service() {
                 lastFixTs = ts
                 scope.launch { recorder.onFix(fix, if (l.hasAltitude()) l.altitude else null, battery?.takeIf { it in 0..100 }) }
             }
-            notify(notification())
+            repost()
         }
+    }
+
+    private var posted: String? = null
+
+    /**
+     * Repost only when the line changes: on Android 14+ a swiped-away notification would otherwise be put
+     * back by every fix, which is what made it feel stuck.
+     */
+    private fun repost() {
+        val n = notification()
+        val line = n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        if (line == posted) return
+        posted = line
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, n)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -171,8 +185,6 @@ class RecordService : Service() {
         })
     }
 
-    private fun notify(n: Notification) = getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, n)
-
     private fun notification(): Notification {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val stop = PendingIntent.getService(this, 1, Intent(this, RecordService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
@@ -182,7 +194,7 @@ class RecordService : Service() {
             .setContentText(if (paused) "Recording resumes by itself. Nothing is uploaded." else "Stays on this phone. Nothing is uploaded.")
             .setContentIntent(open)
             .addAction(0, "Stop", stop)
-            .setOngoing(true).setSilent(true).setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(false).setSilent(true).setPriority(NotificationCompat.PRIORITY_LOW)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
