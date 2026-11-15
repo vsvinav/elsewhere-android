@@ -1,18 +1,19 @@
 package com.elsewhere.app.ui.tabs.tour
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.performClick
 import com.elsewhere.app.SampleRecord
 import com.elsewhere.app.ui.nav.Door
 import com.elsewhere.app.ui.nav.LocalOpenDoor
+import com.elsewhere.app.ui.nav.openDoor
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import com.elsewhere.app.ui.world.LocalMotion
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,39 +30,44 @@ class TourDoorsTest {
         rule.setContent { ElsewhereTheme { CompositionLocalProvider(LocalOpenDoor provides { opened.add(it) }, LocalMotion provides false) { content() } } }
     }
 
-    @Test fun `the hero's stops, lede and foot are doors`() {
+    @Test fun `the hero's figures, stops and foot are doors`() {
         val opened = ArrayList<Door>()
         show(opened) { TourHero(ui, onGo = {}) }
-        rule.onNodeWithContentDescription("Open on the map: Lisbon · 7 nights").performClick()
-        rule.onNodeWithContentDescription("Open on the map: ${ui.doors.distance.label}").performClick()
-        rule.onNodeWithContentDescription("Open on the map: ${ui.doors.places.label}").performClick()
-        assertEquals(listOf(ui.doors.stops[0], ui.doors.distance, ui.doors.places), opened)
+        rule.openDoor("Lisbon · 7 nights")
+        rule.openDoor("${ui.doors.distance.label}")
+        rule.openDoor("${ui.doors.days.label}")
+        rule.openDoor("${ui.doors.countries.label}")
+        assertEquals(listOf(ui.doors.stops[0], ui.doors.distance, ui.doors.days, ui.doors.countries), opened)
     }
 
     @Test fun `the headline act, its stay and the longest trip are doors`() {
         val opened = ArrayList<Door>()
         show(opened) { HeadlineBill(ui, onGo = {}) }
-        rule.onNodeWithContentDescription("Open on the map: Tokyo").performClick()
-        rule.onNodeWithContentDescription("Open on the map: Longest trip · 7 nights").performClick()
-        rule.onNodeWithContentDescription("Open on the map: ${ui.doors.nightsHome.label}").performClick()
-        assertEquals(listOf(ui.doors.headline, ui.doors.longestTrip, ui.doors.nightsHome), opened)
+        rule.openDoor("${ui.doors.act!!.label}")
+        rule.openDoor("${ui.doors.actNights!!.label}")
+        rule.openDoor("Longest trip · 7 nights")
+        rule.openDoor("${ui.doors.nightsHome.label}")
+        assertEquals(listOf(ui.doors.act, ui.doors.actNights, ui.doors.longestTrip, ui.doors.nightsHome), opened)
     }
 
-    @Test fun `every row of the records table and every stamp is a door`() {
+    @Test fun `every cell of the records table and every stamp is a door`() {
         val opened = ArrayList<Door>()
         show(opened) { RecordsBill(ui) }
-        rule.onNodeWithContentDescription("Open on the map: 2024").performClick()
-        rule.onNodeWithContentDescription("Open on the map: ${ui.doors.farthest!!.label}").performClick()
-        rule.onNodeWithContentDescription("Open on the map: ${ui.doors.longestDay!!.label}").performClick()
-        assertEquals(listOf(ui.doors.years[0], ui.doors.farthest, ui.doors.longestDay), opened)
+        rule.openDoor("${ui.doors.years[0][0].label}")
+        rule.openDoor("${ui.doors.years[0][3].label}")
+        rule.openDoor("${ui.doors.act!!.label}")
+        rule.openDoor("${ui.doors.longestDay!!.label}")
+        assertEquals(listOf(ui.doors.years[0][0], ui.doors.years[0][3], ui.doors.act, ui.doors.longestDay), opened)
     }
 
     @Test fun `setlist, residency and backstage figures are doors`() {
         val opened = ArrayList<Door>()
-        show(opened) { SetlistBill(ui); ResidencyBill(ui); BackstageBill(ui) }
-        rule.onAllNodesWithContentDescription("Open on the map: ${ui.doors.distance.label}")[0].performClick()
-        rule.onNodeWithContentDescription("Open on the map: ${ui.doors.thirdPlaces[0].label}").performClick()
-        rule.onNodeWithContentDescription("Open on the map: ${ui.doors.record.label}").performClick()
-        assertTrue(opened.size == 3 && opened[1] == ui.doors.thirdPlaces[0] && opened[2] == ui.doors.record)
+        show(opened) { Column(Modifier.verticalScroll(rememberScrollState())) { SetlistBill(ui); ResidencyBill(ui); BackstageBill(ui) } }
+        rule.openDoor("${ui.doors.distanceOnRecord.label}")
+        rule.openDoor("${ui.doors.laps.label}")
+        rule.openDoor("${ui.doors.flights.label}")
+        rule.openDoor("${ui.doors.thirdPlaces[0].label}")
+        rule.openDoor("${ui.doors.record.label}")
+        assertEquals(listOf(ui.doors.distanceOnRecord, ui.doors.laps, ui.doors.flights, ui.doors.thirdPlaces[0], ui.doors.record), opened)
     }
 }

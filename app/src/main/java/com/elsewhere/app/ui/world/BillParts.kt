@@ -68,13 +68,19 @@ fun BigNum(value: String, small: String? = null, modifier: Modifier = Modifier, 
 /** The rule and the two bold lines that close a bill; `door` makes the two lines one door. */
 @Composable
 fun Foot(left: String, right: String?, modifier: Modifier = Modifier, door: Door? = null) {
+    Foot(listOf(Span(left)), right?.let { listOf(Span(it)) }, modifier, door)
+}
+
+/** A foot whose figures are doors of their own. */
+@Composable
+fun Foot(left: List<Span>, right: List<Span>?, modifier: Modifier = Modifier, door: Door? = null) {
     Column(modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(Rule).background(LocalContentColor.current))
         Spacer(Modifier.height(16.dp))
         val style = PosterType.Display.copy(fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.02.em, lineHeight = 1.em)
         Row(Modifier.fillMaxWidth().door(door), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-            Text(left.uppercase(), Modifier.weight(1f, fill = false), style = style)
-            if (right != null) { Spacer(Modifier.width(24.dp)); Text(right.uppercase(), style = style, textAlign = TextAlign.End) }
+            DoorText(left.map { it.copy(text = it.text.uppercase()) }, Modifier.weight(1f, fill = false), style = style, color = LocalContentColor.current)
+            if (right != null) { Spacer(Modifier.width(24.dp)); DoorText(right.map { it.copy(text = it.text.uppercase()) }, style = style.copy(textAlign = TextAlign.End), color = LocalContentColor.current) }
         }
     }
 }
@@ -140,7 +146,7 @@ fun SetlistRow(label: String, frac: Float, color: Color, n: String, small: Strin
 
 /** The web's `.ptable`: caps headers over a rule, then rows of display figures, first column larger. `doors` runs row for row. */
 @Composable
-fun PTable(headers: List<String>, rows: List<List<String>>, modifier: Modifier = Modifier, compact: Boolean = false, doors: List<Door?> = emptyList()) {
+fun PTable(headers: List<String>, rows: List<List<String>>, modifier: Modifier = Modifier, compact: Boolean = false, doors: List<List<Door?>> = emptyList()) {
     val ink = LocalContentColor.current
     val first = PosterType.Display.copy(fontSize = if (compact) 24.sp else 36.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em)
     val cell = PosterType.Display.copy(fontSize = if (compact) 22.sp else 24.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em)
@@ -152,9 +158,9 @@ fun PTable(headers: List<String>, rows: List<List<String>>, modifier: Modifier =
         }
         Box(Modifier.fillMaxWidth().height(Rule).background(ink))
         rows.forEachIndexed { ri, r ->
-            Row(Modifier.fillMaxWidth().door(doors.getOrNull(ri)).padding(vertical = if (compact) 10.dp else 12.dp), verticalAlignment = Alignment.Bottom) {
+            Row(Modifier.fillMaxWidth().padding(vertical = if (compact) 10.dp else 12.dp), verticalAlignment = Alignment.Bottom) {
                 r.forEachIndexed { i, v ->
-                    Text(v.uppercase(), Modifier.weight(if (i == 0) 1.4f else 1f), style = if (i == 0) first else cell, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(v.uppercase(), Modifier.weight(if (i == 0) 1.4f else 1f).door(doors.getOrNull(ri)?.getOrNull(i)), style = if (i == 0) first else cell, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             Box(Modifier.fillMaxWidth().height(2.dp).background(ink))

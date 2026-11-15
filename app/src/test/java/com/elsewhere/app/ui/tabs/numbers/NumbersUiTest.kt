@@ -4,6 +4,11 @@ import com.elsewhere.app.Fx
 import com.elsewhere.app.SampleRecord
 import com.elsewhere.app.analytics.DayType
 import com.elsewhere.app.ui.nav.Door
+import com.elsewhere.app.ui.world.date
+import com.elsewhere.app.ui.world.hours
+import com.elsewhere.app.ui.world.month
+import com.elsewhere.app.ui.world.n0
+import kotlin.math.roundToInt
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -40,20 +45,61 @@ class NumbersUiTest {
         val ui = numbersUi(SampleRecord.record, SampleRecord.profile)
         val d = ui.doors
         val whole = SampleRecord.record.meta.range
-        // The best month opens on that month, first midnight to the last second.
+        // The best month opens on that month, first midnight to the last second, cut to the record.
         val best = d.bestMonth as Door.Range
-        assertEquals("${ui.best!!.key}-01", java.time.LocalDate.ofEpochDay(best.from / Fx.D).toString())
-        assertEquals(best.from + java.time.YearMonth.parse(ui.best!!.key).lengthOfMonth() * Fx.D - 1, best.to)
-        assertTrue(best.label.startsWith("Best month · "))
-        assertEquals(d.bestMonth, (d.peakMonth as Door.Range).copy(label = best.label))
+        val m0 = java.time.LocalDate.parse("${ui.best!!.key}-01").toEpochDay() * Fx.D
+        assertEquals(maxOf(whole.first, m0), best.from)
+        assertEquals(minOf(whole.last, m0 + java.time.YearMonth.parse(ui.best!!.key).lengthOfMonth() * Fx.D - 1), best.to)
+        assertEquals("Best month · ${month(ui.best!!.key)} · ${n0(ui.best!!.total)} km", best.label)
+        assertEquals("Best month · ${month(ui.best!!.key)}", d.which!!.label)
+        assertEquals(best.copy(label = "Peak month · ${month(ui.best!!.key)} · ${n0(ui.maxMonth)} km"), d.peakMonth)
+        // Chart columns open on their month, labelled as the tip reads.
+        assertEquals(ui.stats.months.size, d.monthColumns.size)
+        assertEquals("${month(ui.stats.months[0].key)} · ${n0(ui.stats.months[0].total)} km", d.monthColumns[0].label)
+        assertEquals(ui.explore.size, d.exploreColumns.size)
+        assertEquals(ui.explore[0].let { "${month(it.key)} · ${it.new} new · ${it.repeat} repeat · ${it.lapsed} lapsed" }, d.exploreColumns[0].label)
         // Window-wide figures open on the window.
         assertEquals(Door.Range(whole.first, whole.last, "12 months on record"), d.months)
+        assertEquals("Average per month · ${n0(ui.avg)} km", d.average.label)
         assertEquals(whole, (d.hoursAway as Door.Range).let { it.from..it.to })
+        assertEquals("${n0(ui.hoursAway)} hours away", d.hoursAway.label)
         assertEquals(DayType.entries.toSet(), d.dayTypes.keys)
-        assertEquals("${ui.pct(DayType.AWAY)}% away days", d.dayTypes.getValue(DayType.AWAY).label)
-        assertEquals(whole, (d.legs as Door.Range).let { it.from..it.to })
-        // City rows open on the city's places, in the stats' order.
-        assertEquals(ui.stats.cities.map { it.city }, d.cities.map { it.label.substringBefore(" · ") })
-        assertEquals(Door.Places(listOf("lisbon", "lisbon-cafe"), d.cities[ui.stats.cities.indexOfFirst { it.city == "Lisbon" }].label), d.cities[ui.stats.cities.indexOfFirst { it.city == "Lisbon" }])
+        assertEquals("${ui.pct(DayType.AWAY)}% of days away", d.dayTypes.getValue(DayType.AWAY).label)
+        assertEquals("${ui.pct(DayType.OUT)}% of days out", d.dayTypes.getValue(DayType.OUT).label)
+        assertEquals("${n0(ui.newTotal)} new places", d.newPlaces.label)
+        assertEquals("${n0(ui.newTotal / maxOf(1, ui.explore.size).toDouble())} new places a month", d.perMonth.label)
+        assertEquals("${ui.stats.cities.size} cities", d.cityCount.label)
+        assertEquals("${ui.countries} countries", d.countryCount.label)
+        // Commute figures, and the home and work day shares, open on home and work.
+        val homeWork = Door.Places(listOf("home", "work"), "")
+        assertEquals(homeWork.copy(label = "${ui.pct(DayType.WORK)}% of days at work"), d.dayTypes.getValue(DayType.WORK))
+        assertEquals(homeWork.copy(label = "${ui.pct(DayType.HOME)}% of days home"), d.dayTypes.getValue(DayType.HOME))
+        assertEquals(homeWork.copy(label = "${n0(ui.commute.legs.size)} commute legs"), d.legs)
+        assertEquals(homeWork.copy(label = "To work · ${ui.commute.toWork.medianMin.roundToInt()} min"), d.toWork)
+        assertEquals(homeWork.copy(label = "${ui.commute.medianAll.roundToInt()} min door to door"), d.median)
+        // City rows open on the city's places cell by cell, the dates on the city's span, in the stats' order.
+        assertEquals(ui.stats.cities.map { it.city }, d.cities.map { it.city.label.substringBefore(" · ") })
+        val li = ui.stats.cities.indexOfFirst { it.city == "Lisbon" }
+        val lisbon = ui.stats.cities[li]
+        val pins = Door.Places(listOf("lisbon", "lisbon-cafe"), "")
+        assertEquals(pins.copy(label = "Lisbon · ${hours(lisbon.hours)} · ${n0(lisbon.visits)} visits · ${n0(lisbon.places)} places"), d.cities[li].city)
+        assertEquals(pins.copy(label = "Lisbon · ${hours(lisbon.hours)}"), d.cities[li].hours)
+        assertEquals(pins.copy(label = "Lisbon · ${n0(lisbon.visits)} visits"), d.cities[li].visits)
+        assertEquals(pins.copy(label = "Lisbon · ${n0(lisbon.places)} places"), d.cities[li].places)
+        assertEquals(Door.Range(lisbon.first, lisbon.last, "Lisbon · first visit ${date(lisbon.first)}"), d.cities[li].first)
+        assertEquals(Door.Range(lisbon.first, lisbon.last, "Lisbon · last visit ${date(lisbon.last)}"), d.cities[li].last)
+    }
+
+    @Test fun `a city the record names no place in still opens as pins, framing them all`() {
+        val d = numbersUi(SampleRecord.record, null).doors
+        assertEquals(Door.Places(emptyList(), "Atlantis · 2h"), d.city("Atlantis", "Atlantis · 2h"))
+    }
+
+    @Test fun `commute figures fall back to the window when the record names no home or work`() {
+        val rec = SampleRecord.record
+        val anon = rec.copy(places = rec.places.mapValues { (_, p) -> p.copy(role = null) })
+        val d = numbersUi(anon, null).doors
+        assertTrue(d.legs is Door.Range)
+        assertTrue(d.dayTypes.getValue(DayType.HOME) is Door.Range)
     }
 }

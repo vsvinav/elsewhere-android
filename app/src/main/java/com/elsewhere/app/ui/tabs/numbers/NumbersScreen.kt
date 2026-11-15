@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -42,7 +43,9 @@ import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.WEEKDAYS
 import com.elsewhere.app.ui.nav.Door
+import com.elsewhere.app.ui.nav.DoorText
 import com.elsewhere.app.ui.nav.door
+import com.elsewhere.app.ui.nav.span
 import com.elsewhere.app.ui.world.countUp
 import com.elsewhere.app.ui.world.cv
 import com.elsewhere.app.ui.world.date
@@ -102,8 +105,18 @@ private fun Axis(left: String?, right: String?) {
 
 /** Stacked columns, one per bucket, bottom segment first; heights are fractions of the tallest. */
 @Composable
-private fun Columns(stacks: List<List<Pair<Float, Color>>>, description: String, modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 180.dp) {
-    Canvas(modifier.fillMaxWidth().height(height).semantics { contentDescription = description }) {
+private fun Columns(stacks: List<List<Pair<Float, Color>>>, description: String, modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 180.dp, doors: List<Door?> = emptyList()) {
+    Box(modifier.fillMaxWidth().height(height)) {
+        Bars(stacks, description, Modifier.matchParentSize())
+        if (doors.isNotEmpty()) Row(Modifier.matchParentSize(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            for (i in stacks.indices) Box(Modifier.weight(1f).fillMaxHeight().door(doors.getOrNull(i)))
+        }
+    }
+}
+
+@Composable
+private fun Bars(stacks: List<List<Pair<Float, Color>>>, description: String, modifier: Modifier) {
+    Canvas(modifier.semantics { contentDescription = description }) {
         val n = max(1, stacks.size)
         val gap = 3.dp.toPx()
         val w = (size.width - gap * (n - 1)) / n
@@ -124,7 +137,7 @@ private fun MonthsPass(ui: NumbersUi) {
     val s = ui.stats; val u = ui.units
     Pass(share = Share("distance by month"), stub = {
         Field("Best month", ui.best?.let { countUp(u.cv(it.total)) }, big = true, door = ui.doors.bestMonth)
-        Field("Which", ui.best?.let { month(it.key) }, door = ui.doors.bestMonth)
+        Field("Which", ui.best?.let { month(it.key) }, door = ui.doors.which)
         Field("Average per month", countUp(u.cv(ui.avg)), big = true, door = ui.doors.average)
         Field("Months on record", "${s.months.size}", big = true, door = ui.doors.months)
     }) {
@@ -138,6 +151,7 @@ private fun MonthsPass(ui: NumbersUi) {
                 listOf((other / ui.maxMonth).toFloat() to Poster.Stock2) + top.indices.reversed().map { i -> ((m.byMode[top[i]] ?: 0.0) / ui.maxMonth).toFloat() to CLS[i] }
             },
             "Distance per month, stacked by mode",
+            doors = ui.doors.monthColumns,
         )
         Axis(s.months.firstOrNull()?.let { month(it.key) }, s.months.lastOrNull()?.let { month(it.key) })
         Spacer(Modifier.height(14.dp))
@@ -149,8 +163,8 @@ private fun MonthsPass(ui: NumbersUi) {
 private fun RhythmPass(ui: NumbersUi) {
     val s = ui.stats
     Pass(share = Share("rhythm"), stub = {
-        Field("Peak hour", ui.peak?.let { "${WEEKDAYS[it.d]} ${it.h.toString().padStart(2, '0')}:00" }, door = ui.doors.peakHour)
-        Field("Busiest day out", if ((ui.byDay.getOrNull(ui.topDay) ?: 0.0) > 0) WEEKDAYS[ui.topDay] else null, door = ui.doors.busiestDay)
+        Field("Peak hour", ui.peak?.let { "${WEEKDAYS[it.d]} ${it.h.toString().padStart(2, '0')}:00" })
+        Field("Busiest day out", if ((ui.byDay.getOrNull(ui.topDay) ?: 0.0) > 0) WEEKDAYS[ui.topDay] else null)
         Field("Hours away", countUp(ui.hoursAway), big = true, door = ui.doors.hoursAway)
     }) {
         Field("Weekly rhythm", "Hours away from home, by weekday and hour of day")
@@ -257,7 +271,7 @@ private fun ExplorePass(ui: NumbersUi) {
         Field("Exploration", "First visits, returns, and places that went quiet, by month")
         Spacer(Modifier.height(22.dp))
         val m = ui.maxExplore.toFloat()
-        Columns(e.map { b -> listOf(b.lapsed / m to Poster.Stock2, b.repeat / m to Poster.Mustard, b.new / m to Poster.Red) }, "New, repeat and lapsed places per month")
+        Columns(e.map { b -> listOf(b.lapsed / m to Poster.Stock2, b.repeat / m to Poster.Mustard, b.new / m to Poster.Red) }, "New, repeat and lapsed places per month", doors = ui.doors.exploreColumns)
         Axis(e.firstOrNull()?.let { month(it.key) }, e.lastOrNull()?.let { month(it.key) })
         Spacer(Modifier.height(14.dp))
         Legend(listOf("New" to Poster.Red, "Repeat" to Poster.Mustard, "Lapsed" to Poster.Stock2))
@@ -268,19 +282,23 @@ private fun ExplorePass(ui: NumbersUi) {
 private fun CitiesPass(ui: NumbersUi) {
     val cities = ui.stats.cities
     Pass(share = Share("cities")) {
-        Field("Cities", "${cities.size} cities in ${ui.countries} countries, by time spent")
+        Field("Cities", listOf(span("${cities.size} cities", ui.doors.cityCount), span(" in "), span("${ui.countries} countries", ui.doors.countryCount), span(", by time spent")))
         Spacer(Modifier.height(22.dp))
         Box(Modifier.fillMaxWidth().height(6.dp).background(Poster.Ink))
         cities.take(25).forEachIndexed { i, c ->
-            Column(Modifier.fillMaxWidth().door(ui.doors.cities.getOrNull(i)).padding(vertical = 10.dp)) {
+            val d = ui.doors.cities.getOrNull(i)
+            Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(c.city.uppercase(), Modifier.weight(1f, fill = false), style = PosterType.Display.copy(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(c.city.uppercase(), Modifier.weight(1f, fill = false).door(d?.city), style = PosterType.Display.copy(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (!c.country.isNullOrEmpty()) { Spacer(Modifier.width(6.dp)); CapsText(c.country, Modifier.padding(bottom = 2.dp), color = Poster.Ink3, size = 12.sp) }
                     Spacer(Modifier.width(16.dp))
-                    Text(hours(c.hours).uppercase(), style = PosterType.Display.copy(fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em))
+                    Text(hours(c.hours).uppercase(), Modifier.door(d?.hours), style = PosterType.Display.copy(fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em))
                 }
                 Spacer(Modifier.height(4.dp))
-                Text("${n0(c.visits)} visits · ${n0(c.places)} places · ${date(c.first)} → ${date(c.last)}", color = Poster.Ink3, style = PosterType.Label.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium))
+                DoorText(
+                    listOf(span("${n0(c.visits)} visits", d?.visits), span(" · "), span("${n0(c.places)} places", d?.places), span(" · "), span(date(c.first), d?.first), span(" → "), span(date(c.last), d?.last)),
+                    color = Poster.Ink3, style = PosterType.Label.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                )
             }
             Box(Modifier.fillMaxWidth().height(2.dp).background(Poster.Ink))
         }

@@ -2,9 +2,13 @@ package com.elsewhere.app.ui.tabs.tour
 
 import com.elsewhere.app.Fx
 import com.elsewhere.app.SampleRecord
+import com.elsewhere.app.analytics.isHome
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ui.nav.Door
 import com.elsewhere.app.ui.nav.doorId
+import com.elsewhere.app.ui.world.cv
+import com.elsewhere.app.ui.world.date
+import com.elsewhere.app.ui.world.n0
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -59,32 +63,56 @@ class TourUiTest {
         val ui = tourUi(SampleRecord.record, SampleRecord.record, SampleRecord.profile, null)
         val d = ui.doors
         val whole = SampleRecord.record.meta.range
-        // Record-wide figures open on the whole window.
-        assertEquals(Door.Range(whole.first, whole.last, "366 days of record"), d.record)
-        assertEquals(whole.first, (d.distance as Door.Range).from)
-        assertEquals(whole.last, (d.nightsAway as Door.Range).to)
-        // A stop opens on the places the record names in its city, in the tour's order.
+        val act = ui.tour.headline!!
+        // Record-wide figures open on the whole window, labelled as they read on the poster.
+        assertEquals(Door.Range(whole.first, whole.last, "366 days of record"), d.days)
+        assertEquals(Door.Range(whole.first, whole.last, "${date(whole.first)} → ${date(whole.last)}"), d.record)
+        assertEquals("${n0(ui.facts.totalKm)} km", d.distance.label)
+        assertEquals("${n0(ui.facts.totalKm)} km on record", d.distanceOnRecord.label)
+        assertEquals("${ui.facts.trips} trips", d.trips.label)
+        assertEquals("${ui.facts.flights} ${if (ui.facts.flights == 1) "flight" else "flights"}", d.flights.label)
+        // Counts of places, cities and countries open as pins: every place, one per city, one per country.
+        assertEquals(Door.Places(SampleRecord.record.places.keys.toList(), "${n0(ui.facts.places)} places"), d.places)
+        assertEquals(ui.facts.cities, (d.cities as Door.Places).placeIds.size)
+        assertEquals(ui.facts.countries, (d.countries as Door.Places).placeIds.size)
+        assertEquals("${ui.facts.countries} ${if (ui.facts.countries == 1) "country" else "countries"}", d.countries.label)
+        // A stop opens on the nights spent there, in the tour's order.
         assertEquals(listOf("Lisbon", "Tokyo", "New York"), ui.tour.stops.map { it.city })
-        assertEquals(Door.Places(listOf("lisbon", "lisbon-cafe"), "Lisbon · 7 nights"), d.stops[0])
+        assertEquals(Door.Range(ui.tour.stops[0].first, ui.tour.stops[0].last, "Lisbon · 7 nights"), d.stops[0])
+        // Nights away open on every bed slept in away; nights home on the homes.
+        assertEquals(Door.Places(ui.tour.stops.flatMap { it.placeIds }, "${n0(ui.tour.nightsAway)} nights away"), d.nightsAway)
+        assertEquals(Door.Places(listOf("home"), "${n0(ui.tour.nightsHome)} nights home"), d.nightsHome)
         // The headline act opens on its hotel at the night it began; its stay is the window.
-        assertEquals(Door.Place("tokyo", ui.tour.headline!!.start, "Tokyo"), d.headline)
-        assertEquals(Door.Range(ui.tour.headline!!.start, ui.tour.headline!!.end, "1 night in Tokyo"), d.headlineStay)
+        assertEquals(Door.Place("tokyo", act.start, "Tokyo · ${n0(act.km)} km from home"), d.act)
+        assertEquals(Door.Range(act.start, act.end, "Tokyo · 1 night"), d.actNights)
         // The longest trip is a trip door, keyed the way the record will find it again.
         assertEquals(Door.Trip(ui.facts.longestTrip!!.trip.doorId, ui.facts.longestTrip!!.trip.start, ui.facts.longestTrip!!.trip.end, "Longest trip · 7 nights"), d.longestTrip)
-        // Third places open on themselves; records on their day; years on the year.
+        // Third places open on themselves; records on their day; year cells on the year, cut to the record.
         assertEquals(ui.facts.thirdPlaces.map { it.id }, d.thirdPlaces.map { (it as Door.Place).placeId })
+        assertEquals(ui.facts.thirdPlaces[0].let { "${it.name} · ${it.place.nVisits} visits" }, d.thirdPlaces[0].label)
         val longest = d.longestDay as Door.Range
         assertEquals(Fx.D - 1, longest.to - longest.from)
-        assertEquals(Door.Place("tokyo", label = "Farthest · ${com.elsewhere.app.ui.world.n0(ui.facts.records.farthest!!.km)} km"), d.farthest)
-        assertEquals(listOf(Door.Range(Fx.utc(2024, 0, 1), Fx.utc(2025, 0, 1) - 1, "2024")), d.years)
+        assertEquals("Longest day · ${n0(ui.facts.records.longestDay!!.km)} km", longest.label)
+        assertEquals("Busiest day · ${ui.facts.records.busiestDay!!.places} places", d.busiestDay!!.label)
+        val y = ui.facts.years[0]
+        val year = Door.Range(maxOf(whole.first, Fx.utc(2024, 0, 1)), minOf(whole.last, Fx.utc(2025, 0, 1) - 1), "")
+        assertEquals(listOf(listOf(
+            year.copy(label = "2024 · ${n0(y.km)} km · ${n0(y.places)} places · ${y.trips} trips · ${y.flights} flights"),
+            year.copy(label = "2024 · ${n0(y.km)} km"), year.copy(label = "2024 · ${n0(y.places)} places"), year.copy(label = "2024 · ${y.trips} trips"), year.copy(label = "2024 · ${y.flights} flights"),
+        )), d.years)
         assertEquals(ui.facts.kmByMode.map { it.first }.toSet(), d.modes.keys)
+        assertEquals("${n0(ui.facts.hours.other)} hours out", d.hoursOut.label)
     }
 
-    @Test fun `a stop in a city the record names no place for opens on its nights instead`() {
+    @Test fun `doors read in the poster's units`() {
+        val mi = tourUi(SampleRecord.record, SampleRecord.record, SampleRecord.profile?.copy(units = Units.MI), null).doors
+        assertEquals("${n0(Units.MI.cv(tourUi(SampleRecord.record, SampleRecord.record, null, null).facts.totalKm))} mi", mi.distance.label)
+    }
+
+    @Test fun `a home the record never names sends nights home to the whole window`() {
         val rec = SampleRecord.record
-        val stripped = rec.copy(places = rec.places.filterKeys { !it.startsWith("nyc") })
-        val d = tourUi(stripped, stripped, null, null).doors
-        val ny = tourUi(stripped, stripped, null, null).tour.stops.first { it.city == "Unknown city" }
-        assertEquals(Door.Range(ny.first, ny.last, "Unknown city"), d.stops[2])
+        val noHome = rec.copy(places = rec.places.mapValues { (_, p) -> if (isHome(p)) p.copy(role = null) else p })
+        val d = tourUi(noHome, noHome, null, null).doors
+        assertTrue(d.nightsHome is Door.Range)
     }
 }

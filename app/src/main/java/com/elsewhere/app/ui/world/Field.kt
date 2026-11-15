@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import com.elsewhere.app.ui.nav.Door
+import com.elsewhere.app.ui.nav.DoorText
+import com.elsewhere.app.ui.nav.Span
 import com.elsewhere.app.ui.nav.door
 
 /**
@@ -73,5 +75,15 @@ fun Field(label: String, value: String?, modifier: Modifier = Modifier, big: Boo
         val shown = if (empty) (if (big) "—" else "not on record") else value!!
         if (big) Text(shown.uppercase(), color = color, style = PosterType.Display.copy(fontSize = 44.sp, lineHeight = 0.9.em), maxLines = 1)
         else Text(shown, color = color, style = PosterType.Lede.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, lineHeight = 1.2.em))
+    }
+}
+
+/** A field whose value holds doors of its own. */
+@Composable
+fun Field(label: String, value: List<Span>, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        CapsText(label, size = 11.sp)
+        Spacer(Modifier.height(6.dp))
+        DoorText(value, color = LocalContentColor.current, style = PosterType.Lede.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, lineHeight = 1.2.em))
     }
 }

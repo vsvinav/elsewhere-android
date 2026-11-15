@@ -14,15 +14,19 @@ import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.analytics.isHome
+import com.elsewhere.app.analytics.isWork
 import com.elsewhere.app.ui.nav.CityIndex
 import com.elsewhere.app.ui.nav.Door
 import com.elsewhere.app.ui.nav.monthDoor
 import com.elsewhere.app.ui.nav.rangeDoor
 import com.elsewhere.app.ui.shell.RangeStore
-import com.elsewhere.app.ui.world.WEEKDAYS
+import com.elsewhere.app.ui.world.cv
+import com.elsewhere.app.ui.world.date
 import com.elsewhere.app.ui.world.hours
 import com.elsewhere.app.ui.world.month
 import com.elsewhere.app.ui.world.n0
+import com.elsewhere.app.ui.world.u
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -52,35 +56,62 @@ data class NumbersUi(
     fun pct(t: DayType): Int = (100.0 * (stats.dayTypes[t] ?: 0) / max(1, days)).roundToInt()
 }
 
-/**
- * Where each figure on the Numbers passes leads, built once with the figures: O(P) for the city index, O(C)
- * for the city rows, O(1) per other figure. Month figures open on their month, city rows on their places, the
- * rest on the window the figures were counted over.
- */
-class NumbersDoors(data: Record, s: Stats, commute: CommuteStats, best: MonthKm?, avg: Double, peak: Peak?, topDay: Int, hoursAway: Double, dayTypes: Map<DayType, Int>, days: Int, newTotal: Int, lapsedTotal: Int, months: Int) {
-    private val range = data.meta.range
-    private fun whole(label: String) = rangeDoor(range, label)
-    private val index = CityIndex(data.places)
+/** A city row's doors, one per cell. */
+data class CityDoors(val city: Door, val hours: Door, val visits: Door, val places: Door, val first: Door, val last: Door)
 
-    val bestMonth: Door? = best?.let { monthDoor(it.key, "Best month · ${month(it.key)}") }
-    val average: Door = whole("${n0(avg)} km a month on average")
-    val months: Door = whole("$months months on record")
-    val peakMonth: Door? = s.months.maxByOrNull { it.total }?.let { monthDoor(it.key, "${n0(it.total)} km peak · ${month(it.key)}") }
-    val peakHour: Door? = peak?.let { whole("Peak hour · ${WEEKDAYS[it.d]} ${it.h.toString().padStart(2, '0')}:00") }
-    val busiestDay: Door = whole("Busiest day out · ${WEEKDAYS.getOrElse(topDay) { "" }}")
+/**
+ * Where each figure on the Numbers passes leads, built once with the figures: O(P) for the city and
+ * home-or-work indexes, O(M) for the month columns, O(C) for the city rows, O(1) per other figure. Month
+ * figures open on their month, city rows on their places, commute figures on home and work, the rest on
+ * the window the figures were counted over. Peak hour and busiest weekday are not doors: no window holds them.
+ */
+class NumbersDoors(data: Record, private val units: Units, s: Stats, commute: CommuteStats, explore: List<Bucket>, best: MonthKm?, avg: Double, maxMonth: Double, hoursAway: Double, private val days: Int, newTotal: Int, lapsedTotal: Int, countries: Int) {
+    private val range = data.meta.range
+    private val u = units.u
+    private fun cv(km: Double) = n0(units.cv(km))
+    private val index = CityIndex(data.places)
+    private val homeWork = data.places.filterValues { isHome(it) || isWork(it) }.keys.toList()
+    fun whole(label: String) = rangeDoor(range, label)
+    fun month(key: String, label: String) = monthDoor(key, label, range)
+    fun city(city: String, label: String): Door = index.door(city, label)
+    fun commute(label: String): Door = if (homeWork.isEmpty()) whole(label) else Door.Places(homeWork, label)
+    private fun pct(n: Int) = (100.0 * n / max(1, days)).roundToInt()
+
+    val bestMonth: Door? = best?.let { month(it.key, "Best month · ${month(it.key)} · ${cv(it.total)} $u") }
+    val which: Door? = best?.let { month(it.key, "Best month · ${month(it.key)}") }
+    val average: Door = whole("Average per month · ${cv(avg)} $u")
+    val months: Door = whole("${s.months.size} months on record")
+    val peakMonth: Door? = best?.let { month(it.key, "Peak month · ${month(it.key)} · ${cv(maxMonth)} $u") }
+    /** Month chart columns, in the stats' order. */
+    val monthColumns: List<Door> = s.months.map { m -> month(m.key, "${month(m.key)} · ${cv(m.total)} $u") }
     val hoursAway: Door = whole("${n0(hoursAway)} hours away")
-    val dayTypes: Map<DayType, Door> = DayType.entries.associateWith { t -> whole("${(100.0 * (dayTypes[t] ?: 0) / max(1, days)).roundToInt()}% ${t.key} days") }
-    val daysAway: Door = whole("${n0(dayTypes[DayType.AWAY] ?: 0)} days away")
-    val legs: Door = whole("${n0(commute.legs.size)} commute legs")
-    val toWork: Door = whole("To work · ${commute.toWork.medianMin.roundToInt()} min")
-    val toHome: Door = whole("To home · ${commute.toHome.medianMin.roundToInt()} min")
-    val badDay: Door = whole("Bad day · ${max(commute.toWork.p90Min, commute.toHome.p90Min).roundToInt()} min")
-    val median: Door = whole("${n0(commute.medianAll)} min door to door")
+    val dayTypes: Map<DayType, Door> = mapOf(
+        DayType.AWAY to whole("${pct(s.dayTypes[DayType.AWAY] ?: 0)}% of days away"),
+        DayType.WORK to commute("${pct(s.dayTypes[DayType.WORK] ?: 0)}% of days at work"),
+        DayType.OUT to whole("${pct(s.dayTypes[DayType.OUT] ?: 0)}% of days out"),
+        DayType.HOME to commute("${pct(s.dayTypes[DayType.HOME] ?: 0)}% of days home"),
+    )
+    val daysAway: Door = whole("${n0(s.dayTypes[DayType.AWAY] ?: 0)} days away")
+    val legs: Door = commute("${n0(commute.legs.size)} commute legs")
+    val toWork: Door = commute("To work · ${commute.toWork.medianMin.roundToInt()} min")
+    val toHome: Door = commute("To home · ${commute.toHome.medianMin.roundToInt()} min")
+    val badDay: Door = commute("Bad day · ${max(commute.toWork.p90Min, commute.toHome.p90Min).roundToInt()} min")
+    val median: Door = commute("${commute.medianAll.roundToInt()} min door to door")
     val newPlaces: Door = whole("${n0(newTotal)} new places")
-    val perMonth: Door = whole("New places per month")
+    val perMonth: Door = whole("${n0(newTotal / max(1, explore.size).toDouble())} new places a month")
     val lapsed: Door = whole("${n0(lapsedTotal)} lapsed places")
-    /** City rows, in the stats' order: the city's places, or its span when the record names none. */
-    val cities: List<Door> = s.cities.map { c -> index.door(c.city, "${c.city} · ${hours(c.hours)}", Door.Range(c.first, c.last, c.city))!! }
+    /** Exploration chart columns, in the buckets' order. */
+    val exploreColumns: List<Door> = explore.map { b -> month(b.key, "${month(b.key)} · ${b.new} new · ${b.repeat} repeat · ${b.lapsed} lapsed") }
+    val cityCount: Door = whole("${s.cities.size} cities")
+    val countryCount: Door = whole("$countries countries")
+    /** City rows, in the stats' order: each cell is a door to the city's places; the dates to its span. */
+    val cities: List<CityDoors> = s.cities.map { c ->
+        CityDoors(
+            city(c.city, "${c.city} · ${hours(c.hours)} · ${n0(c.visits)} visits · ${n0(c.places)} places"),
+            city(c.city, "${c.city} · ${hours(c.hours)}"), city(c.city, "${c.city} · ${n0(c.visits)} visits"), city(c.city, "${c.city} · ${n0(c.places)} places"),
+            Door.Range(c.first, c.last, "${c.city} · first visit ${date(c.first)}"), Door.Range(c.first, c.last, "${c.city} · last visit ${date(c.last)}"),
+        )
+    }
 }
 
 fun numbersUi(data: Record, profile: Profile?): NumbersUi {
@@ -98,16 +129,18 @@ fun numbersUi(data: Record, profile: Profile?): NumbersUi {
     val byDay = s.rhythm.map { it.sum() }
     val topDay = byDay.indexOf(byDay.maxOrNull() ?: 0.0).coerceAtLeast(0)
     val days = s.dayTypes.values.sum()
+    val units = profile?.units ?: Units.KM
+    val countries = s.cities.mapNotNull { it.country?.takeIf { c -> c.isNotEmpty() } }.toSet().size
     return NumbersUi(
-        units = profile?.units ?: Units.KM, stats = s, commute = commute, explore = explore,
+        units = units, stats = s, commute = commute, explore = explore,
         hasWork = !profile?.works.isNullOrEmpty() || data.profile.works.isNotEmpty(),
         modes = modes, maxMonth = maxMonth, best = best, avg = avg, peak = peak, byDay = byDay, topDay = topDay, hoursAway = byDay.sum(),
         days = days, maxExplore = max(1, explore.maxOfOrNull { it.new + it.repeat + it.lapsed } ?: 0),
         newTotal = explore.sumOf { it.new }, lapsedTotal = explore.sumOf { it.lapsed },
         hourMax = max(1, (commute.toWork.byHour + commute.toHome.byHour).maxOrNull() ?: 0),
         usualMode = commute.toWork.byMode.entries.sortedByDescending { it.value }.firstOrNull()?.key,
-        countries = s.cities.mapNotNull { it.country?.takeIf { c -> c.isNotEmpty() } }.toSet().size,
-        doors = NumbersDoors(data, s, commute, best, avg, peak, topDay, byDay.sum(), s.dayTypes, days, explore.sumOf { it.new }, explore.sumOf { it.lapsed }, s.months.size),
+        countries = countries,
+        doors = NumbersDoors(data, units, s, commute, explore, best, avg, maxMonth, byDay.sum(), days, explore.sumOf { it.new }, explore.sumOf { it.lapsed }, countries),
     )
 }
 
