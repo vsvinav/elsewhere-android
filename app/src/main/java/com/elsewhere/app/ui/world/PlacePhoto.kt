@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.decode.DataSource
 import com.elsewhere.app.analytics.Cat
 import com.elsewhere.app.analytics.categoryOf
 import com.elsewhere.app.data.Place
@@ -40,7 +41,8 @@ fun PlacePhoto(place: Place?, modifier: Modifier = Modifier, blank: Boolean = fa
     if (url != null) {
         AsyncImage(
             model = url, contentDescription = null, contentScale = ContentScale.Crop,
-            onSuccess = { if (google != null) sources.onGooglePhoto() },
+            // Only a fetch that went out to Google is billed; a disk or memory hit costs nothing.
+            onSuccess = { if (google != null && it.result.dataSource == DataSource.NETWORK) sources.onGooglePhoto() },
             modifier = modifier.fillMaxWidth().aspectRatio(4f / 3f).background(Poster.Stock2),
         )
     } else if (blank && !free) {
