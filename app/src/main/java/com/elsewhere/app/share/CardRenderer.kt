@@ -7,11 +7,13 @@ import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import com.elsewhere.app.ui.world.LocalMotion
+import com.elsewhere.app.ui.world.Poster
 
 /** Prints a [ShareCard] to pixels without showing it: the Android half of web/src/share/saveCard.ts. */
 object CardRenderer {
@@ -20,13 +22,13 @@ object CardRenderer {
      * it at the sheet width, draws it, and takes the view down again. Main thread; returns synchronously
      * because the first composition is.
      */
-    fun render(activity: ComponentActivity, format: ShareFormat, content: @Composable () -> Unit): Bitmap {
+    fun render(activity: ComponentActivity, format: ShareFormat, paper: Color = Poster.Stock, ink: Color = Poster.Ink, content: @Composable () -> Unit): Bitmap {
         val host = activity.findViewById<ViewGroup>(android.R.id.content)
         val view = ComposeView(activity).apply {
             alpha = 0f
             setViewTreeLifecycleOwner(activity)
             setViewTreeSavedStateRegistryOwner(activity)
-            setContent { ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { ShareCard(format, content) } } }
+            setContent { ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { ShareCard(format, paper, ink, content) } } }
         }
         host.addView(view, ViewGroup.LayoutParams(format.sheetWidth, ViewGroup.LayoutParams.WRAP_CONTENT))
         try {

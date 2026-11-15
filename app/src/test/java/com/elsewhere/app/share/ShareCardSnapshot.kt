@@ -6,10 +6,12 @@ import app.cash.paparazzi.Paparazzi
 import com.android.ide.common.rendering.api.SessionParams.RenderingMode
 import com.android.resources.Density
 import com.elsewhere.app.SampleRecord
+import com.elsewhere.app.ui.tabs.tour.HeadlineBill
 import com.elsewhere.app.ui.tabs.tour.TourHero
 import com.elsewhere.app.ui.tabs.tour.tourUi
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import com.elsewhere.app.ui.world.LocalMotion
+import com.elsewhere.app.ui.world.Tone
 import org.junit.Rule
 import org.junit.Test
 
@@ -26,6 +28,15 @@ class ShareCardSnapshot {
     }
 
     @Test fun story() = card(ShareFormat.STORY)
+
+    /** An ink bill brings its own paper: the sheet and the brand line print in the bill's colours, as on the web. */
+    @Test fun inkStory() = paparazzi.snapshot {
+        ElsewhereTheme {
+            CompositionLocalProvider(LocalMotion provides false) {
+                ShareCard(ShareFormat.STORY, paper = Tone.INK.fill, ink = Tone.INK.text) { HeadlineBill(ui, onGo = {}) }
+            }
+        }
+    }
     @Test fun post() = card(ShareFormat.POST)
 
     @Test fun free() {

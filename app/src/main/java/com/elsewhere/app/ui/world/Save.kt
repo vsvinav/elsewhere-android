@@ -48,11 +48,14 @@ class Share(val name: String, val text: (() -> String)? = null)
 
 /**
  * "SAVE ▾" in the corner of a card, opening Free / Story / Post (and Text when the card has one).
- * `card` is the card as it should print, without this menu; it is composed off-screen and
+ * `card` is the card as it should print, without this menu; it is composed off-screen on `paper` (the brand line in `ink`) and
  * shared as a PNG. `photos` lists the pictures the card shows, fetched up front since the print is one draw.
  */
 @Composable
-fun SaveMenu(share: Share, photos: CardPhotos, card: @Composable () -> Unit, modifier: Modifier = Modifier, color: Color = LocalMuted.current) {
+fun SaveMenu(
+    share: Share, photos: CardPhotos, card: @Composable () -> Unit, modifier: Modifier = Modifier,
+    color: Color = LocalMuted.current, paper: Color = Poster.Stock, ink: Color = Poster.Ink,
+) {
     if (LocalPrinting.current) return
     val context = LocalContext.current
     val sources = LocalPhotoSources.current
@@ -67,7 +70,7 @@ fun SaveMenu(share: Share, photos: CardPhotos, card: @Composable () -> Unit, mod
         scope.launch {
             try {
                 val pictures = photos.urls.toList().associateWith { url -> fetchPhoto(activity, url) }.filterValues { it != null }.mapValues { it.value!! }
-                val bitmap = CardRenderer.render(activity, format) {
+                val bitmap = CardRenderer.render(activity, format, paper, ink) {
                     CompositionLocalProvider(LocalPhotoSources provides sources, LocalPrintedPhotos provides pictures) { printed() }
                 }
                 val uri = withContext(Dispatchers.IO) { ShareSheet.writeCard(activity, bitmap, cardFileName(share.name, format)) }

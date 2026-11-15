@@ -34,6 +34,6 @@ fun Bill(tone: Tone = Tone.STOCK, modifier: Modifier = Modifier, first: Boolean 
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 48.dp), content = content)
             }
         }
-        if (share != null) SaveMenu(share, photos!!, card = { Bill(tone, first = first, content = content) }, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 2.dp), color = tone.muted)
+        if (share != null) SaveMenu(share, photos!!, card = { Bill(tone, first = first, content = content) }, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 2.dp), color = tone.muted, paper = tone.fill, ink = tone.text)
     }
 }
