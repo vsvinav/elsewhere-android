@@ -7,10 +7,11 @@ import com.google.android.gms.common.GoogleApiAvailability
 
 /**
  * Whether this phone can draw Google's native map: the build was given a Maps SDK key and Play services are
- * on the device. Decided once at start-up; until then the build's own answer stands in.
+ * on the device. Decided once at start-up; until [init] runs (never in JVM tests) the answer is no, so tests and
+ * goldens read the same whatever key the build was given.
  */
 object Sdk {
-    @Volatile var available: Boolean = BuildConfig.HAS_MAPS_SDK
+    @Volatile var available: Boolean = false
         private set
 
     fun init(ctx: Context) {

@@ -31,7 +31,7 @@ class KeyGateViewModelTest {
     @Test fun `only a stored key that is unproven and not waved through gates the app`() {
         assertFalse(keyGated(Settings()))
         assertTrue(keyGated(Settings(mapsKey = "k")))
-        assertTrue(keyGated(Settings(mapsKey = "k", keyPlaces = true, keyTiles = false, keyCheckedAt = 5)))
+        assertTrue(keyGated(Settings(mapsKey = "k", keyPlaces = true, keyTiles = false, keyCheckedAt = 5), sdk = false))
         assertFalse(keyGated(Settings(mapsKey = "k", keyPlaces = true, keyTiles = true)))
         assertFalse(keyGated(Settings(mapsKey = "k", limitedAccepted = true)))
     }
