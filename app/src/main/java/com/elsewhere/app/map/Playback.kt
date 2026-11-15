@@ -9,6 +9,9 @@ import com.elsewhere.app.data.LatLng
 import com.elsewhere.app.data.Record
 import kotlin.math.max
 import kotlin.math.min
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.transformLatest
 
 // Port of web/src/map/usePlayback.ts: the clock, without the store.
 
@@ -54,11 +57,26 @@ class ChromeGate(private val periodMs: Long = 250) {
     private var shown: PlayState? = null
     private var at = 0L
 
-    fun pass(s: PlayState, nowMs: Long): Boolean {
+    /** How long to hold this state back: zero to show now, else the rest of the beat since the last shown clock. */
+    fun holdFor(s: PlayState, nowMs: Long): Long {
         val prev = shown
         val clockOnly = prev != null && prev.copy(playhead = s.playhead, rate = s.rate) == s
-        if (clockOnly && nowMs - at < periodMs) return false
-        shown = s; at = nowMs
+        return if (clockOnly) max(0L, at + periodMs - nowMs) else 0L
+    }
+
+    fun shown(s: PlayState, nowMs: Long) { shown = s; at = nowMs }
+
+    fun pass(s: PlayState, nowMs: Long): Boolean {
+        if (holdFor(s, nowMs) > 0) return false
+        shown(s, nowMs)
         return true
     }
+}
+
+/** The states the chrome sees, held to the gate's beat; a held clock still lands once the beat is up, so a scrub never sticks. */
+fun Flow<PlayState>.chromeGated(gate: ChromeGate, nowMs: () -> Long): Flow<PlayState> = transformLatest { s ->
+    val wait = gate.holdFor(s, nowMs())
+    if (wait > 0) delay(wait)
+    gate.shown(s, nowMs())
+    emit(s)
 }

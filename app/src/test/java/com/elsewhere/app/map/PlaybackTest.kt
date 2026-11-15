@@ -9,6 +9,12 @@ import com.elsewhere.app.data.LatLng
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 
 class PlaybackTest {
@@ -70,5 +76,36 @@ class ChromeGateTest {
         assertTrue(g.pass(s0.copy(playhead = 290.0, playing = false, speed = 2.0, lens = Lens.FLY), 1290))
         assertTrue(g.pass(s0.copy(playhead = 300.0, playing = false, speed = 2.0, lens = Lens.FLY, follow = false), 1300))
         assertFalse(g.pass(s0.copy(playhead = 310.0, playing = false, speed = 2.0, lens = Lens.FLY, follow = false), 1310))
+    }
+
+    @Test fun `a clock-only change held back still shows once the beat is up`() {
+        val g = ChromeGate(250)
+        val s0 = PlayState(playhead = 0.0, playing = true)
+        assertEquals(0, g.holdFor(s0, 1000)); g.shown(s0, 1000)
+        assertEquals(234, g.holdFor(s0.copy(playhead = 16.0), 1016))
+        assertEquals(0, g.holdFor(s0.copy(playhead = 16.0, playing = false), 1016))
+        g.shown(s0.copy(playhead = 16.0), 1250)
+        assertEquals(250, g.holdFor(s0.copy(playhead = 20.0), 1250))
+    }
+
+    @Test fun `the last of a burst of scrubs reaches the chrome within a beat, paused or not`() = runTest {
+        val src = MutableStateFlow(PlayState(playhead = 0.0, playing = false))
+        val seen = ArrayList<PlayState>()
+        val job = launch { src.chromeGated(ChromeGate(250)) { testScheduler.currentTime }.toList(seen) }
+        runCurrent()
+        assertEquals(listOf(0.0), seen.map { it.playhead })
+        for (i in 1..5) { advanceTimeBy(16); src.value = src.value.copy(playhead = i * 16.0) }
+        runCurrent()
+        assertEquals(listOf(0.0), seen.map { it.playhead })
+        advanceTimeBy(250); runCurrent()
+        assertEquals(listOf(0.0, 80.0), seen.map { it.playhead })
+        // A pause is never held back, and a lone scrub after it lands within a beat.
+        src.value = src.value.copy(playhead = 90.0, speed = 2.0); runCurrent()
+        assertEquals(90.0, seen.last().playhead)
+        advanceTimeBy(100); src.value = src.value.copy(playhead = 100.0); runCurrent()
+        assertEquals(90.0, seen.last().playhead)
+        advanceTimeBy(250); runCurrent()
+        assertEquals(100.0, seen.last().playhead)
+        job.cancel()
     }
 }
