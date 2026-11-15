@@ -12,6 +12,7 @@ import app.cash.paparazzi.Paparazzi
 import com.elsewhere.app.SampleRecord
 import com.elsewhere.app.analytics.Airports
 import com.elsewhere.app.data.FeatureCollection
+import com.elsewhere.app.share.LocalPrinting
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import com.elsewhere.app.ui.world.LocalMotion
 import com.elsewhere.app.ui.world.Poster
@@ -38,4 +39,15 @@ class FlightsSnapshot {
     @Test fun globe() = sheet { FlightsScreen(ui, ui.centre, onRotate = {}, selected = open, onSelect = {}, scroll = false) }
     @Test fun ledger() = sheet { RoutesBill(ui, open) {}; AirportsBill(ui) }
     @Test fun from() = sheet { FromBill(ui, 0) {} }
+
+    // The saved card: the globe turned 90° east of its default and the open route kept, the drag hint and the Save menu gone.
+    @Test fun printedGlobe() = paparazzi.snapshot {
+        ElsewhereTheme {
+            CompositionLocalProvider(LocalMotion provides false, LocalPrinting provides true) {
+                Column(Modifier.wrapContentHeight(Alignment.Top, unbounded = true)) {
+                    FlightsScreen(ui, Rotation(ui.centre.lng + 90.0, ui.centre.lat), onRotate = {}, selected = open, onSelect = {}, scroll = false)
+                }
+            }
+        }
+    }
 }

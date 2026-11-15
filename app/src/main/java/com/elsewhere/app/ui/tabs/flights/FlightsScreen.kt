@@ -57,6 +57,7 @@ import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.Rule
 import com.elsewhere.app.ui.world.Share
+import com.elsewhere.app.share.LocalPrinting
 import com.elsewhere.app.ui.world.Tone
 import com.elsewhere.app.ui.world.countUp
 import com.elsewhere.app.ui.world.cv
@@ -105,10 +106,14 @@ fun FlightsScreen(
 @Composable
 private fun HeroBill(ui: FlightsUi, rotation: Rotation, onRotate: (Rotation) -> Unit, selected: Int?, onSelect: (Int?) -> Unit) {
     val u = ui.units
-    Bill(tone = Tone.INK, first = true) {
+    val longest = ui.longest?.let { "the longest ${n0(u.cv(it.km))} ${u.u}, ${ui.name(it.s)} to ${ui.name(it.t)}" }
+    val share = Share("globe") {
+        "${ui.legs} ${plural(ui.legs, "flight")} on ${ui.hops.size} ${plural(ui.hops.size, "route")} · ${n0(u.cv(ui.km))} ${u.u}${longest?.let { " · $it" } ?: ""}"
+    }
+    // The card prints the globe as it stands: the same rotation and open route as on screen, without the hint.
+    Bill(tone = Tone.INK, first = true, share = share) {
         Row { DisplayText("Up", 72.sp, color = Poster.Stock, misreg = true); Spacer(Modifier.width(8.dp)); DisplayText("There", 72.sp, color = Poster.Red, misreg = true) }
         Spacer(Modifier.height(14.dp))
-        val longest = ui.longest?.let { "the longest ${n0(u.cv(it.km))} ${u.u}, ${ui.name(it.s)} to ${ui.name(it.t)}" }
         Text(
             "${countUp(ui.legs.toDouble())} ${plural(ui.legs, "flight")} on ${ui.hops.size} ${plural(ui.hops.size, "route")}. " +
                 "${countUp(u.cv(ui.km))} ${u.u} above the ground${longest?.let { "; $it" } ?: ""}.",
@@ -116,8 +121,10 @@ private fun HeroBill(ui: FlightsUi, rotation: Rotation, onRotate: (Rotation) -> 
         )
         Spacer(Modifier.height(24.dp))
         Globe(ui.byN, ui.ports, ui.land, rotation, onRotate, selected, onSelect)
-        Spacer(Modifier.height(10.dp))
-        CapsText("Drag to turn · tap a route", color = LocalMuted.current, size = 10.sp)
+        if (!LocalPrinting.current) {
+            Spacer(Modifier.height(10.dp))
+            CapsText("Drag to turn · tap a route", color = LocalMuted.current, size = 10.sp)
+        }
         Spacer(Modifier.height(24.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(28.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Field("Flights", countUp(ui.legs.toDouble()), big = true)
@@ -147,7 +154,7 @@ internal fun FromBill(ui: FlightsUi, pick: Int, onPick: (Int) -> Unit) {
     val f = ui.from(pick) ?: return
     val u = ui.units
     val name = f.from.name
-    Bill {
+    Bill(share = Share("from $name") { "From $name · ${f.legs} ${plural(f.legs, "flight")} · ${f.hops.size} ${plural(f.hops.size, "route")} · ${n0(u.cv(f.km))} ${u.u}" }) {
         // The web sets the name red beside "From", and drops it a line (`long`) past eight letters.
         if (name.length > 8) {
             DisplayText("From", 48.sp)
