@@ -10,7 +10,10 @@ import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordSource
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Settings
+import com.elsewhere.app.data.Place
+import com.elsewhere.app.ingest.Geocoder
 import com.elsewhere.app.ingest.KeyChecker
+import com.elsewhere.app.ingest.PlaceNamer
 import com.elsewhere.app.ingest.KeyReport
 import com.elsewhere.app.ingest.Probe
 import kotlinx.coroutines.flow.Flow
@@ -44,6 +47,17 @@ object Fakes {
     class Checker(var report: KeyReport = KeyReport(Probe.Ok, Probe.Ok)) : KeyChecker {
         val asked = ArrayList<String>()
         override suspend fun run(key: String): KeyReport { asked += key; return report }
+    }
+
+    /** Hands back a scripted name per leading place id and records what it was asked. */
+    class Namer(val names: Map<String, String> = emptyMap()) : PlaceNamer {
+        val asked = ArrayList<List<String>>()
+        override suspend fun name(ids: List<String>, all: Map<String, Place>, key: String): String? { asked += ids; return names[ids.first()] }
+    }
+
+    class Geo(val addresses: Map<Pair<Double, Double>, String> = emptyMap()) : Geocoder {
+        val asked = ArrayList<Pair<Double, Double>>()
+        override suspend fun address(lat: Double, lng: Double): String? { asked += lat to lng; return addresses[lat to lng] }
     }
 
     class Source(initial: Record? = null) : RecordSource {

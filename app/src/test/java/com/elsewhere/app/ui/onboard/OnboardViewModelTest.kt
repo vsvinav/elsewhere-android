@@ -37,7 +37,7 @@ class OnboardViewModelTest {
         for (d in 60 until 75) visits += Fx.visit(start + d * Fx.D + 20 * Fx.H, start + (d + 1) * Fx.D + 8 * Fx.H, "austin", lat = 30.27, lng = -97.74)
         return Fx.record(
             visits = visits, range = start..end,
-            places = mapOf("boston" to Fx.place(city = "Boston", cc = "US", lat = 42.36, lng = -71.06, name = "The flat"), "austin" to Fx.place(city = "Austin", cc = "US", lat = 30.27, lng = -97.74)),
+            places = mapOf("boston" to Fx.place(city = "Boston", cc = "US", lat = 42.36, lng = -71.06, name = "The flat", types = listOf("lodging")), "austin" to Fx.place(city = "Austin", cc = "US", lat = 30.27, lng = -97.74)),
         )
     }
 
@@ -48,10 +48,12 @@ class OnboardViewModelTest {
     private fun run() = dispatcher.scheduler.runCurrent()
 
     private val checker = Fakes.Checker()
+    private val namer = Fakes.Namer(mapOf("austin" to "Barton Hills Bungalow"))
+    private val geo = Fakes.Geo(mapOf((30.27 to -97.74) to "Mary St, Bouldin Creek"))
 
     private fun imported(): Triple<OnboardViewModel, Fakes.Store, Fakes.Maps> {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
-        val vm = OnboardViewModel(store, maps, checker)
+        val vm = OnboardViewModel(store, maps, checker, namer, geo)
         vm.start(Step.Import); run()
         vm.import({ ByteArrayInputStream("{}".toByteArray()) }, "Timeline.json"); run()
         return Triple(vm, store, maps)
@@ -68,6 +70,26 @@ class OnboardViewModelTest {
         vm.skipKey(); vm.setLimitedAck(true); vm.acceptLimited(); run(); assertEquals(Step.Name, vm.state.value.step)
         vm.next(); assertEquals(Step.Home, vm.state.value.step)
         vm.back(); assertEquals(Step.Name, vm.state.value.step)
+    }
+
+    @Test fun `with a working key, unnamed candidates are named through Places`() = runTest(dispatcher) {
+        val store = Fakes.Store(record()); val maps = Fakes.Maps()
+        maps.cur.value = Settings(mapsKey = "k", keyPlaces = true, keyTiles = true)
+        store.hasImport.value = true
+        val vm = OnboardViewModel(store, maps, checker, namer, geo)
+        vm.start(Step.Name); run()
+        assertEquals(listOf("The flat", "Barton Hills Bungalow"), vm.state.value.sleep.map { it.label })
+        assertEquals(listOf(listOf("austin")), namer.asked) // the flat already has a proper name
+        assertTrue(geo.asked.isEmpty())
+    }
+
+    @Test fun `without a key, unnamed candidates get a street from Nominatim`() = runTest(dispatcher) {
+        val (vm, _, _) = imported()
+        val austin = vm.state.value.sleep[1]
+        assertEquals("Austin", austin.label)
+        assertEquals("Mary St, Bouldin Creek", austin.address)
+        assertTrue(namer.asked.isEmpty())
+        assertEquals(listOf(30.27 to -97.74), geo.asked)
     }
 
     @Test fun `a saved key is checked, remembered and continues to the name`() = runTest(dispatcher) {
@@ -128,7 +150,7 @@ class OnboardViewModelTest {
     @Test fun `editing the key from settings re-checks and closes the door`() = runTest(dispatcher) {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
         maps.cur.value = Settings(mapsKey = "old", keyPlaces = true, keyTiles = true, keyCheckedAt = 5)
-        val vm = OnboardViewModel(store, maps, checker)
+        val vm = OnboardViewModel(store, maps, checker, namer, geo)
         vm.start(Step.Key); run()
         assertEquals(KeyPhase.Entry, vm.state.value.keyPhase)
         vm.recheckKey(); run()

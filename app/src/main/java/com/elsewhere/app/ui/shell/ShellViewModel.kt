@@ -7,6 +7,8 @@ import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.ingest.EnrichState
+import com.elsewhere.app.ingest.Progress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -16,7 +18,8 @@ import javax.inject.Inject
 
 /** What the masthead menu reads and does: the name on the record, units, usage, start over. */
 @HiltViewModel
-class ShellViewModel @Inject constructor(private val repo: RecordStore, settings: MapsSettings) : ViewModel() {
+class ShellViewModel @Inject constructor(private val repo: RecordStore, settings: MapsSettings, enrich: EnrichState) : ViewModel() {
+    val naming: StateFlow<Progress?> = enrich.progress
     val profile: StateFlow<Profile?> = repo.profile
     val counters: StateFlow<Counters> = settings.counters.stateIn(viewModelScope, SharingStarted.Eagerly, Counters())
 
@@ -27,6 +30,3 @@ class ShellViewModel @Inject constructor(private val repo: RecordStore, settings
 
     fun reset() { viewModelScope.launch { repo.reset() } }
 }
-
-/** USD at list price per 1,000 calls, before Google's monthly free allowance; mirrors web/src/usage/usage.ts. */
-fun Counters.dollars(): Double = (detailsCalls * 17 + photoCalls * 7 + mapLoads * 7) / 1000.0

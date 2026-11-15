@@ -35,6 +35,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.elsewhere.app.data.Counters
+import com.elsewhere.app.ingest.dollars
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.Poster

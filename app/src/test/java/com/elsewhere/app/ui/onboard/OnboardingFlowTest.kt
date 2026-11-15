@@ -26,8 +26,8 @@ import java.time.YearMonth
 class OnboardingFlowTest {
     @get:Rule val rule = createComposeRule()
 
-    private val boston = Candidate("b", 42.36, -71.06, "Boston", "US", "The flat", null, 40.0, 0.8, 1)
-    private val austin = Candidate("a", 30.27, -97.74, "Austin", "US", "Austin", null, 15.0, 0.3, 1)
+    private val boston = Candidate("b", 42.36, -71.06, "Boston", "US", "The flat", null, 40.0, 0.8, listOf("b"))
+    private val austin = Candidate("a", 30.27, -97.74, "Austin", "US", "Austin", null, 15.0, 0.3, listOf("a"))
 
     /** The screen is stateless; this stands in for the view model and stores the pick. */
     private class Actions : OnboardActions {
