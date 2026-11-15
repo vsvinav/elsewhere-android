@@ -6,20 +6,26 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import com.elsewhere.app.R
 import com.elsewhere.app.data.Viewport
 import com.elsewhere.app.ui.world.Poster
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMapOptions
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.CameraMoveStartedReason
 import com.google.maps.android.compose.CameraPositionState
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
@@ -34,7 +40,7 @@ import kotlinx.coroutines.launch
 
 /**
  * The map on a build that carries a Maps SDK key: Google's native map, the same basemap the web's Maps JS draws,
- * free of charge and styled by the user's Map ID. The SDK prints its own logo and attribution, so `copyright`
+ * free of charge, styled by the user's Map ID or else by the poster style in res/raw. The SDK prints its own logo and attribution, so `copyright`
  * goes unused here. Zooms are already Google's convention, so nothing converts.
  */
 class GoogleMapHost(private val scope: CoroutineScope, initial: Cam, private val state: CameraPositionState = CameraPositionState(initial.toGoogle())) : MapHost {
@@ -74,6 +80,8 @@ class GoogleMapHost(private val scope: CoroutineScope, initial: Cam, private val
     override fun Content(modifier: Modifier, basemap: Basemap, copyright: String?, overlays: @Composable () -> Unit) {
         framer.density = LocalDensity.current.density
         val mapId = (basemap as? Basemap.Sdk)?.mapId.orEmpty()
+        val context = LocalContext.current
+        val style = remember(context) { MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style) }
         LaunchedEffect(Unit) {
             // The same watch as MapLibre: the SDK blames a gesture per move, and a quiet spell after one ends it.
             val positions = snapshotFlow { state.position }
@@ -94,6 +102,7 @@ class GoogleMapHost(private val scope: CoroutineScope, initial: Cam, private val
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = state,
                     googleMapOptionsFactory = { GoogleMapOptions().also { if (mapId.isNotBlank()) it.mapId(mapId) } },
+                    properties = remember(mapId, style) { mapProperties(mapId, style) },
                     uiSettings = UI,
                     onMapClick = { _taps.tryEmit(Tap(it.latitude, it.longitude)) },
                 )
@@ -110,6 +119,15 @@ class GoogleMapHost(private val scope: CoroutineScope, initial: Cam, private val
         )
     }
 }
+
+/**
+ * The web's choice in style.ts: a Map ID means Cloud styling and the JSON must stay out of its way; without one the
+ * poster style paints the basemap. Buildings, indoor plans and traffic are never drawn, whichever way.
+ */
+internal fun mapProperties(mapId: String, style: MapStyleOptions?): MapProperties = MapProperties(
+    isBuildingEnabled = false, isIndoorEnabled = false, isTrafficEnabled = false, mapType = MapType.NORMAL,
+    mapStyleOptions = if (mapId.isBlank()) style else null,
+)
 
 internal fun Cam.toGoogle() = CameraPosition(LatLng(lat, lng), zoom, 0f, bearing)
 internal fun CameraPosition.toCam() = Cam(target.latitude, target.longitude, zoom, bearing)
