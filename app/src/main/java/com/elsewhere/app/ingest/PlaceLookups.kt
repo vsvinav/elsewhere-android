@@ -12,6 +12,8 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -103,7 +105,8 @@ class PlaceLookups(
     private var stopped = false
     private var paused = false
 
-    init { scope.launch { settings.collect { setKey(it.mapsKey, it.keyPlaces) } } }
+    // Only the key and Places' verdict on it matter here; a map-provider toggle must not clear a refusal.
+    init { scope.launch { settings.map { it.mapsKey to it.keyPlaces }.distinctUntilChanged().collect { (k, p) -> setKey(k, p) } } }
 
     private fun canSpend() = key.isNotBlank() && !stopped && keyPlaces
 
