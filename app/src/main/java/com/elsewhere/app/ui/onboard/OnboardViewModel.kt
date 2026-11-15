@@ -15,6 +15,9 @@ import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.data.Work
+import com.elsewhere.app.ingest.KeyChecker
+import com.elsewhere.app.ingest.KeyReport
+import com.elsewhere.app.ingest.Probe
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +33,9 @@ import javax.inject.Inject
 // Port of web/src/profile/Onboarding.tsx: the state machine behind the front door.
 
 enum class Step { Import, Key, Name, Home, Moves, Work, Units, Done }
+
+/** The key page's three faces: the field, the probes running, the verdict (or the no-key acknowledgement). */
+enum class KeyPhase { Entry, Checking, Result }
 
 /** The five questions, in order; `Import` and `Key` come before, `Done` after. */
 val QUESTIONS = listOf(Step.Name, Step.Home, Step.Moves, Step.Work, Step.Units)
@@ -61,6 +67,10 @@ data class OnboardState(
     val units: Units = Units.KM,
     val key: String = "",
     val mapId: String = "",
+    val keyPhase: KeyPhase = KeyPhase.Entry,
+    /** The last check's verdict; null on the Result face means the key was skipped. */
+    val keyReport: KeyReport? = null,
+    val limitedAck: Boolean = false,
 ) {
     val questionIndex: Int get() = QUESTIONS.indexOf(step)
 }
@@ -90,7 +100,7 @@ fun YearMonth.epoch(): Long = atDay(1).atStartOfDay(ZoneOffset.UTC).toEpochSecon
 fun monthOf(ts: Long): YearMonth = YearMonth.from(LocalDate.ofEpochDay(Math.floorDiv(ts, 86400L)))
 
 @HiltViewModel
-class OnboardViewModel @Inject constructor(private val store: RecordStore, private val maps: MapsSettings) : ViewModel(), OnboardActions {
+class OnboardViewModel @Inject constructor(private val store: RecordStore, private val maps: MapsSettings, private val checker: KeyChecker) : ViewModel(), OnboardActions, KeyActions {
     private val _state = MutableStateFlow(OnboardState())
     val state: StateFlow<OnboardState> = _state
     /** Open the door at `step`: the import for a new record, a question or the key when editing. Resets what was there. */
@@ -132,17 +142,48 @@ class OnboardViewModel @Inject constructor(private val store: RecordStore, priva
         return Candidate(s.placeId, s.lat, s.lng, s.city, s.cc, p?.name ?: p?.label ?: s.city ?: "Unnamed place", p?.address, s.score, s.share, s.members.size)
     }
 
-    fun saveKey(key: String, mapId: String) {
+    /** Save the key, then ask Google about it; the page shows the probes running, then the verdict. */
+    override fun saveKey(key: String, mapId: String) {
+        val k = key.trim()
+        if (k.isBlank()) return skipKey()
+        if (_state.value.keyPhase == KeyPhase.Checking) return
+        _state.update { it.copy(key = k, mapId = mapId.trim(), keyPhase = KeyPhase.Checking, keyReport = null, limitedAck = false) }
         viewModelScope.launch {
             val s = maps.settings.first()
             // A new key gets a fresh chance at Google; the rejection only ever applied to the old one.
-            val same = key.trim() == s.mapsKey
-            maps.saveSettings(s.copy(mapsKey = key.trim(), mapId = mapId.trim(), googleRejected = s.googleRejected && same, googleFailures = if (same) s.googleFailures else 0))
-            _state.update { it.copy(key = key.trim(), mapId = mapId.trim(), step = if (it.editing) Step.Done else Step.Name) }
+            val same = k == s.mapsKey
+            maps.saveSettings(s.copy(mapsKey = k, mapId = mapId.trim(), googleRejected = s.googleRejected && same, googleFailures = if (same) s.googleFailures else 0))
+            val report = checker.run(k)
+            val now = maps.settings.first()
+            maps.saveSettings(now.copy(keyPlaces = report.places == Probe.Ok, keyTiles = report.tiles == Probe.Ok, keyCheckedAt = System.currentTimeMillis()))
+            _state.update { it.copy(keyPhase = KeyPhase.Result, keyReport = report) }
         }
     }
 
-    fun skipKey() { _state.update { it.copy(step = if (it.editing) Step.Done else Step.Name) } }
+    /** Settings → Key's "Re-check": the probes again on the key already saved. */
+    override fun recheckKey() { saveKey(_state.value.key, _state.value.mapId) }
+
+    /** No key: the limited-mode acknowledgement, with nothing to report. */
+    override fun skipKey() { _state.update { it.copy(keyPhase = KeyPhase.Result, keyReport = null, limitedAck = false) } }
+
+    /** Back to the field from a verdict. */
+    override fun editKey() { _state.update { it.copy(keyPhase = KeyPhase.Entry) } }
+
+    override fun setLimitedAck(on: Boolean) { _state.update { it.copy(limitedAck = on) } }
+
+    private fun leaveKey() { _state.update { it.copy(keyPhase = KeyPhase.Entry, step = if (it.editing) Step.Done else Step.Name) } }
+
+    /** Both probes passed: on to the questions (or back to the app). */
+    override fun continueKey() { if (_state.value.keyReport?.accepted == true) leaveKey() }
+
+    /** The user ticked "I understand" on limited maps: remember it and move on. */
+    override fun acceptLimited() {
+        if (!_state.value.limitedAck) return
+        viewModelScope.launch {
+            maps.saveSettings(maps.settings.first().copy(limitedAccepted = true))
+            leaveKey()
+        }
+    }
 
     override fun setName(s: String) { _state.update { it.copy(name = s.take(24)) } }
 

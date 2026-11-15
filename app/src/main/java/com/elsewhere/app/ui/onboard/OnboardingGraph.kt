@@ -46,7 +46,7 @@ fun OnboardingGraph(startStep: Step, onClose: (() -> Unit)?, vm: OnboardViewMode
             Step.Import -> ImportScreen(state.importing, state.importError, state.report) { uri, name ->
                 vm.import({ app.contentResolver.openInputStream(uri) ?: throw IllegalStateException("Couldn't open that file") }, name)
             }
-            Step.Key -> KeyScreen(state.key, state.mapId, onSave = vm::saveKey, onSkip = vm::skipKey, onCancel = onClose)
+            Step.Key -> KeyScreen(state, vm, onCancel = onClose)
             Step.Done -> Unit
             else -> QuestionsScreen(state, vm, onCancel = onClose)
         }

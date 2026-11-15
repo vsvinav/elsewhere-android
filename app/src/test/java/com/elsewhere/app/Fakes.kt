@@ -10,6 +10,9 @@ import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordSource
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Settings
+import com.elsewhere.app.ingest.KeyChecker
+import com.elsewhere.app.ingest.KeyReport
+import com.elsewhere.app.ingest.Probe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.InputStream
@@ -36,6 +39,11 @@ object Fakes {
         override val settings: Flow<Settings> = cur
         override val counters: Flow<Counters> = MutableStateFlow(Counters())
         override suspend fun saveSettings(s: Settings) { cur.value = s }
+    }
+
+    class Checker(var report: KeyReport = KeyReport(Probe.Ok, Probe.Ok)) : KeyChecker {
+        val asked = ArrayList<String>()
+        override suspend fun run(key: String): KeyReport { asked += key; return report }
     }
 
     class Source(initial: Record? = null) : RecordSource {

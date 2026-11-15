@@ -19,6 +19,8 @@ object Poster {
     val Red = Color(0xFFD63C20)
     val Red2 = Color(0xFFB02E16)
     val Mustard = Color(0xFFE9B531)
+    /** The one green: a customs "accepted" stamp. */
+    val Green = Color(0xFF2F6B45)
 }
 
 private val Scheme = lightColorScheme(

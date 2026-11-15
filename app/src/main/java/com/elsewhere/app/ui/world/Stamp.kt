@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 
 /** A red rubber stamp, slammed onto the sheet on first composition. */
 @Composable
-fun Stamp(text: String, modifier: Modifier = Modifier, color: Color = Poster.Red, animate: Boolean = true) {
+fun Stamp(text: String, modifier: Modifier = Modifier, color: Color = Poster.Red, animate: Boolean = LocalMotion.current) {
     val scale = remember { Animatable(if (animate) 1.6f else 1f) }
     val alpha = remember { Animatable(if (animate) 0f else 1f) }
     LaunchedEffect(Unit) {

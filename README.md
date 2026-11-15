@@ -72,9 +72,11 @@ You get one `Timeline.json`. Google moved Timeline onto the phone in 2024; Takeo
 
 Without a key the app draws OpenStreetMap tiles and skips place names/photos. With one:
 
-1. [console.cloud.google.com → Maps APIs](https://console.cloud.google.com/google/maps-apis), enable **Maps SDK for Android** and **Places API (New)**.
-2. Create a key; restrict it to Android apps with package `com.elsewhere.app` and your signing SHA-1 (`./gradlew signingReport`).
-3. Paste it in the app at the front door, or later from the ▾ menu.
+1. [console.cloud.google.com → Maps APIs](https://console.cloud.google.com/google/maps-apis), enable **Places API (New)** and **Map Tiles API**.
+2. Create a key. Under *Application restrictions* choose **None** — a key restricted to websites (HTTP referrers) or to Android apps is refused, because the app calls these APIs directly over HTTPS, not through the Maps SDK. If you want to lock it down, use *API restrictions* and allow just those two APIs.
+3. Paste it in the app at the front door, or later from the ▾ menu → Maps key.
+
+The app checks the key the moment you save it, with two free requests, and shows Google's exact answer if either is refused, along with what to change. A key that fails (or no key) means *limited maps*: OpenStreetMap tiles, no place names or photos. You are asked to acknowledge that before going on, and can re-check the key from the menu any time.
 
 The ▾ menu shows a running count of paid calls and a rough dollar figure. Names and photos are fetched once for your 100 busiest stops and cached forever.
 

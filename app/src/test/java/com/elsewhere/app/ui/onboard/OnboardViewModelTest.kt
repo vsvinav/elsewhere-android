@@ -17,6 +17,9 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import com.elsewhere.app.ingest.KeyReport
+import com.elsewhere.app.ingest.Probe
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
@@ -44,9 +47,11 @@ class OnboardViewModelTest {
 
     private fun run() = dispatcher.scheduler.runCurrent()
 
+    private val checker = Fakes.Checker()
+
     private fun imported(): Triple<OnboardViewModel, Fakes.Store, Fakes.Maps> {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
-        val vm = OnboardViewModel(store, maps)
+        val vm = OnboardViewModel(store, maps, checker)
         vm.start(Step.Import); run()
         vm.import({ ByteArrayInputStream("{}".toByteArray()) }, "Timeline.json"); run()
         return Triple(vm, store, maps)
@@ -60,16 +65,77 @@ class OnboardViewModelTest {
         assertNull(s.importing)
         assertEquals(listOf("The flat", "Austin"), s.sleep.map { it.label })
         assertEquals(Sure.LIKELY, s.sleep[0].sure)
-        vm.skipKey(); assertEquals(Step.Name, vm.state.value.step)
+        vm.skipKey(); vm.setLimitedAck(true); vm.acceptLimited(); run(); assertEquals(Step.Name, vm.state.value.step)
         vm.next(); assertEquals(Step.Home, vm.state.value.step)
         vm.back(); assertEquals(Step.Name, vm.state.value.step)
     }
 
-    @Test fun `a saved key is remembered and skips straight to the name`() = runTest(dispatcher) {
+    @Test fun `a saved key is checked, remembered and continues to the name`() = runTest(dispatcher) {
         val (vm, _, maps) = imported()
-        vm.saveKey(" AIza-key ", ""); run()
+        assertEquals(KeyPhase.Entry, vm.state.value.keyPhase)
+        vm.saveKey(" AIza-key ", "")
+        assertEquals(KeyPhase.Checking, vm.state.value.keyPhase)
+        run()
         assertEquals("AIza-key", maps.cur.value.mapsKey)
+        assertEquals(listOf("AIza-key"), checker.asked)
+        assertEquals(KeyPhase.Result, vm.state.value.keyPhase)
+        assertEquals(KeyReport(Probe.Ok, Probe.Ok), vm.state.value.keyReport)
+        assertEquals(Step.Key, vm.state.value.step)
+        assertEquals(true, maps.cur.value.keyPlaces); assertEquals(true, maps.cur.value.keyTiles)
+        assertTrue(maps.cur.value.keyCheckedAt > 0)
+        assertEquals(false, maps.cur.value.limitedAccepted)
+        vm.continueKey()
         assertEquals(Step.Name, vm.state.value.step)
+    }
+
+    @Test fun `a refused key records what failed and needs the limited-mode acknowledgement`() = runTest(dispatcher) {
+        checker.report = KeyReport(Probe.Failed("Requests from referer <empty> are blocked.", "PERMISSION_DENIED", "hint"), Probe.Ok)
+        val (vm, _, maps) = imported()
+        vm.saveKey("AIza-web", ""); run()
+        assertEquals(KeyPhase.Result, vm.state.value.keyPhase)
+        assertEquals(false, maps.cur.value.keyPlaces); assertEquals(true, maps.cur.value.keyTiles)
+        assertEquals(false, vm.state.value.limitedAck)
+        vm.acceptLimited(); run() // nothing happens until the box is ticked
+        assertEquals(Step.Key, vm.state.value.step)
+        vm.setLimitedAck(true); vm.acceptLimited(); run()
+        assertEquals(Step.Name, vm.state.value.step)
+        assertEquals(true, maps.cur.value.limitedAccepted)
+    }
+
+    @Test fun `try again re-runs the probes with the key in the field`() = runTest(dispatcher) {
+        checker.report = KeyReport(Probe.Failed("API key not valid.", "INVALID_ARGUMENT", null), Probe.Failed("API key not valid.", "INVALID_ARGUMENT", null))
+        val (vm, _, maps) = imported()
+        vm.saveKey("AIzb", ""); run()
+        assertEquals(false, vm.state.value.keyReport!!.accepted)
+        checker.report = KeyReport(Probe.Ok, Probe.Ok)
+        vm.saveKey("AIza", ""); run()
+        assertEquals(listOf("AIzb", "AIza"), checker.asked)
+        assertEquals(true, vm.state.value.keyReport!!.accepted)
+        assertEquals("AIza", maps.cur.value.mapsKey)
+    }
+
+    @Test fun `skipping the key lands on the acknowledgement with no report`() = runTest(dispatcher) {
+        val (vm, _, maps) = imported()
+        vm.skipKey()
+        assertEquals(KeyPhase.Result, vm.state.value.keyPhase)
+        assertNull(vm.state.value.keyReport)
+        assertEquals(Step.Key, vm.state.value.step)
+        vm.setLimitedAck(true); vm.acceptLimited(); run()
+        assertEquals(Step.Name, vm.state.value.step)
+        assertEquals(true, maps.cur.value.limitedAccepted)
+    }
+
+    @Test fun `editing the key from settings re-checks and closes the door`() = runTest(dispatcher) {
+        val store = Fakes.Store(record()); val maps = Fakes.Maps()
+        maps.cur.value = Settings(mapsKey = "old", keyPlaces = true, keyTiles = true, keyCheckedAt = 5)
+        val vm = OnboardViewModel(store, maps, checker)
+        vm.start(Step.Key); run()
+        assertEquals(KeyPhase.Entry, vm.state.value.keyPhase)
+        vm.recheckKey(); run()
+        assertEquals(listOf("old"), checker.asked)
+        assertEquals(KeyPhase.Result, vm.state.value.keyPhase)
+        vm.continueKey()
+        assertEquals(Step.Done, vm.state.value.step)
     }
 
     @Test fun `a new key clears Google's refusal, the same key keeps it`() = runTest(dispatcher) {
@@ -85,7 +151,7 @@ class OnboardViewModelTest {
 
     @Test fun `picking a home and printing saves one open-ended home from the record start`() = runTest(dispatcher) {
         val (vm, store, _) = imported()
-        vm.skipKey(); vm.next()
+        vm.skipKey(); vm.setLimitedAck(true); vm.acceptLimited(); run(); vm.next()
         vm.pickHome(vm.state.value.sleep[0])
         assertEquals(Units.MI, vm.state.value.units)
         vm.next(); vm.next(); vm.skip(); vm.setUnits(Units.KM)
@@ -98,7 +164,7 @@ class OnboardViewModelTest {
 
     @Test fun `adding a move closes the earlier home the month the new one starts`() = runTest(dispatcher) {
         val (vm, store, _) = imported()
-        vm.skipKey(); vm.next()
+        vm.skipKey(); vm.setLimitedAck(true); vm.acceptLimited(); run(); vm.next()
         val (boston, austin) = vm.state.value.sleep
         vm.pickHome(boston); vm.next()
         assertEquals(Step.Moves, vm.state.value.step)
@@ -113,7 +179,7 @@ class OnboardViewModelTest {
 
     @Test fun `a home with an until can be picked again for a later stint`() = runTest(dispatcher) {
         val (vm, _, _) = imported()
-        vm.skipKey(); vm.next()
+        vm.skipKey(); vm.setLimitedAck(true); vm.acceptLimited(); run(); vm.next()
         val (boston, austin) = vm.state.value.sleep
         vm.pickHome(boston); vm.next()
         // The nights shift to Austin in March: that is where the stint starts, and Boston closes there.

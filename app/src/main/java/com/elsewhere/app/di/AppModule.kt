@@ -22,6 +22,9 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import okhttp3.OkHttpClient
+import com.elsewhere.app.ingest.KeyCheck
+import com.elsewhere.app.ingest.KeyChecker
 import javax.inject.Singleton
 
 @Module
@@ -34,6 +37,9 @@ object AppModule {
         PreferenceDataStoreFactory.create { ctx.preferencesDataStoreFile("settings") }
 
     @Provides @Singleton fun appScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    @Provides @Singleton fun http(): OkHttpClient = OkHttpClient()
+    @Provides fun keyChecker(check: KeyCheck): KeyChecker = check
 
     @Provides fun recordSource(repo: RecordRepository): RecordSource = repo
     @Provides fun recordStore(repo: RecordRepository): RecordStore = repo
