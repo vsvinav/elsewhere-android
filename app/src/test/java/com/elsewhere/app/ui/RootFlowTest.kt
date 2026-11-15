@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import com.elsewhere.app.Fakes
 import com.elsewhere.app.Fx
 import com.elsewhere.app.data.Visit
+import com.elsewhere.app.ingest.KeyVerifier
 import com.elsewhere.app.ui.onboard.OnboardViewModel
 import com.elsewhere.app.ui.onboard.OnboardingGraph
 import com.elsewhere.app.ui.shell.RangeStore
@@ -43,9 +44,9 @@ class RootFlowTest {
     @Test fun `through the door, into the app, and back in through Change answers`() {
         val store = Fakes.Store(record); val maps = Fakes.Maps()
         // One onboarding view model for the whole activity, as Hilt scopes it.
-        val onboard = OnboardViewModel(store, maps, Fakes.Checker(), Fakes.Namer(), Fakes.Geo())
+        val onboard = OnboardViewModel(store, maps, KeyVerifier(maps, Fakes.Checker()), Fakes.Namer(), Fakes.Geo())
         rule.setContent {
-            val root = remember { RootViewModel(store, Fakes.Land) }
+            val root = remember { RootViewModel(store, Fakes.Land, maps) }
             val shell = remember { ShellViewModel(store, maps, Fakes.lookups(maps, CoroutineScope(Dispatchers.Main))) }
             val range = remember { RangeViewModel(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main))) }
             ElsewhereTheme {

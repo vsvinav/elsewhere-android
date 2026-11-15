@@ -18,12 +18,11 @@ import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.data.Work
 import com.elsewhere.app.ingest.Geocoder
-import com.elsewhere.app.ingest.KeyChecker
+import com.elsewhere.app.ingest.KeyVerifier
 import com.elsewhere.app.ingest.PlaceNamer
 import com.elsewhere.app.ingest.Progress
 import com.elsewhere.app.ingest.properName
 import com.elsewhere.app.ingest.KeyReport
-import com.elsewhere.app.ingest.Probe
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -112,7 +111,7 @@ fun monthOf(ts: Long): YearMonth = YearMonth.from(LocalDate.ofEpochDay(Math.floo
 
 @HiltViewModel
 class OnboardViewModel @Inject constructor(
-    private val store: RecordStore, private val maps: MapsSettings, private val checker: KeyChecker,
+    private val store: RecordStore, private val maps: MapsSettings, private val verifier: KeyVerifier,
     private val namer: PlaceNamer, private val geocoder: Geocoder, readyState: ReadyState = ReadyState(),
 ) : ViewModel(), OnboardActions, KeyActions {
     val ready: StateFlow<Ready?> = readyState.ready
@@ -190,13 +189,7 @@ class OnboardViewModel @Inject constructor(
         if (_state.value.keyPhase == KeyPhase.Checking) return
         _state.update { it.copy(key = k, mapId = mapId.trim(), keyPhase = KeyPhase.Checking, keyReport = null, limitedAck = false) }
         viewModelScope.launch {
-            val cur = maps.settings.first()
-            // A new key is unproven until its probes answer: nothing paid may run on it in the meantime.
-            val fresh = if (k == cur.mapsKey) cur else cur.copy(keyPlaces = false, keyTiles = false, keyCheckedAt = 0, limitedAccepted = false)
-            maps.saveSettings(fresh.copy(mapsKey = k, mapId = mapId.trim()))
-            val report = checker.run(k)
-            val now = maps.settings.first()
-            maps.saveSettings(now.copy(keyPlaces = report.places == Probe.Ok, keyTiles = report.tiles == Probe.Ok, keyCheckedAt = System.currentTimeMillis()))
+            val report = verifier.verify(k, mapId.trim())
             _state.update { it.copy(keyPhase = KeyPhase.Result, keyReport = report) }
         }
     }
@@ -221,7 +214,7 @@ class OnboardViewModel @Inject constructor(
     override fun acceptLimited() {
         if (!_state.value.limitedAck) return
         viewModelScope.launch {
-            maps.saveSettings(maps.settings.first().copy(limitedAccepted = true))
+            verifier.acceptLimited()
             leaveKey()
         }
     }
