@@ -37,6 +37,8 @@ data class TourUi(
     val name: String, val units: Units, val facts: HomeFacts, val tour: Tour, val trail: TrailLayout,
     val nights: NightsUi?, val actPlace: Place?, val actName: String?, val actSub: String?,
     val hasWork: Boolean, val homeCity: String?, val record: Record, val named: Int, val photos: Int,
+    /** Days with at least one stay the phone recorded itself, as opposed to the export. */
+    val deviceDays: Int = 0,
 ) {
     val yearSpan: String get() = tour.years.let { (a, b) -> if (a == b) "$a" else "$a–$b" }
 }
@@ -56,8 +58,13 @@ fun tourUi(data: Record, raw: Record, profile: Profile?, land: FeatureCollection
         actSub = act?.let { listOfNotNull(actPlace?.address, it.country).joinToString(" · ").ifEmpty { null } },
         hasWork = !profile?.works.isNullOrEmpty(), homeCity = profile?.homes?.lastOrNull()?.city,
         record = data, named = data.places.values.count { it.name != null }, photos = data.places.values.count { it.photo != null },
+        deviceDays = deviceDays(data),
     )
 }
+
+/** Device stays carry `dev:` place ids; count the distinct local days they fall on. */
+fun deviceDays(r: Record): Int = r.visits.asSequence().filter { it.placeId.startsWith("dev:") }
+    .map { Math.floorDiv(it.start + it.tz * 60L, 86400L) }.distinct().count()
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
