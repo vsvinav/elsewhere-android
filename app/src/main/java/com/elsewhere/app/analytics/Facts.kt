@@ -6,6 +6,7 @@ import com.elsewhere.app.data.Units
 import com.elsewhere.app.data.Visit
 import com.elsewhere.app.ingest.jsRound
 import com.elsewhere.app.ui.nav.Door
+import com.elsewhere.app.ui.nav.withLabel
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -51,13 +52,15 @@ private fun f1(x: Double): String = toFixed(x, 1)
 private fun long(d: String): String = LocalDate.parse(d).format(LONG_DATE)
 private fun longTs(ts: Long): String = long(dayKey(ts))
 private const val DAY = 86_400L
-private fun dayStart(ts: Long): Long = Math.floorDiv(ts, DAY) * DAY
 private fun dayStart(d: String): Long = LocalDate.parse(d).toEpochDay() * DAY
-/** Doors: the whole window, one UTC day, the days between two date keys, or the places behind a figure. */
-private fun whole(c: Ctx, label: String) = Door.Range(c.range.first, c.range.last, label)
-private fun day(ts: Long, label: String) = Door.Range(dayStart(ts), dayStart(ts) + DAY - 1, label)
-private fun days(from: String, to: String, label: String) = Door.Range(dayStart(from), dayStart(to) + DAY - 1, label)
-private fun places(ids: Collection<String>, label: String): Door? = if (ids.isEmpty()) null else if (ids.size == 1) Door.Place(ids.first(), label = label) else Door.Places(ids.toList(), label)
+/**
+ * Doors: the whole window, the local day around an instant, the days between two date keys, or the places behind
+ * a figure. Each is labelled with the fact's headline once the fact is made, so the labels here are blank.
+ */
+private fun whole(c: Ctx) = Door.Range(c.range.first, c.range.last, "")
+private fun localDay(ts: Long, tz: Int): Door.Range { val off = tz * 60L; val d = Math.floorDiv(ts + off, DAY) * DAY - off; return Door.Range(d, d + DAY - 1, "") }
+private fun days(from: String, to: String) = Door.Range(dayStart(from), dayStart(to) + DAY - 1, "")
+private fun pins(ids: Collection<String>) = Door.Places(ids.toList(), "")
 private fun localHour(ts: Long, tz: Int): Int = Instant.ofEpochSecond(ts + tz * 60L).atOffset(ZoneOffset.UTC).hour
 private fun localDow(ts: Long, tz: Int): Int = Instant.ofEpochSecond(ts + tz * 60L).atOffset(ZoneOffset.UTC).dayOfWeek.value - 1
 private fun pct(a: Double, b: Double): Int = jsRound((100 * a) / max(1.0, b)).toInt()
@@ -105,7 +108,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val head = if (laps >= 1) "${f1(laps)}× around the Earth" else "${jsRound(laps * 100).toInt()}% of the way around the Earth"
             Fact("laps", Kind.SCALE, headline = head,
                 detail = "${c.dist(km)} on record, over ground, rail, water and air. The equator is ${c.dist(EARTH_KM)}.",
-                figure = Figure.Scale(c.cv(km), c.cv(EARTH_KM), "Equator", c.unit), door = whole(c, head))
+                figure = Figure.Scale(c.cv(km), c.cv(EARTH_KM), "Equator", c.unit), door = whole(c))
         }
     },
     // Walked equals
@@ -117,7 +120,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val how = if (ratio > 1.15) "${f1(ratio)}× " else if (ratio < 0.85) "${jsRound(ratio * 100).toInt()}% of " else ""
             Fact("walked", Kind.SCALE, headline = "Walked $how$name",
                 detail = "${c.dist(km)} on foot. ${name[0].uppercaseChar()}${name.substring(1)} is about ${c.dist(ref)}.",
-                figure = Figure.Scale(c.cv(km), c.cv(ref), name.replaceFirst(Regex("^the "), ""), c.unit), door = whole(c, "Walked $how$name"))
+                figure = Figure.Scale(c.cv(km), c.cv(ref), name.replaceFirst(Regex("^the "), ""), c.unit), door = whole(c))
         }
     },
     // Longest streak home
@@ -126,7 +129,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
         if (r == null || r.n < 14) null else Fact("streak-home", Kind.RECORD,
             headline = "${r.n} nights in your own bed, straight",
             detail = "${long(r.from)} to ${long(r.to)}. Your longest stretch without a night away.",
-            figure = Figure.Beds(c.nights.filter { it.date >= r.from && it.date <= r.to }), door = days(r.from, r.to, "${r.n} nights in your own bed"))
+            figure = Figure.Beds(c.nights.filter { it.date >= r.from && it.date <= r.to }), door = days(r.from, r.to))
     },
     // Longest streak away
     { c ->
@@ -136,7 +139,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val list = if (cities.isEmpty()) "" else " · ${cities.take(4).joinToString(", ")}${if (cities.size > 4) " and ${cities.size - 4} more" else ""}"
             Fact("streak-away", Kind.RECORD, headline = "${r.n} nights away without a night home",
                 detail = "${long(r.from)} to ${long(r.to)}$list.",
-                figure = Figure.Beds(c.nights.filter { it.date >= r.from && it.date <= r.to }), door = days(r.from, r.to, "${r.n} nights away"))
+                figure = Figure.Beds(c.nights.filter { it.date >= r.from && it.date <= r.to }), door = days(r.from, r.to))
         }
     },
     // Furthest from home
@@ -149,32 +152,32 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val where = p?.name ?: p?.city ?: "an unnamed place"
             Fact("furthest", Kind.RECORD, headline = "${c.dist(bestKm)} from home",
                 detail = "$where${if (t(p?.city) && t(p?.name)) ", ${p!!.city}" else ""}${if (t(p?.countryCode)) " (${p!!.countryCode})" else ""}, ${longTs(best.start)}. The furthest your record gets.",
-                figure = Figure.Globe(best.lat, best.lng, home.lat, home.lng), door = Door.Place(best.placeId, best.start, "${c.dist(bestKm)} from home"))
+                figure = Figure.Globe(best.lat, best.lng, home.lat, home.lng), door = Door.Place(best.placeId, best.start, ""))
         }
     },
     // Fastest ground leg
     { c ->
-        var bestKmh = 0.0; var bestMode = ""; var bestTs = 0L
+        var bestKmh = 0.0; var bestMode = ""; var bestTs = 0L; var bestEnd = 0L
         for (a in c.d.activities) {
             val lens = lensOf(a.mode)
             // Timeline sometimes labels a flight "walking"; only legs plausible for their mode count.
             if (lens == Lens.FLY || lens == Lens.FOOT || a.end - a.start < 20 * 60 || a.m < 20_000) continue
             val kmh = (a.m / 1000) / ((a.end - a.start) / 3600.0)
-            if (kmh > bestKmh && kmh < (if (lens == Lens.DRIVE) 180 else 350)) { bestKmh = kmh; bestMode = a.mode; bestTs = a.start }
+            if (kmh > bestKmh && kmh < (if (lens == Lens.DRIVE) 180 else 350)) { bestKmh = kmh; bestMode = a.mode; bestTs = a.start; bestEnd = a.end }
         }
         if (bestKmh < 60) null else {
             val v = if (c.u == Units.MI) bestKmh * MI else bestKmh
             val head = "${n0(v)} ${if (c.u == Units.MI) "mph" else "km/h"} door to door"
             Fact("fastest", Kind.RECORD, headline = head,
                 detail = "Your quickest leg over land, ${longTs(bestTs)}, by ${bestMode.replaceFirst(Regex("^IN_"), "").replace('_', ' ').lowercase()}. Averaged over the whole leg, stops included.",
-                door = day(bestTs, head))
+                door = Door.Range(bestTs, bestEnd, ""))
         }
     },
     // Earliest departure from home
     { c ->
         val d = c.d
         val hours = IntArray(24)
-        var eh = -1; var em = 0; var ets = 0L
+        var eh = -1; var em = 0; var ets = 0L; var etz = 0
         for (i in 1 until d.visits.size) {
             val prev = d.visits[i - 1]; val v = d.visits[i]
             if (!isHome(d.places[prev.placeId]) || isHome(d.places[v.placeId]) || prev.lvl != 0 || v.lvl != 0) continue
@@ -182,13 +185,13 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val h = loc.hour; val m = loc.minute
             hours[h]++
             val score = if (h < 12) h * 60 + m else 24 * 60
-            if (score >= 3 * 60 && (eh < 0 || score < eh * 60 + em)) { eh = h; em = m; ets = prev.end }
+            if (score >= 3 * 60 && (eh < 0 || score < eh * 60 + em)) { eh = h; em = m; ets = prev.end; etz = prev.tz }
         }
         if (eh < 0 || hours.sum() < 20) null else {
             val label = "${pad2(eh)}:${pad2(em)}"
             Fact("earliest", Kind.RECORD, headline = "Out the door at $label",
                 detail = "${longTs(ets)}, your earliest start. The clock points at it; the faint bars are the hours you usually leave home.",
-                figure = Figure.Dial(hours.toList(), eh + em / 60.0, null, label), door = day(ets, "Out the door at $label"))
+                figure = Figure.Dial(hours.toList(), eh + em / 60.0, null, label), door = localDay(ets, etz))
         }
     },
     // Night owl
@@ -204,38 +207,39 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val head = if (share >= 15) "Night owl · $share% of legs after 10 pm" else "$share% of your legs start after 10 pm"
             Fact("owl", Kind.HABIT, headline = head,
                 detail = "${n0(late)} of ${n0(n)} journeys began between 22:00 and 04:00 local time. The hand points at your busiest hour.",
-                figure = Figure.Dial(hours.toList(), peak + 0.5, 22 to 28, "${pad2(peak)}:00"), door = whole(c, head))
+                figure = Figure.Dial(hours.toList(), peak + 0.5, 22 to 28, "${pad2(peak)}:00"), door = whole(c))
         }
     },
     // Weekend explorer
     { c ->
         val cells = IntArray(7 * 24)
         var firsts = 0; var weekend = 0
+        val found = LinkedHashSet<String>()
         for (v in nonRoutine(c.d)) {
             if (!c.isFirst(v)) continue
             firsts++
             val dow = localDow(v.start, v.tz)
             cells[dow * 24 + localHour(v.start, v.tz)]++
-            if (dow >= 5) weekend++
+            if (dow >= 5) { weekend++; found.add(v.placeId) }
         }
         if (firsts < 20) null else {
             val share = pct(weekend, firsts)
             Fact("weekend", Kind.HABIT, headline = "$share% of new places found on a weekend",
                 detail = "${n0(firsts)} first visits; ${n0(weekend)} were on a Saturday or Sunday. Two days of seven is ${jsRound(200 / 7.0).toInt()}%.",
-                figure = Figure.Week(cells.toList()), door = whole(c, "$share% of new places found on a weekend"))
+                figure = Figure.Week(cells.toList()), door = pins(found))
         }
     },
     // Cities per 1,000 km
     { c ->
         val d = c.d
         val km = kmOf(d) { true }
-        val cities = HashSet<String>()
-        for (v in sleeps(d)) { val p = d.places[v.placeId]; val city = p?.city; if (t(city) && !isHome(p)) cities.add(city!!) }
+        val cities = HashSet<String>(); val beds = LinkedHashSet<String>()
+        for (v in sleeps(d)) { val p = d.places[v.placeId]; val city = p?.city; if (t(city) && !isHome(p)) { cities.add(city!!); beds.add(v.placeId) } }
         if (km < 2_000 || cities.size < 2) null else {
             val per = (1000 * cities.size) / km
             Fact("density", Kind.SCALE, headline = "A new bed every ${c.dist(km / cities.size)}",
                 detail = "${cities.size} cities slept in over ${c.dist(km)} of travel: ${f1(per)} cities per 1,000 km.",
-                door = whole(c, "A new bed every ${c.dist(km / cities.size)}"))
+                door = pins(beds))
         }
     },
     // Passed through, never slept
@@ -253,13 +257,13 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
         if (top == null || top.value < 5) null else Fact("passed", Kind.HABIT,
             headline = "${top.key}: ${top.value} visits, never a night",
             detail = "The city you keep passing through without ever sleeping there.",
-            door = places(ids[top.key].orEmpty(), "${top.key}: ${top.value} visits"))
+            door = pins(ids[top.key].orEmpty()))
     },
     // New Year's Eve
     { c ->
         val d = c.d
         val out = ArrayList<String>()
-        val ids = LinkedHashSet<String>()
+        val ids = ArrayList<String>()
         val y0 = yearOf(c.range.first); val y1 = yearOf(c.range.last)
         for (y in y0 + 1..y1) {
             val ts = LocalDate.of(y, 1, 1).atStartOfDay(ZoneOffset.UTC).toEpochSecond()
@@ -271,7 +275,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
         }
         if (out.isEmpty()) null else {
             val head = if (out.size == 1) "Midnight on New Year's, ${out[0].take(4)}" else "${out.size} New Year's Eves on record"
-            Fact("nye", Kind.HABIT, headline = head, detail = out.joinToString(" · ") + ".", door = places(ids, head))
+            Fact("nye", Kind.HABIT, headline = head, detail = out.joinToString(" · ") + ".", door = pins(ids))
         }
     },
     // Time in motion
@@ -283,7 +287,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val head = "${if (days >= 10) n0(days) else f1(days)} whole days in motion"
             Fact("motion", Kind.SCALE, headline = head,
                 detail = "${n0(h)} hours in a vehicle or on foot between places: ${pct(h, (d.meta.range.last - d.meta.range.first) / 3600.0)}% of the record.",
-                door = whole(c, head))
+                door = whole(c))
         }
     },
     // Bars against gyms
@@ -302,7 +306,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
                 gym > bars -> "More gym than bar. Who even are you?"
                 else -> "${hrs(bars)} hours in bars, ${hrs(gym)} at the gym. Your liver is the one lifting."
             }
-            Fact("bars", Kind.HABIT, head, detail, Figure.Scale(bars, gym, "Gym", "h", "Bars"), card = true, quip = quip, door = places(barPs.keys + gymPs.keys, head))
+            Fact("bars", Kind.HABIT, head, detail, Figure.Scale(bars, gym, "Gym", "h", "Bars"), card = true, quip = quip, door = pins(barPs.keys + gymPs.keys))
         }
     },
     // Coffee runs
@@ -311,27 +315,27 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
         if (n < 8) null else Fact("coffee", Kind.HABIT, card = true,
             headline = "${n0(n)} coffee runs · one every ${everyDays(n, c.range)} days",
             detail = "${hrs(hoursOf(ps, 3.0))} hours in ${ps.size} cafés, waiting for, drinking, or pretending to work over coffee.",
-            quip = "${n0(n)} coffee runs. That's not a habit, that's a personality.", door = places(ps.keys, "${n0(n)} coffee runs"))
+            quip = "${n0(n)} coffee runs. That's not a habit, that's a personality.", door = pins(ps.keys))
     },
     // Airports
     { c ->
         val ps = typed(c.d, AIRPORT); val h = hoursOf(ps, 8.0)
         if (h < 6) null else Fact("airports", Kind.SCALE, headline = "${hrs(h)} hours inside airports",
             detail = "${f1(h / 8)} full working days of boarding groups, gate changes and ${if (h > 40) "overpriced" else "surprisingly fine"} sandwiches.",
-            figure = Figure.Scale(h, 40.0, "A working week", "h"), door = places(ps.keys, "${hrs(h)} hours inside airports"))
+            figure = Figure.Scale(h, 40.0, "A working week", "h"), door = pins(ps.keys))
     },
     // Grocery runs
     { c ->
         val ps = typed(c.d, GROCERY); val n = visitsOf(ps)
         if (n < 6) null else Fact("grocery", Kind.HABIT, card = true, headline = "${n0(n)} grocery runs",
             detail = "One every ${everyDays(n, c.range)} days, ${hrs(hoursOf(ps, 2.0))} hours in the aisles. Nobody has ever gone in for just milk.",
-            quip = "${n0(n)} grocery runs, zero of them 'just for milk'.", door = places(ps.keys, "${n0(n)} grocery runs"))
+            quip = "${n0(n)} grocery runs, zero of them 'just for milk'.", door = pins(ps.keys))
     },
     // Restaurant loyalty
     { c ->
         val e = typed(c.d, FOOD).entries.filter { t(it.value.name) && it.value.nVisits >= 4 }.maxByOrNull { it.value.nVisits }
         val p = e?.value
-        if (p == null) null else Fact("regular", Kind.HABIT, card = true, headline = "${p.name}, ${p.nVisits} times", door = Door.Place(e.key, label = "${p.name}, ${p.nVisits} times"),
+        if (p == null) null else Fact("regular", Kind.HABIT, card = true, headline = "${p.name}, ${p.nVisits} times", door = Door.Place(e.key, label = ""),
             detail = "Your most loyal restaurant${if (t(p.city)) ", in ${p.city}" else ""}. ${hrs(p.totalHours)} hours at the table. There are other menus; you have chosen not to read them.",
             quip = "${p.name} has seen you ${p.nVisits} times. They know your order.")
     },
@@ -344,7 +348,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val h = (best.end - best.start) / 3600.0
             Fact("hermit", Kind.RECORD, headline = "${hrs(h)} hours without leaving the house",
                 detail = "${longTs(best.start)} to ${longTs(best.end)}. ${if (h >= 72) "The outside world managed without you." else "A proper weekend in."}",
-                door = Door.Range(best.start, best.end, "${hrs(h)} hours without leaving the house"))
+                door = Door.Range(best.start, best.end, ""))
         }
     },
     // Longest single stay away
@@ -357,7 +361,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val head = "${hrs(h)} hours straight at ${p?.name ?: p?.city ?: "one place"}"
             Fact("longest-stay", Kind.RECORD, headline = head,
                 detail = "From ${longTs(best.start)}. Your longest unbroken stay anywhere that wasn't home or work${if (t(p?.name) && t(p?.city)) ", in ${p!!.city}" else ""}.",
-                door = Door.Place(best.placeId, best.start, head))
+                door = Door.Place(best.placeId, best.start, ""))
         }
     },
     // Days since anywhere new
@@ -371,7 +375,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
                 val id = d.visits.firstOrNull { it.start == last }?.placeId
                 val p = d.places[id ?: ""]
                 Fact("since-new", Kind.HABIT, card = true, headline = "${n0(days)} days since you went anywhere new",
-                    door = id?.let { Door.Place(it, last, "${n0(days)} days since anywhere new") },
+                    door = if (id != null) Door.Place(id, last, "") else whole(c),
                     detail = "Last first visit: ${p?.name ?: p?.city ?: "an unnamed place"}, ${longTs(last)}. ${if (days > 30) "The map is not going to explore itself." else "Not bad. Keep it up."}",
                     quip = "${n0(days)} days since anywhere new. The map is judging you.")
             }
@@ -387,7 +391,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val lo = zones.min(); val hi = zones.max()
             Fact("zones", Kind.EXPLORED, headline = "${zones.size} time zones slept in",
                 detail = "Your body clock has run from ${fmt(lo)} to ${fmt(hi)}, a ${f1((hi - lo) / 60.0)}-hour spread. Counting only zones you spent a full day in.",
-                figure = Figure.Ring((100.0 * zones.size) / 24, "of 24"), door = whole(c, "${zones.size} time zones slept in"))
+                figure = Figure.Ring((100.0 * zones.size) / 24, "of 24"), door = whole(c))
         }
     },
     // Hours behind the wheel
@@ -397,7 +401,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val times = h / AUDIOBOOK_H
             Fact("wheel", Kind.SCALE, headline = "${hrs(h)} hours in a car",
                 detail = "Enough to hear all seven Harry Potter audiobooks ${if (times >= 1) "${f1(times)} times over" else "${jsRound(times * 100).toInt()}% of the way through"}. Or sit in silence. Your call.",
-                figure = Figure.Scale(h, AUDIOBOOK_H, "All seven audiobooks", "h"), door = whole(c, "${hrs(h)} hours in a car"))
+                figure = Figure.Scale(h, AUDIOBOOK_H, "All seven audiobooks", "h"), door = whole(c))
         }
     },
     // Homebody share
@@ -406,7 +410,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
         if (known.size < 30) null else {
             val home = pct(known.count { it.kind == NightKind.HOME }, known.size)
             Fact("homebody", Kind.HABIT, card = true, headline = "$home% of nights in your own bed", detail = "${n0(known.size)} nights on record.",
-                door = whole(c, "$home% of nights in your own bed"),
+                door = whole(c),
                 quip = when {
                     home >= 85 -> "$home% of nights in your own bed. Homebody."
                     home >= 60 -> "$home% of nights at home. The other ${100 - home}% is where the stories are."
@@ -427,20 +431,20 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
         val top = h.entries.filter { it.key != homeCity }.maxByOrNull { it.value }
         if (top == null || top.value < 48) null else Fact("second-city", Kind.HABIT, card = true,
             headline = "${top.key}: ${hrs(top.value)} hours", detail = "The city you spend most time in that isn't home.",
-            door = places(ids[top.key].orEmpty(), "${top.key}: ${hrs(top.value)} hours"),
+            door = pins(ids[top.key].orEmpty()),
             quip = "${hrs(top.value)} hours in ${top.key}. At this point it's a situationship.")
     },
     // Shop hours
     { c ->
         val ps = typed(c.d, SHOP); val h = hoursOf(ps, 3.0)
         if (h < 10) null else Fact("shops", Kind.HABIT, card = true, headline = "${hrs(h)} hours in shops", detail = "Capped at three hours a visit.",
-            quip = "${hrs(h)} hours in shops. \"Just looking,\" you said, ${n0(visitsOf(ps))} times.", door = places(ps.keys, "${hrs(h)} hours in shops"))
+            quip = "${hrs(h)} hours in shops. \"Just looking,\" you said, ${n0(visitsOf(ps))} times.", door = pins(ps.keys))
     },
     // Transit stops
     { c ->
         val ps = typed(c.d, STATION); val n = visitsOf(ps)
         if (n < 10) null else Fact("transit", Kind.HABIT, card = true, headline = "${n0(n)} station visits", detail = "${hrs(hoursOf(ps, 1.0))} hours on platforms.",
-            quip = "${n0(n)} times through a station, ${hrs(hoursOf(ps, 1.0))} hours on platforms. The train is always \"2 minutes\" away.", door = places(ps.keys, "${n0(n)} station visits"))
+            quip = "${n0(n)} times through a station, ${hrs(hoursOf(ps, 1.0))} hours on platforms. The train is always \"2 minutes\" away.", door = pins(ps.keys))
     },
 )
 
@@ -455,5 +459,6 @@ fun facts(data: Record, units: Units = Units.KM, raw: Record = data): List<Fact>
     // First visit ever to a place: the earliest raw visit starts no sooner than this one.
     val isFirst = { v: Visit -> val f = raw.places[v.placeId]?.firstTs; f == null || v.start <= f }
     val ctx = Ctx(data, raw, units, dist, cv, bedStrip(raw, range), range, isFirst)
-    return GEN.mapNotNull { it(ctx) }.sortedBy { it.kind.ordinal }
+    // Every fact's door reads as its headline.
+    return GEN.mapNotNull { it(ctx) }.map { f -> f.copy(door = f.door?.withLabel(f.headline)) }.sortedBy { it.kind.ordinal }
 }
