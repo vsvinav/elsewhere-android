@@ -47,9 +47,15 @@ class Segmenter(state: SegmenterState = SegmenterState(), private val tzAt: (Lon
         if (f.accM > MAX_ACC_M) {
             // Too coarse to place, but a coarse fix whose circle covers the open stay still says "still here".
             val stay = state.stay ?: return emptyList()
-            if (metres(stay.lat, stay.lng, f.lat, f.lng) <= RADIUS_M + f.accM) {
-                state = state.copy(stay = stay.copy(lastTs = f.ts), lastTs = f.ts)
+            if (metres(stay.lat, stay.lng, f.lat, f.lng) > RADIUS_M + f.accM) return emptyList()
+            val next = stay.copy(lastTs = f.ts)
+            val moving = state.moving
+            if (next.confirmed && moving != null) {
+                // Heartbeats alone made this a stay: the leg that brought us here is over too.
+                state = state.copy(stay = next, moving = null, lastTs = f.ts)
+                return listOf(activityOf(moving, next))
             }
+            state = state.copy(stay = next, lastTs = f.ts)
             return emptyList()
         }
         val out = ArrayList<Emission>(2)

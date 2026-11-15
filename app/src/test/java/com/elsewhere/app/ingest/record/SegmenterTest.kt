@@ -79,6 +79,40 @@ class SegmenterTest {
         assertTrue(abs(v.lat - home.first) < 1e-6)
     }
 
+    /** 10 min at home, a walk north, one good fix at the shop, then only heartbeats. */
+    private fun arriveByHeartbeat(s: Segmenter): List<Emission> {
+        val out = ArrayList<Emission>()
+        for (i in 0..10) out += s.feed(fix(t0 + i * 60, home))
+        for (i in 1..13) out += s.feed(fix(t0 + 10 * 60 + i * 60, home, dLat = 0.0007 * i))
+        out += s.feed(fix(t0 + 25 * 60, shop))
+        for (i in 1..10) out += s.feed(fix(t0 + 25 * 60 + i * 60, shop, acc = 500f))
+        return out
+    }
+
+    @Test fun `a stay confirmed by heartbeats still closes the leg that led to it`() {
+        val s = seg()
+        val out = arriveByHeartbeat(s)
+        assertEquals(listOf("visit", "activity"), out.map { it.kind })
+        val a = (out[1] as Emission.Activity).activity
+        assertEquals(t0 + 10 * 60, a.start); assertEquals(t0 + 25 * 60, a.end)
+        assertNull(s.state.moving)
+        val leave = s.feed(fix(t0 + 36 * 60, home))
+        assertEquals(listOf("visit"), leave.map { it.kind })
+        assertEquals(t0 + 35 * 60, (leave[0] as Emission.Visit).visit.end)
+    }
+
+    @Test fun `close after a heartbeat arrival keeps the leg too`() {
+        val s = seg()
+        for (i in 0..10) s.feed(fix(t0 + i * 60, home))
+        for (i in 1..13) s.feed(fix(t0 + 10 * 60 + i * 60, home, dLat = 0.0007 * i))
+        s.feed(fix(t0 + 25 * 60, shop))
+        val out = ArrayList<Emission>()
+        for (i in 1..6) out += s.feed(fix(t0 + 25 * 60 + i * 60, shop, acc = 500f))
+        out += s.close()
+        assertEquals(listOf("activity", "visit"), out.map { it.kind })
+        assertEquals(t0 + 31 * 60, (out[1] as Emission.Visit).visit.end)
+    }
+
     @Test fun `a coarse fix far from the stay is still ignored`() {
         val s = seg()
         for (i in 0..10) s.feed(fix(t0 + i * 60, home))
