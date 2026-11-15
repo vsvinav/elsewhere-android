@@ -23,6 +23,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,7 +65,7 @@ fun FlightsTab(vm: FlightsViewModel = hiltViewModel()) {
     if (u == null) { Box(Modifier.fillMaxSize().background(Poster.Stock)); return }
     // A new window reorders the routes, so the pick resets with it, as the web does.
     LaunchedEffect(u.byN) { vm.selected.value = null }
-    var rotation by remember(u.centre) { mutableStateOf(u.centre) }
+    var rotation by rememberSaveable(u.centre, stateSaver = RotationSaver) { mutableStateOf(u.centre) }
     FlightsScreen(u, rotation, { rotation = it }, selected, vm::select)
 }
 
@@ -169,3 +171,5 @@ internal fun AirportsBill(ui: FlightsUi) {
         if (ui.ports.size > 10) CapsText("and ${ui.ports.size - 10} more", Modifier.padding(top = 18.dp), color = Poster.Red, size = 12.sp)
     }
 }
+
+private val RotationSaver = listSaver<Rotation, Double>(save = { listOf(it.lng, it.lat) }, restore = { Rotation(it[0], it[1]) })

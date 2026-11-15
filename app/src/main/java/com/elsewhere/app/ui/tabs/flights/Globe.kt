@@ -83,6 +83,8 @@ fun Globe(
     val turn by rememberUpdatedState(onRotate)
     val measurer = rememberTextMeasurer()
     val labelStyle = PosterType.Display.copy(fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em, color = Poster.Ink)
+    // Label layout does not depend on rotation, so it is measured once per port list, not per drag frame.
+    val labels = remember(ports, measurer, labelStyle) { ports.map { p -> if (p.name.isEmpty()) null else measurer.measure(p.name.uppercase(), labelStyle) } }
     val maxN = hops.maxOfOrNull { it.n } ?: 1
     val reachPx = with(density) { TAP_REACH.toPx() }.toDouble()
 
@@ -131,10 +133,9 @@ fun Globe(
         val kept = ArrayList<Rect>()
         fun inDisc(o: Offset) = (o - c).getDistance() <= r - rimPx
         ports.forEachIndexed { i, p ->
-            if (p.name.isEmpty()) return@forEachIndexed
+            val text = labels[i] ?: return@forEachIndexed
             val d = dots[i] ?: return@forEachIndexed
             if (angleBetween(rotation, p.p.lng, p.p.lat) > LABEL_LIMB) return@forEachIndexed
-            val text = measurer.measure(p.name.uppercase(), labelStyle)
             val w = text.size.width.toFloat(); val h = text.size.height.toFloat()
             val x = d[0].toFloat(); val y = d[1].toFloat()
             val gap = dotRadius(p.n) + 4.dp.toPx()
