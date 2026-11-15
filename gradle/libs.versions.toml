@@ -63,6 +63,9 @@ junit5-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref
 junit5-params = { module = "org.junit.jupiter:junit-jupiter-params", version.ref = "junit5" }
 junit4 = { module = "junit:junit", version = "4.13.2" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+tink-android = { module = "com.google.crypto.tink:tink-android", version = "1.15.0" }
+zxing-core = { module = "com.google.zxing:core", version = "3.5.3" }
+play-code-scanner = { module = "com.google.android.gms:play-services-code-scanner", version = "16.1.0" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
