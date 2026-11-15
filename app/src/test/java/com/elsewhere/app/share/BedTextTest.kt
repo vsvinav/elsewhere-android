@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test
 import java.time.LocalDate
 
 /** Twin of web/src/share/text.test.ts. */
-class ShareTextTest {
+class BedTextTest {
     private fun n(date: String, kind: NightKind, city: String? = null) = Night(date, kind, city)
 
     @Test fun `short ranges wrap by week, Monday first, with the caption and site`() {

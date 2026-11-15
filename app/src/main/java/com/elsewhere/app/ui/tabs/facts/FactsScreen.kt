@@ -58,6 +58,9 @@ import com.elsewhere.app.ui.world.InkButton
 import com.elsewhere.app.ui.world.Lede
 import com.elsewhere.app.ui.world.LocalMotion
 import com.elsewhere.app.ui.world.Pass
+import com.elsewhere.app.ui.world.Share
+import com.elsewhere.app.share.SITE
+import com.elsewhere.app.share.bedText
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.RecordStamp
@@ -186,7 +189,9 @@ internal fun FlipCard(f: Fact, modifier: Modifier = Modifier) {
 /** One fact printed as a pass: headline, the longer line, its figure, and a stub naming its kind. */
 @Composable
 internal fun FactPass(f: Fact, index: Int, total: Int) {
-    Pass(stub = { Field(KIND_LABEL.getValue(f.kind), "$index of $total") }) {
+    // Mirrors web/src/tabs/Facts: a beds figure shares as the strip, anything else as headline, detail, site.
+    val text = { (f.figure as? Figure.Beds)?.let { bedText(it.nights, f.headline.uppercase()) } ?: "${f.headline.uppercase()}\n${f.detail}\n$SITE" }
+    Pass(share = Share(f.headline, text), stub = { Field(KIND_LABEL.getValue(f.kind), "$index of $total") }) {
         val red = f.kind == Kind.EXPLORED || f.kind == Kind.RECORD
         Text(f.headline.uppercase(), color = if (red) Poster.Red else Poster.Ink, style = PosterType.Display.copy(fontSize = 40.sp, lineHeight = 0.9.em, letterSpacing = (-0.01).em))
         Spacer(Modifier.height(20.dp))

@@ -33,7 +33,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui); implementation(libs.compose.foundation); implementation(libs.compose.material3)
     implementation(libs.compose.ui.tooling.preview); debugImplementation(libs.compose.ui.tooling)
-    implementation(libs.activity.compose); implementation(libs.lifecycle.vm.compose); implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.core.ktx); implementation(libs.activity.compose); implementation(libs.lifecycle.vm.compose); implementation(libs.lifecycle.runtime.compose)
     implementation(libs.nav.compose)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler); implementation(libs.hilt.nav.compose)
     implementation(libs.hilt.work); ksp(libs.hilt.work.compiler)

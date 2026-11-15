@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elsewhere.app.analytics.Lens
 import com.elsewhere.app.analytics.lensOf
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.share.LocalPrinting
 import com.elsewhere.app.ui.Tab
 import com.elsewhere.app.ui.world.BigNum
 import com.elsewhere.app.ui.world.Bill
@@ -45,6 +46,7 @@ import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.RecordStamp
 import com.elsewhere.app.ui.world.SetlistRow
+import com.elsewhere.app.ui.world.Share
 import com.elsewhere.app.ui.world.Tone
 import com.elsewhere.app.ui.world.TrailMap
 import com.elsewhere.app.ui.world.Word
@@ -89,7 +91,8 @@ private fun TourUi.countries() = "${n0(facts.countries)} ${plural(facts.countrie
 @Composable
 internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit, onRecord: () -> Unit = {}) {
     val f = ui.facts; val t = ui.tour; val u = ui.units
-    Bill(first = true) {
+    Bill(first = true, share = Share(if (ui.name.isNotEmpty()) "${ui.name}'s elsewhere" else "elsewhere ${ui.yearSpan}")) {
+        val printing = LocalPrinting.current
         Box(Modifier.fillMaxWidth()) {
             Column {
                 if (ui.name.isNotEmpty()) {
@@ -111,6 +114,7 @@ internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit, onRecord: () -> Unit = {}
         DatesList(
             t.stops.take(6).map { DateRow(it.city, it.country, "${it.nights}", plural(it.nights, "night")) },
             more = when {
+                printing -> null
                 t.stops.size > 6 -> ({ CapsText("+ ${t.stops.size - 6} more cities →", Modifier.clickable(role = Role.Button) { onGo(Tab.DATES) }, size = 12.sp) })
                 t.stops.isEmpty() -> ({ CapsText("No nights away on record", size = 12.sp) })
                 else -> null
@@ -118,8 +122,10 @@ internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit, onRecord: () -> Unit = {}
         )
         Spacer(Modifier.height(40.dp))
         Foot("${n0(f.cities)} cities · ${ui.countries()}", "${countUp(u.cv(f.totalKm))} ${u.u}")
-        Spacer(Modifier.height(20.dp))
-        CapsText(if (ui.deviceDays > 0) "Recording on this phone →" else "Record new travel →", Modifier.clickable(role = Role.Button, onClick = onRecord), color = Poster.Red, size = 12.sp)
+        if (!printing) {
+            Spacer(Modifier.height(20.dp))
+            CapsText(if (ui.deviceDays > 0) "Recording on this phone →" else "Record new travel →", Modifier.clickable(role = Role.Button, onClick = onRecord), color = Poster.Red, size = 12.sp)
+        }
     }
 }
 
@@ -127,7 +133,7 @@ internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit, onRecord: () -> Unit = {}
 internal fun HeadlineBill(ui: TourUi, onGo: (Tab) -> Unit) {
     val act = ui.tour.headline ?: return
     val f = ui.facts; val t = ui.tour; val u = ui.units
-    Bill(Tone.INK) {
+    Bill(Tone.INK, share = Share("headline ${act.city}")) {
         CapsText("Headline act · farthest from home")
         Spacer(Modifier.height(16.dp))
         Word(act.city)
@@ -153,7 +159,7 @@ internal fun HeadlineBill(ui: TourUi, onGo: (Tab) -> Unit) {
 @Composable
 internal fun SetlistBill(ui: TourUi) {
     val f = ui.facts; val u = ui.units
-    Bill {
+    Bill(share = Share("setlist")) {
         CapsText("Setlist · ${if (u == Units.MI) "miles" else "kilometres"} by mode")
         Spacer(Modifier.height(16.dp))
         BigNum(countUp(u.cv(f.totalKm)), u.u)
@@ -172,7 +178,7 @@ internal fun ResidencyBill(ui: TourUi, onSeen: (String) -> Unit = {}) {
     val f = ui.facts
     val hoursTotal = f.hours.home + f.hours.work + f.hours.other + f.hours.transit
     fun pct(h: Double) = (100 * h / max(1.0, hoursTotal)).roundToInt()
-    Bill(Tone.RED) {
+    Bill(Tone.RED, share = Share("residency")) {
         CapsText("Residency · where the hours went")
         Spacer(Modifier.height(16.dp))
         BigNum(countUp(f.hours.other), "h out")
@@ -189,7 +195,7 @@ internal fun ResidencyBill(ui: TourUi, onSeen: (String) -> Unit = {}) {
 @Composable
 internal fun RecordsBill(ui: TourUi) {
     val f = ui.facts; val u = ui.units
-    Bill {
+    Bill(share = Share("records")) {
         CapsText("Records · personal bests")
         Spacer(Modifier.height(24.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {

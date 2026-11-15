@@ -4,7 +4,7 @@ import com.elsewhere.app.analytics.Night
 import com.elsewhere.app.analytics.NightKind
 import java.time.LocalDate
 
-// Port of web/src/share/text.ts. `shareText` (navigator.share / clipboard) is the platform layer's job on Android.
+// Port of web/src/share/text.ts; `shareText` lives in ShareSheet.kt.
 
 const val SITE = "github.com/vsvinav/elsewhere"
 private val CELL: Map<NightKind, String> = mapOf(NightKind.HOME to "⬛", NightKind.NEW to "🟥", NightKind.REPEAT to "🟨", NightKind.NONE to "⬜")

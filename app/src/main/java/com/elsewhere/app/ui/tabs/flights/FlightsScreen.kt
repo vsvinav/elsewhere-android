@@ -56,6 +56,7 @@ import com.elsewhere.app.ui.world.PRow
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.Rule
+import com.elsewhere.app.ui.world.Share
 import com.elsewhere.app.ui.world.Tone
 import com.elsewhere.app.ui.world.countUp
 import com.elsewhere.app.ui.world.cv
@@ -192,7 +193,7 @@ private fun AirportPicker(named: List<Port>, pick: Int, onPick: (Int) -> Unit) {
 @Composable
 internal fun RoutesBill(ui: FlightsUi, selected: Int?, onSelect: (Int?) -> Unit) {
     val u = ui.units
-    Bill {
+    Bill(share = Share("routes")) {
         DisplayText("Routes", 48.sp)
         Spacer(Modifier.height(18.dp))
         Column(Modifier.fillMaxWidth().semantics { contentDescription = "Most flown routes" }) {
@@ -226,7 +227,7 @@ internal fun RoutesBill(ui: FlightsUi, selected: Int?, onSelect: (Int?) -> Unit)
 
 @Composable
 internal fun AirportsBill(ui: FlightsUi) {
-    Bill {
+    Bill(share = Share("airports")) {
         DisplayText("Airports", 48.sp)
         Spacer(Modifier.height(18.dp))
         PList(ui.ports.take(10).map { p -> PRow(p.name.ifEmpty { "Somewhere" }, null, "${p.n} ${plural(p.n, "leg")}") }, Modifier.semantics { contentDescription = "Busiest airports" })
