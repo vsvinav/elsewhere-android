@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
@@ -90,8 +92,18 @@ class RecordRepository @Inject constructor(
     /** Photo URLs carry the key, so a key change re-prints the record. */
     private val photoKey = settings.settings.map { it.mapsKey }.distinctUntilChanged()
 
-    override val record: StateFlow<Record?> = combine(importVersion, shape, placesVersion, photoKey) { _, p, _, k -> p to k }
-        .mapLatest { (p, k) -> if (p == null || p.homes.isEmpty()) null else timed { build(p, k) } }
+    /** What a rebuild is for: a new import or a reshaped profile is "Working out trips"; names or photos landing are not. */
+    private data class Cause(val version: Int, val profile: Profile?, val placesVersion: Int, val key: String)
+
+    override val record: StateFlow<Record?> = combine(importVersion, shape, placesVersion, photoKey, ::Cause)
+        .runningFold(null as Pair<Cause?, Cause>?) { prev, c -> prev?.second to c }
+        .filterNotNull()
+        .mapLatest { (prev, c) ->
+            val p = c.profile
+            if (p == null || p.homes.isEmpty()) null
+            else if (prev != null && prev.version == c.version && prev.profile === c.profile) build(p, c.key)
+            else timed { build(p, c.key) }
+        }
         .flowOn(Dispatchers.Default)
         .stateIn(scope, SharingStarted.Eagerly, null)
 
