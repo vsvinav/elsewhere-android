@@ -117,6 +117,28 @@ class DeriveTest {
 
     private data class LatLngOf(val lat: Double, val lng: Double)
 
+    /** The ground trail must be the web's: every timelinePath, thinned by one global step, its last point always kept, 1e-4 rounding. */
+    @Test fun `strokes are thinned exactly as the web thins them`() {
+        val res = javaClass.classLoader
+        val parsed = parseTimeline(res.getResource("mini_timeline.json")!!.readText())
+        val cities = Cities.fromJson(res.getResource("cities.json")!!.readText())
+        val profile = Profile(null, Units.KM, homes = listOf(Home(42.3632761, -71.0643721, "Boston", "US", 0, null)), works = emptyList())
+        val meta = Meta("mini_timeline.json", "x", 0, 0L..0L, ImportReport(0, 0, emptyMap()))
+        val long = PPath(0, 9002, (0 until 9002).map { i -> com.elsewhere.app.data.Pt(42.0 + i * 0.00001234, -71.0, i.toLong()) })
+        val pair = PPath(0, 1, listOf(com.elsewhere.app.data.Pt(1.0, 2.0, 0), com.elsewhere.app.data.Pt(3.0, 4.0, 1)))
+        val lone = PPath(0, 1, listOf(com.elsewhere.app.data.Pt(5.0, 6.0, 0)))
+        val record = derive(parsed.copy(paths = listOf(long, pair, lone)), profile, cities, meta)
+
+        // total 9005 points → k = ceil(9005 / 8000) = 2: every other point, plus the odd last one.
+        assertEquals(2, record.strokes.size)
+        val s = record.strokes[0]
+        assertEquals(4502, s.pts.size)
+        assertEquals(long.pts.last().ts, s.pts.last().ts)
+        assertEquals(42.1111, s.pts.last().lat, 1e-9)
+        assertEquals(0L, s.pts[0].ts); assertEquals(2L, s.pts[1].ts)
+        assertEquals(listOf(1.0, 3.0), record.strokes[1].pts.map { it.lat })
+    }
+
     @Test fun `haversine Boston to SF`() {
         val d = haversineKm(42.3601, -71.0589, 37.7749, -122.4194)
         assertTrue(d > 4330 && d < 4350)

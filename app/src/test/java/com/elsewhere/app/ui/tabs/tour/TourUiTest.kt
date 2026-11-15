@@ -24,7 +24,8 @@ class TourUiTest {
         assertEquals(listOf("Lisbon", "Tokyo", "New York"), ui.tour.stops.map { it.city })
         assertEquals(10, ui.named)
         assertEquals(0, ui.photos)
-        assertTrue(ui.trail.lines.isNotEmpty() && ui.trail.flights.size == 4)
+        // Four legs, two of them returns, print as two arcs.
+        assertTrue(ui.trail.lines.isNotEmpty() && ui.trail.flights.size == 2)
     }
 
     @Test fun `a span across years prints both ends and no profile is a blank bill`() {

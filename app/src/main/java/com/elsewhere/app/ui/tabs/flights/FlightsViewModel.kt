@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
-import kotlin.math.abs
 
 /** Everything the Flights page prints, the derived values at the top of web/src/tabs/Flights/Flights.tsx. */
 data class FlightsUi(
@@ -41,8 +40,14 @@ data class FlightsUi(
     val hops: List<Hop> get() = flights.hops
     val ports: List<Port> get() = flights.ports
 
+    /** The airports with a town, busiest first: the ones the From bill can pick between. */
+    val named: List<Port> get() = namedPorts(ports)
+
     /** The town of a runway, or "somewhere" when no city was visited near it. */
-    fun name(p: LatLng): String = ports.firstOrNull { abs(it.p.lng - p.lng) < 0.1 && abs(it.p.lat - p.lat) < 0.1 }?.name?.ifEmpty { null } ?: "somewhere"
+    fun name(p: LatLng): String = ports.firstOrNull { near(it.p, p) }?.name?.ifEmpty { null } ?: "somewhere"
+
+    /** The From bill for the `pick`th named airport, or null when no airport has a town. */
+    fun from(pick: Int): FromAirport? = fromAirport(hops, ports, pick, ::name)
 }
 
 fun flightsUi(data: Record, profile: Profile?, airports: List<Airport>, land: FeatureCollection?): FlightsUi {
@@ -69,4 +74,11 @@ class FlightsViewModel @Inject constructor(range: RangeStore, store: RecordStore
 
     /** Picking the open route again closes it. */
     fun select(i: Int?) { selected.value = if (i == selected.value) null else i }
+
+    private val pickState = ResettingPick(ui)
+
+    /** The airport the From bill shows, as an index into `FlightsUi.named`; a new window puts it back to the busiest. */
+    val pick: StateFlow<Int> = pickState.index.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    fun pick(i: Int) = pickState.set(i)
 }
