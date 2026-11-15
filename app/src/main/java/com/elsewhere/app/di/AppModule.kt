@@ -14,6 +14,7 @@ import com.elsewhere.app.data.LandSource
 import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.data.db.ElsewhereDb
+import com.elsewhere.app.data.db.MIGRATIONS
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -40,7 +41,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
     @Provides @Singleton fun db(@ApplicationContext ctx: Context): ElsewhereDb =
-        Room.databaseBuilder(ctx, ElsewhereDb::class.java, "elsewhere.db").fallbackToDestructiveMigration().build()
+        Room.databaseBuilder(ctx, ElsewhereDb::class.java, "elsewhere.db").addMigrations(*MIGRATIONS).fallbackToDestructiveMigration().build()
 
     @Provides @Singleton fun dataStore(@ApplicationContext ctx: Context): DataStore<Preferences> =
         PreferenceDataStoreFactory.create { ctx.preferencesDataStoreFile("settings") }
@@ -64,6 +65,7 @@ object AppModule {
     @Provides fun visits(db: ElsewhereDb) = db.visits()
     @Provides fun activities(db: ElsewhereDb) = db.activities()
     @Provides fun paths(db: ElsewhereDb) = db.paths()
+    @Provides fun rawFixes(db: ElsewhereDb) = db.rawFixes()
     @Provides fun memories(db: ElsewhereDb) = db.memories()
     @Provides fun frequentPlaces(db: ElsewhereDb) = db.frequentPlaces()
     @Provides fun placeEnrichment(db: ElsewhereDb) = db.placeEnrichment()

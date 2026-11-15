@@ -8,21 +8,34 @@ import androidx.room.Upsert
 
 @Dao interface VisitDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(rows: List<VisitEntity>)
-    @Query("SELECT * FROM visits ORDER BY id") suspend fun all(): List<VisitEntity>
+    @Query("SELECT * FROM visits ORDER BY start, id") suspend fun all(): List<VisitEntity>
     @Query("SELECT COUNT(*) FROM visits") suspend fun count(): Int
+    @Query("SELECT COUNT(*) FROM visits WHERE source = 'device'") suspend fun countDevice(): Int
     @Query("DELETE FROM visits") suspend fun clear()
+    @Query("DELETE FROM visits WHERE source = 'import'") suspend fun clearImported()
 }
 
 @Dao interface ActivityDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(rows: List<ActivityEntity>)
-    @Query("SELECT * FROM activities ORDER BY id") suspend fun all(): List<ActivityEntity>
+    @Query("SELECT * FROM activities ORDER BY start, id") suspend fun all(): List<ActivityEntity>
     @Query("DELETE FROM activities") suspend fun clear()
+    @Query("DELETE FROM activities WHERE source = 'import'") suspend fun clearImported()
 }
 
 @Dao interface PathDao {
     @Insert suspend fun insertAll(rows: List<PathEntity>)
-    @Query("SELECT * FROM paths ORDER BY id") suspend fun all(): List<PathEntity>
+    @Query("SELECT * FROM paths ORDER BY start, id") suspend fun all(): List<PathEntity>
     @Query("DELETE FROM paths") suspend fun clear()
+    @Query("DELETE FROM paths WHERE source = 'import'") suspend fun clearImported()
+}
+
+@Dao interface RawFixDao {
+    @Insert suspend fun insertAll(rows: List<RawFixEntity>)
+    @Query("SELECT * FROM raw_fixes WHERE ts >= :ts ORDER BY ts") suspend fun since(ts: Long): List<RawFixEntity>
+    @Query("SELECT * FROM raw_fixes ORDER BY ts DESC LIMIT 1") suspend fun latest(): RawFixEntity?
+    @Query("SELECT COUNT(*) FROM raw_fixes") suspend fun countAll(): Int
+    @Query("DELETE FROM raw_fixes WHERE ts < :ts") suspend fun pruneBefore(ts: Long)
+    @Query("DELETE FROM raw_fixes") suspend fun clear()
 }
 
 @Dao interface MemoryDao {
