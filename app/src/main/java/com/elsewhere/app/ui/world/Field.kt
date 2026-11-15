@@ -17,6 +17,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -25,12 +27,12 @@ import androidx.compose.foundation.background
 
 /**
  * A printed input: ink on stock, a rule beneath instead of a box. `display` sets the headline
- * face the web uses for the name question; `mono` the typewriter face for keys.
+ * face the web uses for the name question; `mono` the typewriter face for keys; `hidden` dots out a secret.
  */
 @Composable
 fun PosterTextField(
     value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier, placeholder: String = "",
-    label: String? = null, display: Boolean = false, mono: Boolean = false, singleLine: Boolean = true,
+    label: String? = null, display: Boolean = false, mono: Boolean = false, singleLine: Boolean = true, hidden: Boolean = false,
 ) {
     val style: TextStyle = when {
         display -> PosterType.Display.copy(fontSize = 56.sp, lineHeight = 1.em, color = Poster.Ink)
@@ -43,6 +45,7 @@ fun PosterTextField(
         BasicTextField(
             value = if (display) value.uppercase() else value, onValueChange = onValueChange, textStyle = style, singleLine = singleLine,
             cursorBrush = SolidColor(Poster.Red),
+            visualTransformation = if (hidden) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(capitalization = if (display) KeyboardCapitalization.Words else KeyboardCapitalization.None, autoCorrectEnabled = false),
             modifier = Modifier.fillMaxWidth(),
             decorationBox = { inner ->

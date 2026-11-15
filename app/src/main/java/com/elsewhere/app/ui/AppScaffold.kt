@@ -28,7 +28,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.elsewhere.app.data.Units
 import com.elsewhere.app.ui.shell.DatePickSheet
 import com.elsewhere.app.ui.shell.Masthead
 import com.elsewhere.app.ui.shell.RangeBar
@@ -72,7 +71,7 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}) = when (t
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppScaffold(
-    onChangeAnswers: () -> Unit, onMapsKey: () -> Unit, onRecord: () -> Unit = {},
+    onChangeAnswers: () -> Unit, onSettings: () -> Unit, onRecord: () -> Unit = {},
     shell: ShellViewModel = hiltViewModel(), rangeVm: RangeViewModel = hiltViewModel(),
     content: @Composable (tab: Tab, go: (Tab) -> Unit) -> Unit = { t, g -> TabContent(t, g, onRecord) },
 ) {
@@ -104,9 +103,9 @@ fun AppScaffold(
         containerColor = Poster.Stock,
         topBar = {
             Masthead(
-                name = profile?.name, units = profile?.units ?: Units.KM, counters = counters,
-                onHome = { go(Tab.TOUR) }, onChangeAnswers = onChangeAnswers, onMapsKey = onMapsKey, onRecord = onRecord,
-                onToggleUnits = shell::toggleUnits, onStartOver = shell::reset,
+                name = profile?.name, counters = counters,
+                onHome = { go(Tab.TOUR) }, onChangeAnswers = onChangeAnswers, onSettings = onSettings, onRecord = onRecord,
+                onStartOver = shell::reset,
             )
         },
         bottomBar = {

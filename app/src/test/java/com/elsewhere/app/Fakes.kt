@@ -1,6 +1,9 @@
 package com.elsewhere.app
 
+import com.elsewhere.app.ask.LlmClient
+import com.elsewhere.app.ask.LlmConfig
 import com.elsewhere.app.data.Counters
+import com.elsewhere.app.data.LlmSettings
 import com.elsewhere.app.data.FeatureCollection
 import com.elsewhere.app.data.ImportReport
 import com.elsewhere.app.data.LandSource
@@ -49,6 +52,18 @@ object Fakes {
         override val settings: Flow<Settings> = cur
         override val counters: Flow<Counters> = MutableStateFlow(Counters())
         override suspend fun saveSettings(s: Settings) { cur.value = s }
+    }
+
+    class Llm : LlmSettings {
+        val cur = MutableStateFlow(LlmConfig())
+        override val llm: Flow<LlmConfig> = cur
+        override suspend fun saveLlm(c: LlmConfig) { cur.value = c }
+    }
+
+    /** Answers every prompt with `reply`, or throws it, and remembers what it was asked. */
+    class Asker(var reply: Result<String> = Result.success("OK")) : LlmClient {
+        val asked = ArrayList<Pair<LlmConfig, String>>()
+        override suspend fun ask(c: LlmConfig, prompt: String): String { asked += c to prompt; return reply.getOrThrow() }
     }
 
     class Checker(var report: KeyReport = KeyReport(Probe.Ok, Probe.Ok)) : KeyChecker {
