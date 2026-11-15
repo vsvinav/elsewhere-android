@@ -11,6 +11,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextLayoutResult
 import com.elsewhere.app.ui.world.ElsewhereTheme
+import com.elsewhere.app.ui.world.LocalMotion
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -32,7 +33,7 @@ class DoorTextTest {
     private val opened = ArrayList<Door>()
 
     private fun show() {
-        rule.setContent { ElsewhereTheme { CompositionLocalProvider(LocalOpenDoor provides { opened += it }) { DoorText(spans) } } }
+        rule.setContent { ElsewhereTheme { CompositionLocalProvider(LocalOpenDoor provides { opened += it }, LocalMotion provides false) { DoorText(spans) } } }
     }
 
     @Test fun `each figure is an accessibility action that opens its door, the plain words are not`() {

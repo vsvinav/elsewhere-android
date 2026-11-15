@@ -12,7 +12,7 @@ data class YearRow(val year: Int, val km: Double, val places: Int, val trips: In
 data class Hours(val home: Double, val work: Double, val other: Double, val transit: Double)
 data class DayKm(val date: String, val km: Double)
 data class DayPlaces(val date: String, val places: Int)
-data class Farthest(val km: Double, val city: String?, val placeId: String? = null)
+data class Farthest(val km: Double, val city: String?)
 data class Records(val longestDay: DayKm?, val busiestDay: DayPlaces?, val farthest: Farthest?)
 data class LongestTrip(val trip: Trip, val city: String?)
 data class HomeFacts(
@@ -71,7 +71,7 @@ fun homeFacts(data: Record): HomeFacts {
     var farthest: Farthest? = null
     for (v in visits) {
         val d = distanceKm(home, v)
-        if (farthest == null || d > farthest.km) farthest = Farthest(d, data.places[v.placeId]?.city, v.placeId)
+        if (farthest == null || d > farthest.km) farthest = Farthest(d, data.places[v.placeId]?.city)
     }
 
     val flights = data.activities.filter { it.mode == "FLYING" }

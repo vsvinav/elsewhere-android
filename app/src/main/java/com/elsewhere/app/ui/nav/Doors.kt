@@ -72,7 +72,8 @@ fun span(text: String, door: Door? = null) = Span(text, door)
 fun DoorText(spans: List<Span>, modifier: Modifier = Modifier, style: TextStyle = LocalTextStyle.current, color: Color = Color.Unspecified, pressed: Int? = null) {
     val open = LocalOpenDoor.current
     var down by remember { mutableStateOf(pressed) }
-    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    // Plain holder, not state: nothing in composition reads the layout, only taps do.
+    val layout = remember { arrayOfNulls<TextLayoutResult>(1) }
     // Character offsets of each run, so a tap's offset finds its run by scanning a handful of spans.
     val starts = remember(spans) { IntArray(spans.size + 1).also { a -> for (i in spans.indices) a[i + 1] = a[i] + spans[i].text.length } }
     val text = remember(spans, down) {
@@ -83,7 +84,7 @@ fun DoorText(spans: List<Span>, modifier: Modifier = Modifier, style: TextStyle 
         }
     }
     fun runAt(pos: Offset): Int? {
-        val l = layout ?: return null
+        val l = layout[0] ?: return null
         if (pos.x < 0f || pos.y < 0f || pos.x > l.size.width || pos.y > l.size.height) return null
         val off = l.getOffsetForPosition(pos)
         val i = spans.indices.firstOrNull { off >= starts[it] && off < starts[it + 1] } ?: return null
@@ -99,6 +100,6 @@ fun DoorText(spans: List<Span>, modifier: Modifier = Modifier, style: TextStyle 
                     onTap = { p -> runAt(p)?.let { open(spans[it].door!!) } },
                 )
             },
-        color = color, style = style, onTextLayout = { layout = it },
+        color = color, style = style, onTextLayout = { layout[0] = it },
     )
 }
