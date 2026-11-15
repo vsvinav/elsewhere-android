@@ -9,11 +9,13 @@ import com.elsewhere.app.data.ReadyState
 import com.elsewhere.app.data.Ready
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.data.shellReady
 import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.ingest.Progress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -22,7 +24,9 @@ import javax.inject.Inject
 @HiltViewModel
 class ShellViewModel @Inject constructor(private val repo: RecordStore, settings: MapsSettings, private val lookups: PlaceLookups, readyState: ReadyState = ReadyState()) : ViewModel() {
     val naming: StateFlow<Progress?> = lookups.progress
-    val ready: StateFlow<Ready?> = readyState.ready
+    /** The bar waits for the names too: derive finishes long before slow Places lookups do, and the user needs to see something is still happening. */
+    val ready: StateFlow<Ready?> = combine(readyState.ready, lookups.progress, ::shellReady)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, shellReady(readyState.ready.value, lookups.progress.value))
     val profile: StateFlow<Profile?> = repo.profile
     val counters: StateFlow<Counters> = settings.counters.stateIn(viewModelScope, SharingStarted.Eagerly, Counters())
 
