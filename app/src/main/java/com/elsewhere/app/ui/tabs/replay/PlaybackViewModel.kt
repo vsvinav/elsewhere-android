@@ -40,6 +40,7 @@ class PlaybackViewModel @Inject constructor(range: RangeStore, private val maps:
         .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val state = MutableStateFlow(PlayState(playhead = Double.NaN, playing = false))
+    private var shownOnce = false
 
     init {
         // A new window rewinds to its start, as the web's setRange does; the first record also seeds the playhead.
@@ -51,6 +52,12 @@ class PlaybackViewModel @Inject constructor(range: RangeStore, private val maps:
         val rec = data.value ?: return
         state.update { s -> if (s.playing && !s.playhead.isNaN()) tickPlayback(rec, s, dt) else s }
     }
+
+    /**
+     * The tab plays itself the first time it comes on screen, as the web's setTab does; a recreated Activity shows the
+     * same view model again and must not restart a replay the user paused or a camera they took over.
+     */
+    fun shown() { if (!shownOnce) { shownOnce = true; setPlaying(true) } }
 
     /** Playing hands the camera back to the follow-cam; starting from the end rewinds first. */
     fun setPlaying(on: Boolean) {

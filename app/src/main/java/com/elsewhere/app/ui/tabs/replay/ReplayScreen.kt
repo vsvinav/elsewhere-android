@@ -13,7 +13,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
@@ -112,8 +111,8 @@ fun ReplayTab(vm: PlaybackViewModel = hiltViewModel()) {
         scope.launch { snackbar.showSnackbar(if (swapped) "Google refused the key — using OpenStreetMap" else "Google Maps didn't load") }
     })
 
-    // The tab plays while it is on screen, as the web's setTab does.
-    DisposableEffect(Unit) { vm.setPlaying(true); onDispose { vm.setPlaying(false) } }
+    // Leaving the tab pops its back-stack entry and clears the view model, so the clock stops with it.
+    LaunchedEffect(vm) { vm.shown() }
 
     val follow = remember(host) { Follow() }
     val arrivals = remember { Arrivals() }
