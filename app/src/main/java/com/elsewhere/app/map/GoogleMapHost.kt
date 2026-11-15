@@ -16,10 +16,12 @@ import androidx.compose.ui.platform.LocalDensity
 import com.elsewhere.app.R
 import com.elsewhere.app.data.Viewport
 import com.elsewhere.app.ui.world.Poster
+import com.google.android.gms.maps.CameraUpdate
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMapOptions
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.CameraMoveStartedReason
 import com.google.maps.android.compose.CameraPositionState
@@ -53,18 +55,24 @@ class GoogleMapHost(private val scope: CoroutineScope, initial: Cam, private val
     private val _viewport = MutableStateFlow<Viewport?>(null)
     override val viewport: StateFlow<Viewport?> = _viewport.asStateFlow()
 
-    private val framer = Framer { cam, ms -> moveTo(cam, ms) }
+    // The SDK frames bounds itself: it knows the zoom floor this screen allows, where a hand-solved zoom below it
+    // would be clamped and leave the outer pins off the edge.
+    private val framer = Framer { b, size, pad ->
+        val ll = LatLngBounds(LatLng(b.swLat, b.swLng), LatLng(b.neLat, b.neLng))
+        animate(CameraUpdateFactory.newLatLngBounds(ll, size.width, size.height, pad), Framer.ANIMATE_MS)
+    }
     private val watch = MoveWatch()
 
     override fun moveTo(cam: Cam, animateMs: Int) {
         watch.wrote(cam)
         val update = CameraUpdateFactory.newCameraPosition(cam.toGoogle())
         if (animateMs <= 0) { state.move(update); _camera.value = cam }
-        // animate suspends until the map exists and cancels any move still running, so it always lands.
-        else scope.launch { state.animate(update, animateMs) }
+        else animate(update, animateMs)
     }
 
-    /** Solved in Mercator like the MapLibre host, so a "Fit pins" lands on the same frame on both maps. */
+    /** animate suspends until the map exists and cancels any move still running, so it always lands. */
+    private fun animate(update: CameraUpdate, ms: Int) { scope.launch { state.animate(update, ms) } }
+
     override fun fit(bounds: Bounds, paddingPx: Int) = framer.fit(bounds, paddingPx)
 
     /** The SDK answers in px already; null until the map has a projection. */

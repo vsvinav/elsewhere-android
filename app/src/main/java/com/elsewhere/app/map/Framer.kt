@@ -9,7 +9,13 @@ import kotlin.math.roundToInt
  * Every fit glides rather than jumps, so the user sees where the pins went. Zoom counts 256 logical px per
  * tile and Compose reports physical px, so size and padding are scaled back to dp before solving.
  */
-class Framer(private val move: (cam: Cam, animateMs: Int) -> Unit) {
+class Framer(private val go: (bounds: Bounds, sizePx: IntSize, paddingPx: Int) -> Unit) {
+    /** The Mercator solve, for a host whose camera is set by hand. */
+    constructor(move: (cam: Cam, animateMs: Int) -> Unit) : this({ b, size, pad -> move(camForBounds(b, size.width, size.height, pad), ANIMATE_MS) }) {
+        solveInDp = true
+    }
+
+    private var solveInDp = false
     var density = 1f
     var size: IntSize = IntSize.Zero
         set(v) {
@@ -19,8 +25,11 @@ class Framer(private val move: (cam: Cam, animateMs: Int) -> Unit) {
     private var pending: (() -> Unit)? = null
 
     fun fit(bounds: Bounds, paddingPx: Int) {
-        val go = { move(camForBounds(bounds, (size.width / density).roundToInt(), (size.height / density).roundToInt(), (paddingPx / density).roundToInt()), ANIMATE_MS) }
-        if (size != IntSize.Zero) go() else pending = go
+        val run = {
+            if (solveInDp) go(bounds, IntSize((size.width / density).roundToInt(), (size.height / density).roundToInt()), (paddingPx / density).roundToInt())
+            else go(bounds, size, paddingPx)
+        }
+        if (size != IntSize.Zero) run() else pending = run
     }
 
     companion object { const val ANIMATE_MS = 400 }
