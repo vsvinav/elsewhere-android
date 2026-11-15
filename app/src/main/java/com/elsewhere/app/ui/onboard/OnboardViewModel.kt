@@ -12,6 +12,8 @@ import com.elsewhere.app.data.ImportReport
 import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
+import com.elsewhere.app.data.ReadyState
+import com.elsewhere.app.data.Ready
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.data.Work
@@ -111,8 +113,9 @@ fun monthOf(ts: Long): YearMonth = YearMonth.from(LocalDate.ofEpochDay(Math.floo
 @HiltViewModel
 class OnboardViewModel @Inject constructor(
     private val store: RecordStore, private val maps: MapsSettings, private val checker: KeyChecker,
-    private val namer: PlaceNamer, private val geocoder: Geocoder,
+    private val namer: PlaceNamer, private val geocoder: Geocoder, readyState: ReadyState = ReadyState(),
 ) : ViewModel(), OnboardActions, KeyActions {
+    val ready: StateFlow<Ready?> = readyState.ready
     private val _state = MutableStateFlow(OnboardState())
     val state: StateFlow<OnboardState> = _state
 

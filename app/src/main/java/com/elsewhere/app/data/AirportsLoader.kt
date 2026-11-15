@@ -13,13 +13,13 @@ import javax.inject.Singleton
 
 /** Reads `assets/airports.json` (the web's AIRPORTS table) once; later calls return the cached list. */
 @Singleton
-class AirportsLoader @Inject constructor(@ApplicationContext private val context: Context) {
+class AirportsLoader @Inject constructor(@ApplicationContext private val context: Context, private val readyState: ReadyState = ReadyState()) {
     private val lock = Mutex()
     @Volatile private var cached: List<Airport>? = null
 
     suspend fun get(): List<Airport> = cached ?: lock.withLock {
-        cached ?: withContext(Dispatchers.IO) {
+        cached ?: readyState.drawing { withContext(Dispatchers.IO) {
             Airports.fromJson(context.assets.open("airports.json").bufferedReader().readText())
-        }.also { cached = it }
+        } }.also { cached = it }
     }
 }

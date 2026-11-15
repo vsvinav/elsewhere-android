@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.data.Counters
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.MapsSettings
+import com.elsewhere.app.data.ReadyState
+import com.elsewhere.app.data.Ready
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ingest.PlaceLookups
@@ -18,8 +20,9 @@ import javax.inject.Inject
 
 /** What the masthead menu reads and does: the name on the record, units, usage, start over. */
 @HiltViewModel
-class ShellViewModel @Inject constructor(private val repo: RecordStore, settings: MapsSettings, private val lookups: PlaceLookups) : ViewModel() {
+class ShellViewModel @Inject constructor(private val repo: RecordStore, settings: MapsSettings, private val lookups: PlaceLookups, readyState: ReadyState = ReadyState()) : ViewModel() {
     val naming: StateFlow<Progress?> = lookups.progress
+    val ready: StateFlow<Ready?> = readyState.ready
     val profile: StateFlow<Profile?> = repo.profile
     val counters: StateFlow<Counters> = settings.counters.stateIn(viewModelScope, SharingStarted.Eagerly, Counters())
 
