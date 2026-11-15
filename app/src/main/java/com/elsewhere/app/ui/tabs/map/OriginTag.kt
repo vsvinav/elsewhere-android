@@ -55,7 +55,7 @@ fun OriginTag(origin: Origin?, onBack: () -> Unit, modifier: Modifier = Modifier
         Row(
             Modifier.height(32.dp).background(Poster.Ink)
                 .clickable(role = Role.Button, onClick = onBack)
-                .semantics { contentDescription = "Back to ${o.backTab.label}: ${o.label}" },
+                .semantics { contentDescription = "Back to ${o.backTab.label}" },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("FROM · ${o.label.uppercase()}", Modifier.widthIn(max = 220.dp).padding(start = 10.dp, end = 8.dp), color = Poster.Mustard, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)

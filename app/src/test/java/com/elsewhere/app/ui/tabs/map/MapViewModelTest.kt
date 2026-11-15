@@ -9,7 +9,9 @@ import com.elsewhere.app.data.Viewport
 import com.elsewhere.app.ingest.Kind
 import com.elsewhere.app.ingest.MemoryCostMeter
 import com.elsewhere.app.map.Basemap
+import com.elsewhere.app.analytics.Cat
 import com.elsewhere.app.ui.nav.DoorNav
+import com.elsewhere.app.ui.nav.Opening
 import com.elsewhere.app.ui.shell.RangeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -92,5 +94,15 @@ class MapViewModelTest {
         maps.cur.value = Settings(mapsKey = "AIzb", keyTiles = true); run()
         assertTrue((vm.basemap.value as Basemap.Google).styleJson.contains("tok-AIzb"))
         assertEquals(2, tiles.sessions)
+    }
+
+    @Test fun `a door onto pins shows every kind of stop again, a door onto a window leaves the chips alone`() = runTest(dispatcher) {
+        val vm = vm()
+        vm.only(Cat.EAT)
+        vm.apply(Opening(select = null, fit = null, range = 0L..1L))
+        assertEquals(Cat.entries.toSet() - Cat.EAT, vm.opts.value.hidden)
+        vm.apply(Opening(select = "a", fit = listOf("a"), range = 0L..1L))
+        assertEquals(emptySet<Cat>(), vm.opts.value.hidden)
+        assertEquals("a", vm.opts.value.selected)
     }
 }

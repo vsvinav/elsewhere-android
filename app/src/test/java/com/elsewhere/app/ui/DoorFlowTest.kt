@@ -63,7 +63,7 @@ class DoorFlowTest {
         assertEquals(Fx.utc(2024, 2, 1)..Fx.utc(2024, 2, 31), store.range.value)
         assertEquals(Origin("Numbers figure", Tab.NUMBERS), doors.origin.value)
 
-        rule.onNodeWithContentDescription("Back to Numbers: Numbers figure").performClick()
+        rule.onNodeWithContentDescription("Back to Numbers").performClick()
         rule.waitForIdle()
         rule.onNodeWithText("Numbers figure").assertIsDisplayed()
         assertNull(doors.origin.value)
@@ -78,6 +78,28 @@ class DoorFlowTest {
         rule.waitForIdle()
         rule.onNodeWithText("Tour figure").assertIsDisplayed()
         assertNull(doors.origin.value)
+    }
+
+    @Test fun `system Back leaves no extra entry behind, so a second Back lands on the Tour, not the map`() {
+        show()
+        rule.onNodeWithText("NUMBERS").performClick()
+        rule.onNodeWithContentDescription("Open on the map: Numbers figure").performClick()
+        rule.waitForIdle()
+        rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForIdle()
+        rule.onNodeWithText("Numbers figure").assertIsDisplayed()
+        rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForIdle()
+        rule.onNodeWithText("Tour figure").assertIsDisplayed()
+    }
+
+    @Test fun `the replay is still the map, so switching to it keeps the stub`() {
+        show()
+        rule.onNodeWithContentDescription("Open on the map: Tour figure").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("REPLAY").performClick()
+        rule.waitForIdle()
+        assertEquals(Origin("Tour figure", Tab.TOUR), doors.origin.value)
     }
 
     @Test fun `leaving the map by the strip drops the stub`() {

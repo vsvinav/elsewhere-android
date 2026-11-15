@@ -70,7 +70,7 @@ class TourUiTest {
         assertEquals(Door.Place("tokyo", ui.tour.headline!!.start, "Tokyo"), d.headline)
         assertEquals(Door.Range(ui.tour.headline!!.start, ui.tour.headline!!.end, "1 night in Tokyo"), d.headlineStay)
         // The longest trip is a trip door, keyed the way the record will find it again.
-        assertEquals(Door.Trip(ui.facts.longestTrip!!.trip.doorId, "Longest trip · 7 nights"), d.longestTrip)
+        assertEquals(Door.Trip(ui.facts.longestTrip!!.trip.doorId, ui.facts.longestTrip!!.trip.start, ui.facts.longestTrip!!.trip.end, "Longest trip · 7 nights"), d.longestTrip)
         // Third places open on themselves; records on their day; years on the year.
         assertEquals(ui.facts.thirdPlaces.map { it.id }, d.thirdPlaces.map { (it as Door.Place).placeId })
         val longest = d.longestDay as Door.Range

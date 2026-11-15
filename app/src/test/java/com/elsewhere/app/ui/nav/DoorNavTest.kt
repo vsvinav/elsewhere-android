@@ -29,7 +29,8 @@ class DoorNavTest {
         nav.go(Door.Range(jan + 10 * D, jan + 20 * D, "11 days"), from = Tab.NUMBERS); run()
         assertEquals(Tab.MAP, nav.jump.value)
         assertEquals((jan + 10 * D)..(jan + 20 * D), store.range.value)
-        assertEquals(Opening(select = null, fit = null, range = (jan + 10 * D)..(jan + 20 * D)), nav.opening.value)
+        assertEquals(Opening(select = null, fit = null, range = (jan + 10 * D)..(jan + 20 * D)), nav.opening.value!!.copy(n = 0))
+        assertEquals(false, nav.opening.value!!.clearHidden)
         assertEquals(Origin("11 days", Tab.NUMBERS), nav.origin.value)
     }
 
@@ -38,24 +39,44 @@ class DoorNavTest {
         assertEquals(bounds, store.range.value)
     }
 
-    @Test fun `a trip door becomes the trip's window`() = runTest(dispatcher) {
-        nav.go(Door.Trip(trip.doorId, "7 nights"), from = Tab.TOUR); run()
+    @Test fun `a trip door becomes the trip's window and frames every pin inside it`() = runTest(dispatcher) {
+        nav.go(Door.Trip(trip.doorId, trip.start, trip.end, "7 nights"), from = Tab.TOUR); run()
         assertEquals(Tab.MAP, nav.jump.value)
         assertEquals(trip.start..trip.end, store.range.value)
+        assertEquals(Opening(select = null, fit = null, range = trip.start..trip.end), nav.opening.value!!.copy(n = 0))
         assertEquals(Origin("7 nights", Tab.TOUR), nav.origin.value)
     }
 
-    @Test fun `a trip door for a trip the record has not got goes nowhere`() = runTest(dispatcher) {
-        nav.go(Door.Trip("nope", "x"), from = Tab.TOUR); run()
-        assertNull(nav.jump.value); assertNull(nav.origin.value)
-        assertEquals(bounds, store.range.value)
+    @Test fun `each door is a fresh opening, so the map re-frames even for the same pins`() = runTest(dispatcher) {
+        val d = Door.Places(listOf("a"), "one")
+        nav.go(d, from = Tab.FACTS); run()
+        val first = nav.opening.value!!
+        nav.opened()
+        nav.go(d, from = Tab.MAP); run()
+        assertEquals(first.fit, nav.opening.value!!.fit)
+        assertEquals(true, nav.opening.value!!.n > first.n)
+    }
+
+    @Test fun `a door opened from the map keeps the first origin's way back`() = runTest(dispatcher) {
+        nav.go(Door.Places(listOf("a"), "first"), from = Tab.FACTS); run()
+        nav.go(Door.Places(listOf("b"), "second"), from = Tab.MAP); run()
+        assertEquals(Origin("second", Tab.FACTS), nav.origin.value)
+        nav.go(Door.Places(listOf("c"), "third"), from = Tab.REPLAY); run()
+        assertEquals(Origin("third", Tab.FACTS), nav.origin.value)
+    }
+
+    @Test fun `a door opened from the map with no way back goes back to the Tour`() = runTest(dispatcher) {
+        nav.go(Door.Places(listOf("a"), "x"), from = Tab.MAP); run()
+        assertEquals(Origin("x", Tab.TOUR), nav.origin.value)
+        nav.back()
+        assertEquals(Tab.TOUR, nav.jump.value)
     }
 
     @Test fun `a place door selects and frames the pin and leaves the window alone when the moment is inside it`() = runTest(dispatcher) {
         nav.go(Door.Place("cafe", at = jan + 100 * D, label = "Café"), from = Tab.FACTS); run()
         assertEquals(Tab.MAP, nav.jump.value)
         assertEquals(bounds, store.range.value)
-        assertEquals(Opening(select = "cafe", fit = listOf("cafe"), range = bounds), nav.opening.value)
+        assertEquals(Opening(select = "cafe", fit = listOf("cafe"), range = bounds), nav.opening.value!!.copy(n = 0))
     }
 
     @Test fun `a place door widens a window that misses its moment`() = runTest(dispatcher) {
@@ -66,7 +87,8 @@ class DoorNavTest {
 
     @Test fun `a places door frames the set and leaves the window alone`() = runTest(dispatcher) {
         nav.go(Door.Places(listOf("a", "b"), "2 bars"), from = Tab.FACTS); run()
-        assertEquals(Opening(select = null, fit = listOf("a", "b"), range = bounds), nav.opening.value)
+        assertEquals(Opening(select = null, fit = listOf("a", "b"), range = bounds), nav.opening.value!!.copy(n = 0))
+        assertEquals(true, nav.opening.value!!.clearHidden)
         assertEquals(Origin("2 bars", Tab.FACTS), nav.origin.value)
     }
 
@@ -92,6 +114,23 @@ class DoorNavTest {
         nav.pinChanged("cafe")
         assertEquals(Origin("Café", Tab.FACTS), nav.origin.value)
         nav.pinChanged("bar")
+        assertNull(nav.origin.value)
+    }
+
+    @Test fun `the origin survives closing the pin card or tapping empty map, and re-picking the same pin`() = runTest(dispatcher) {
+        nav.go(Door.Place("cafe", label = "Café"), from = Tab.FACTS); run()
+        nav.pinChanged(null)
+        assertEquals(Origin("Café", Tab.FACTS), nav.origin.value)
+        nav.go(Door.Place("cafe", label = "Café"), from = Tab.MAP); run()
+        nav.pinChanged("cafe")
+        assertEquals(Origin("Café", Tab.FACTS), nav.origin.value)
+    }
+
+    @Test fun `after a range door, opening any pin is the reader's own move`() = runTest(dispatcher) {
+        nav.go(Door.Range(jan, jan + D, "a day"), from = Tab.TOUR); run()
+        nav.pinChanged(null)
+        assertEquals(Origin("a day", Tab.TOUR), nav.origin.value)
+        nav.pinChanged("cafe")
         assertNull(nav.origin.value)
     }
 

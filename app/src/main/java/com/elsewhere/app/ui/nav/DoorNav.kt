@@ -16,9 +16,13 @@ import kotlin.math.min
 
 /**
  * What the Map tab applies when a door opens: the pin to select, the stops to frame (null frames every shown
- * pin), and the window the pins must have been cut to, so a stale pin set is never framed.
+ * pin), and the window the pins must have been cut to, so a stale pin set is never framed. A door that names
+ * pins also shows every kind of stop again, or its pins might be hidden. `n` counts doors, so the same door
+ * twice still re-frames.
  */
-data class Opening(val select: String?, val fit: List<String>?, val range: LongRange)
+data class Opening(val select: String?, val fit: List<String>?, val range: LongRange, val clearHidden: Boolean = fit != null, val n: Int = 0)
+
+private fun onMap(t: Tab) = t == Tab.MAP || t == Tab.REPLAY
 
 /**
  * Opens doors. A door moves the shared window, tells the map what to select and frame, asks the shell to
@@ -36,7 +40,9 @@ class DoorNav @Inject constructor(private val store: RangeStore, scope: Coroutin
     val jump: StateFlow<Tab?> = _jump
     /** The window and pin as the door left them; any other window or pin is the reader's own doing. */
     private var applied: LongRange? = null
-    private var doorPin: String? = null
+    /** The pin as the map last reported it; only a different, real pin counts as leaving the door. */
+    private var pin: String? = null
+    private var doors = 0
 
     init { store.range.onEach { r -> if (_origin.value != null && r != applied) dismiss() }.launchIn(scope) }
 
@@ -47,20 +53,23 @@ class DoorNav @Inject constructor(private val store: RangeStore, scope: Coroutin
         fun clamp(a: Long, b: Long) = max(bounds.first, a)..min(bounds.last, b)
         val range = when (door) {
             is Door.Range -> clamp(door.from, door.to)
-            is Door.Trip -> rec.trips.firstOrNull { it.doorId == door.tripId }?.let { clamp(it.start, it.end) } ?: return
+            is Door.Trip -> clamp(door.from, door.to)
             // The moment the figure names must be inside the window, or its pin would not be on the map.
             is Door.Place -> door.at?.takeIf { it !in cur }?.let { clamp(min(cur.first, midnight(it)), max(cur.last, midnight(it) + DAY - 1)) } ?: cur
             is Door.Places -> cur
         }
+        val n = ++doors
         val opening = when (door) {
-            is Door.Place -> Opening(door.placeId, listOf(door.placeId), range)
-            is Door.Places -> Opening(null, door.placeIds, range)
-            else -> Opening(null, null, range)
+            is Door.Place -> Opening(door.placeId, listOf(door.placeId), range, n = n)
+            is Door.Places -> Opening(null, door.placeIds, range, n = n)
+            else -> Opening(null, null, range, n = n)
         }
         // The window watcher must know this move is ours before it sees it.
         applied = range
-        doorPin = opening.select
-        _origin.value = Origin(door.label, from)
+        pin = opening.select
+        // A door opened from the map itself keeps the first way back; one with no way back returns to the Tour.
+        val prior = _origin.value
+        _origin.value = if (onMap(from) && prior != null) prior.copy(label = door.label) else Origin(door.label, if (onMap(from)) Tab.TOUR else from)
         _opening.value = opening
         store.range.value = range
         _jump.value = Tab.MAP
@@ -69,8 +78,8 @@ class DoorNav @Inject constructor(private val store: RangeStore, scope: Coroutin
     fun jumped() { _jump.value = null }
     fun opened() { _opening.value = null }
 
-    /** The pin the map now shows; any pin but the door's own closes the way back. */
-    fun pinChanged(id: String?) { if (_origin.value != null && id != doorPin) dismiss() }
+    /** The pin the map now shows. Picking a different pin closes the way back; closing the card or re-picking the same one does not. */
+    fun pinChanged(id: String?) { if (_origin.value != null && id != null && id != pin) dismiss(); pin = id }
 
     /** Back through the door: the shell is asked for the tab the reader came from, and the origin is forgotten. */
     fun back() { val o = _origin.value ?: return; dismiss(); _jump.value = o.backTab }
@@ -78,5 +87,5 @@ class DoorNav @Inject constructor(private val store: RangeStore, scope: Coroutin
     /** The reader left the map some other way; the tag would be stale when they return. */
     fun leave() = dismiss()
 
-    private fun dismiss() { _origin.value = null; _opening.value = null; applied = null; doorPin = null }
+    private fun dismiss() { _origin.value = null; _opening.value = null; applied = null }
 }

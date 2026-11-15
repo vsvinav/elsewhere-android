@@ -56,8 +56,8 @@ class MapViewModel @Inject constructor(private val range: RangeStore, maps: Maps
     /** The door the tab was opened through, if any, and what it asks the map to show. */
     val origin: StateFlow<Origin?> get() = doors.origin
     val opening: StateFlow<Opening?> get() = doors.opening
-    /** The door's own pin goes on without closing the way back. */
-    fun apply(o: Opening) = opts.update { it.copy(selected = o.select) }
+    /** The door's own pin goes on without closing the way back; a door onto pins shows every kind of stop again. */
+    fun apply(o: Opening) = opts.update { it.copy(selected = o.select, hidden = if (o.clearHidden) emptySet() else it.hidden) }
     fun opened() = doors.opened()
     fun back() = doors.back()
 }

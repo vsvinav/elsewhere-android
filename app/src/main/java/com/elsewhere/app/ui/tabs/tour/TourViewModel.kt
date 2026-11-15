@@ -68,7 +68,7 @@ class TourDoors(data: Record, facts: HomeFacts = homeFacts(data), t: Tour = tour
     val stops: List<Door> = t.stops.map { s -> cities.door(s.city, "${s.city} · ${s.nights} ${plural(s.nights, "night")}", Door.Range(s.first, s.last, s.city))!! }
     val headline: Door? = t.headline?.let { Door.Place(it.placeId, it.start, it.city) }
     val headlineStay: Door? = t.headline?.let { Door.Range(it.start, it.end, "${it.nights} ${plural(it.nights, "night")} in ${it.city}") }
-    val longestTrip: Door? = facts.longestTrip?.let { Door.Trip(it.trip.doorId, "Longest trip · ${it.trip.nights} nights") }
+    val longestTrip: Door? = facts.longestTrip?.let { Door.Trip(it.trip.doorId, it.trip.start, it.trip.end, "Longest trip · ${it.trip.nights} nights") }
     val nightsAway: Door = whole("${n0(t.nightsAway)} nights away")
     val nightsHome: Door = whole("${n0(t.nightsHome)} nights home")
     val trips: Door = whole("${facts.trips} ${plural(facts.trips, "trip")}")

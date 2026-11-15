@@ -24,7 +24,7 @@ class OriginTagTest {
         var backs = 0
         rule.setContent { ElsewhereTheme { OriginTag(Origin("42 countries", Tab.TOUR), onBack = { backs++ }) } }
         rule.onNodeWithText("FROM · 42 COUNTRIES").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Back to Tour: 42 countries").performClick()
+        rule.onNodeWithContentDescription("Back to Tour").performClick()
         assertEquals(1, backs)
     }
 

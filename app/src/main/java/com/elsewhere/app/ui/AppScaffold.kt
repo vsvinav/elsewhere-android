@@ -88,8 +88,8 @@ fun AppScaffold(
         // Returning home pops back to the live Tour entry so its view model and scroll survive.
         if (t == Tab.TOUR) { if (!nav.popBackStack(Tab.TOUR.route, inclusive = false)) nav.navigate(t.route) { launchSingleTop = true } }
         else nav.navigate(t.route) { popUpTo(Tab.TOUR.route); launchSingleTop = true }
-        // Leaving the map by the strip is not going back through a door.
-        if (t != Tab.MAP) shell.doors.leave()
+        // Leaving the map by the strip is not going back through a door; the replay is still the map.
+        if (t != Tab.MAP && t != Tab.REPLAY) shell.doors.leave()
     }
     val origin by shell.doors.origin.collectAsStateWithLifecycle()
     val jump by shell.doors.jump.collectAsStateWithLifecycle()
