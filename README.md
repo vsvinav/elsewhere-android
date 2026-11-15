@@ -2,7 +2,7 @@
 <p align="center"><strong>Your Google Maps Timeline, printed as a world-tour poster — natively on Android.</strong><br>
 Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same privacy rules as <a href="https://github.com/vsvinav/elsewhere">the web app</a>.</p>
 
-> **Status:** under construction, usable today. Tour, Numbers, Facts, Stops, Dates, Map and Flights are built; Replay is in progress; share cards and on-device recording come after. Install the latest APK from [Releases](https://github.com/vsvinav/elsewhere-android/releases).
+> **Status:** under construction, usable today. All eight tabs are built — Tour, Numbers, Facts, Stops, Dates, Map, Flights and Replay; place names, key verification, share cards and on-device recording come next. Install the latest APK from [Releases](https://github.com/vsvinav/elsewhere-android/releases).
 
 <p align="center">
 <img src="docs/screenshots/tour.png" width="180" alt="Tour: ADA'S ELSEWHERE headline, nights per city, dotted route map">
@@ -11,6 +11,7 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 <img src="docs/screenshots/dates.png" width="180" alt="Dates: nights away, trip legs, a route breakdown">
 <img src="docs/screenshots/map.png" width="180" alt="Map: category chips, search, a selected stop card and Fit pins">
 <img src="docs/screenshots/flights.png" width="180" alt="Flights: an orthographic globe with great-circle routes">
+<img src="docs/screenshots/replay.png" width="180" alt="Replay: the playhead moving through time with coloured trails per mode">
 </p>
 
 <details><summary>More screens</summary>
@@ -34,7 +35,7 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Tour · Numbers · Facts · Stops · Dates | ✅ |
 | Map (Google Maps, OpenStreetMap fallback, clusters, search) | ✅ |
 | Flights globe | ✅ |
-| Replay | 🔨 |
+| Replay | ✅ |
 | Place names and photos, share cards | ⏳ |
 | Recording new location on-device | ⏳ |
 
