@@ -42,6 +42,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.State
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
@@ -184,10 +186,10 @@ internal fun TicketBill(ui: RecordUi, actions: RecordActions) {
 /** The recording light: a red dot breathing once a second, still under reduced motion. */
 @Composable
 private fun PulseDot(modifier: Modifier = Modifier) {
-    val alpha = if (motionOn()) {
-        rememberInfiniteTransition(label = "rec").animateFloat(1f, 0.25f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "dot").value
-    } else 1f
-    Box(modifier.size(8.dp).graphicsLayer { this.alpha = alpha }.background(Poster.Red, CircleShape).semantics { contentDescription = "Recording" })
+    val alpha: State<Float> = if (motionOn()) {
+        rememberInfiniteTransition(label = "rec").animateFloat(1f, 0.25f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "dot")
+    } else rememberUpdatedState(1f)
+    Box(modifier.size(8.dp).graphicsLayer { this.alpha = alpha.value }.background(Poster.Red, CircleShape).semantics { contentDescription = "Recording" })
 }
 
 /**

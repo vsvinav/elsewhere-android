@@ -37,7 +37,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +93,11 @@ import com.elsewhere.app.map.PinSummary
 import com.elsewhere.app.map.SizeBy
 import com.elsewhere.app.map.Tap
 import com.elsewhere.app.record.NowStamp
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import com.elsewhere.app.ui.world.motionOn
 import com.elsewhere.app.map.clusterRadius
 import com.elsewhere.app.map.rememberMapHost
@@ -165,10 +172,7 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
 
     val live by vm.live.collectAsStateWithLifecycle()
     // One projection per camera frame, read by the stamp's layout alone: the rest of the chrome never recomposes for it.
-    val liveAt = produceState<Offset?>(null, host, live) {
-        val s = live ?: run { value = null; return@produceState }
-        host.camera.collect { value = host.project(s.lat, s.lng) }
-    }
+    val liveAt = produceState<Offset?>(null, host, live) { liveOffsets(host, live).collect { value = it } }
     val acts = MapActions(vm::toggle, vm::only, vm::showAll, vm::search, vm::select, vm::sizeBy, fit = { layers?.let { fit(it, opts) } }, seen = vm::seen, heat = vm::heat)
     MapScreen(
         layers, opts, acts, snackbar = snackbar, origin = origin, onBack = vm::back, live = live, liveAt = liveAt,
@@ -341,26 +345,36 @@ internal const val NOW_STAMP_TAG = "now-stamp"
 private val RING = 44.dp
 
 /**
+ * Where the stamp sits on screen: re-projected on every camera frame, and again when the host first has a
+ * projection (its viewport arrives), so a fix shows at its true place without waiting for the map to move.
+ */
+internal fun liveOffsets(host: MapHost, stamp: NowStamp?): Flow<Offset?> {
+    val s = stamp ?: return flowOf(null)
+    return merge(host.camera, host.viewport.filterNotNull()).map { host.project(s.lat, s.lng) }
+}
+
+/**
  * The red "you are here, now" over the last fix: a ring and a dot pulsing once every 1.2 s (still under reduced
- * motion), a tag below reading NOW · 14:02 · CAMBRIDGE and the fix's age. Sits at `at`, or the box centre until the
- * host has projected it; the position is read in layout, so a camera frame moves the mark without recomposing it.
+ * motion), a tag below reading NOW · 14:02 · CAMBRIDGE and the fix's age. Sits at `at`, and nowhere until the host
+ * has projected it; the position is read in layout and the pulse in draw, so neither frame recomposes the mark.
  */
 @Composable
-private fun NowStampMark(stamp: NowStamp, at: State<Offset?>, onTap: () -> Unit, modifier: Modifier = Modifier) {
-    val motion = motionOn()
-    val pulse = if (motion) {
+internal fun NowStampMark(stamp: NowStamp, at: State<Offset?>, onTap: () -> Unit, modifier: Modifier = Modifier, onComposed: (() -> Unit)? = null) {
+    if (onComposed != null) SideEffect(onComposed)
+    val pulse: State<Float> = if (motionOn()) {
         rememberInfiniteTransition(label = "now").animateFloat(
             1f, 1.25f, infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pulse",
-        ).value
-    } else 1f
-    val tag = "NOW · ${stamp.time} · ${stamp.city.uppercase()}"
+        )
+    } else rememberUpdatedState(1f)
+    val tag = remember(stamp) { "NOW · ${stamp.time} · ${stamp.city.uppercase()}" }
+    val age = remember(stamp) { stamp.age.uppercase() }
     Box(modifier) {
         Column(
             Modifier.layout { m, c ->
                 val p = m.measure(c.copy(minWidth = 0, minHeight = 0))
                 val ring = RING.roundToPx()
                 layout(c.maxWidth, c.maxHeight) {
-                    val o = at.value ?: Offset(c.maxWidth / 2f, c.maxHeight / 2f)
+                    val o = at.value ?: return@layout
                     p.place((o.x - p.width / 2f).roundToInt(), (o.y - ring / 2f).roundToInt())
                 }
             }.testTag(NOW_STAMP_TAG).semantics(mergeDescendants = true) { contentDescription = "Now · ${stamp.time} · ${stamp.city} · ${stamp.age}" }
@@ -369,8 +383,9 @@ private fun NowStampMark(stamp: NowStamp, at: State<Offset?>, onTap: () -> Unit,
         ) {
             Canvas(Modifier.size(RING)) {
                 val r = size.minDimension / 2
-                drawCircle(Poster.Red.copy(alpha = 0.18f), r * pulse, center)
-                drawCircle(Poster.Red, (r - 3.dp.toPx()) * pulse, center, style = Stroke(3.dp.toPx()))
+                val k = pulse.value
+                drawCircle(Poster.Red.copy(alpha = 0.18f), r * k, center)
+                drawCircle(Poster.Red, (r - 3.dp.toPx()) * k, center, style = Stroke(3.dp.toPx()))
                 drawCircle(Poster.Stock, 7.dp.toPx(), center)
                 drawCircle(Poster.Red, 5.dp.toPx(), center)
             }
@@ -381,7 +396,7 @@ private fun NowStampMark(stamp: NowStamp, at: State<Offset?>, onTap: () -> Unit,
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                stamp.age.uppercase(), color = Poster.Red, style = PosterType.Caps.copy(fontSize = 10.sp), softWrap = false,
+                age, color = Poster.Red, style = PosterType.Caps.copy(fontSize = 10.sp), softWrap = false,
                 modifier = Modifier.background(Poster.Stock.copy(alpha = 0.9f)).padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }

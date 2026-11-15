@@ -2,7 +2,9 @@ package com.elsewhere.app.record
 
 import com.elsewhere.app.data.CitiesLoader
 import com.elsewhere.app.ingest.record.CityResolver
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -49,7 +51,10 @@ class Live(
         /** The nearest listed city within [NOW_CITY_KM], over an index built on first use. */
         fun nearestCity(cities: CitiesLoader): suspend (Double, Double) -> String? {
             var resolver: CityResolver? = null
-            return { lat, lng -> (resolver ?: CityResolver(cities.get(), NOW_CITY_KM).also { resolver = it }).resolve(lat, lng).first }
+            // The index over every city is built, and walked, off the main thread the collector runs on.
+            return { lat, lng ->
+                withContext(Dispatchers.Default) { (resolver ?: CityResolver(cities.get(), NOW_CITY_KM).also { resolver = it }).resolve(lat, lng).first }
+            }
         }
     }
 }
