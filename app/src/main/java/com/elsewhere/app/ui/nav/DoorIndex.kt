@@ -26,4 +26,9 @@ fun dayDoor(ts: Long, label: String): Door.Range { val d = Math.floorDiv(ts, DAY
 fun dayDoor(iso: String, label: String): Door.Range = dayDoor(LocalDate.parse(iso).toEpochDay() * DAY_S, label)
 fun yearDoor(year: Int, label: String = "$year"): Door.Range =
     Door.Range(LocalDate.of(year, 1, 1).atStartOfDay(ZoneOffset.UTC).toEpochSecond(), LocalDate.of(year + 1, 1, 1).atStartOfDay(ZoneOffset.UTC).toEpochSecond() - 1, label)
+/** A `YYYY-MM` month key as a window. */
+fun monthDoor(key: String, label: String): Door.Range {
+    val m = LocalDate.parse("$key-01")
+    return Door.Range(m.atStartOfDay(ZoneOffset.UTC).toEpochSecond(), m.plusMonths(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond() - 1, label)
+}
 fun rangeDoor(r: LongRange, label: String): Door.Range = Door.Range(r.first, r.last, label)
