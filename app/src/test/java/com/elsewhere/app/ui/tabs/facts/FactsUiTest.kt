@@ -30,4 +30,10 @@ class FactsUiTest {
         assertEquals(Units.KM, ui.units)
         assertTrue(ui.kinds.isNotEmpty())
     }
+
+    @Test fun `the lede counts the days of the chosen range, not the whole record`() {
+        val raw = SampleRecord.record
+        val week = raw.copy(meta = raw.meta.copy(range = raw.meta.range.first..(raw.meta.range.first + 7 * 86400)))
+        assertEquals(7, factsUi(week, raw, SampleRecord.profile).days)
+    }
 }

@@ -67,6 +67,7 @@ import com.elsewhere.app.analytics.tilt
 import com.elsewhere.app.analytics.todaysFact
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ui.tabs.highlights.OpenDoor
+import com.elsewhere.app.ui.tabs.highlights.dayMonth
 import com.elsewhere.app.ui.tabs.highlights.headline
 import com.elsewhere.app.ui.world.CapsText
 import com.elsewhere.app.ui.world.Field
@@ -238,7 +239,7 @@ internal fun HubDeck(
                         Headline(highlight.city)
                         Body("${dmy(highlight.date)} — you ${highlight.verb.text} ${highlight.city}.")
                         Spacer(Modifier.height(12.dp))
-                        CapsText(headline(highlight), size = 10.sp)
+                        CapsText(if (day is HighlightState.Short) "Your record starts ${dayMonth(day.starts)} — meanwhile, here's your farthest day so far." else headline(highlight), size = 10.sp)
                     } else {
                         Headline("Quiet day")
                         val near = (day as? HighlightState.Quiet)?.nearest

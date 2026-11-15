@@ -38,12 +38,11 @@ fun streaks(data: Record): Streaks {
     if (data.visits.isEmpty() && data.daily.isEmpty()) return Streaks(null, null, 0)
     val nights = if (data.visits.isEmpty()) emptyList() else bedStrip(data)
     val away = longestRun(nights, ::isAway)
+    // Nights the record has not reached yet are skipped at the tail; a gap inside the run ends it.
+    var i = nights.lastIndex
+    while (i >= 0 && nights[i].kind == NightKind.NONE) i--
     var current = 0
-    for (i in nights.indices.reversed()) {
-        if (nights[i].kind == NightKind.NONE) continue
-        if (!isAway(nights[i])) break
-        current++
-    }
+    while (i >= 0 && isAway(nights[i])) { current++; i-- }
     // Daily rows come in date order; distinct weeks with a new place, then the longest chain of adjacent ones.
     var newWeeks: Run? = null
     var w0 = 0L; var w1 = 0L; var open = false

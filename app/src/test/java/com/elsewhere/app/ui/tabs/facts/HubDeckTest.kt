@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -42,6 +43,15 @@ class HubDeckTest {
 
     private fun deck(page: Int = 0) = rule.setContent {
         ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { HubDeck(ui, ui.hub!!, onOpen = { r, _, ids -> opened.add(r to ids) }, onOpenKind = { kinds.add(it) }, onOpenPassport = { passport++ }, page = page) } }
+    }
+
+    @Test fun aRecordUnderAYearOldShowsItsFarthestDayWithoutClaimingItHappenedOnThisDay() {
+        val short = data.copy(meta = data.meta.copy(range = OnThisDay.at(2023, 11, 11, 8)..OnThisDay.at(2024, 5, 1)))
+        val shortUi = factsUi(short, short, null, today = "2024-04-10")
+        rule.setContent { ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { HubDeck(shortUi, shortUi.hub!!, onOpen = { _, _, _ -> }, onOpenKind = {}, onOpenPassport = {}, page = 1) } } }
+        rule.onNodeWithText("landed in Paris", substring = true).assertExists()
+        rule.onNodeWithText("YOUR RECORD STARTS 11 NOVEMBER", substring = true).assertExists()
+        rule.onAllNodesWithText("ON THIS DAY, EARLIER THIS YEAR", substring = true).assertCountEquals(0)
     }
 
     @Test fun dealsSixCardsInOrderWithTheFirstInFront() {

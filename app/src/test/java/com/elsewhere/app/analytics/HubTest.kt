@@ -59,6 +59,17 @@ class HubTest {
         assertEquals(2, s.current)
     }
 
+    @Test fun `streaks - a night with no record inside a run ends it, so the current streak never beats the longest`() {
+        // Paris for three nights (new), one night unaccounted for, then two more in Paris (repeat) to the end.
+        val gap = data.copy(
+            visits = listOf(v(at(2024, 1, 1, 12), at(2024, 1, 4, 12), "paris", 48.85, 2.35), v(at(2024, 1, 5, 12), at(2024, 1, 7, 12), "paris", 48.85, 2.35)),
+            meta = data.meta.copy(range = at(2024, 1, 1)..at(2024, 1, 7, 12)),
+        )
+        val s = streaks(gap)
+        assertEquals(Run("2024-01-02", "2024-01-04", 3), s.away)
+        assertEquals(2, s.current)
+    }
+
     @Test fun `streaks - a record that ends at home has no current streak`() {
         val home = data.copy(visits = data.visits.take(4), meta = data.meta.copy(range = at(2024, 1, 1)..at(2024, 1, 9, 12)))
         assertEquals(0, streaks(home).current)
