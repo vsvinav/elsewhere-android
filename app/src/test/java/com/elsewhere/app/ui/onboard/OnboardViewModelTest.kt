@@ -8,7 +8,11 @@ import com.elsewhere.app.data.ImportReport
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.data.Place
+import com.elsewhere.app.ingest.PlaceNamer
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -91,6 +95,60 @@ class OnboardViewModelTest {
         assertEquals("Mary St, Bouldin Creek", austin.address)
         assertTrue(namer.asked.isEmpty())
         assertEquals(listOf(30.27 to -97.74), geo.asked)
+    }
+
+    @Test fun `verifying a key after import names the cards that still only say a city`() = runTest(dispatcher) {
+        val (vm, _, _) = imported()
+        assertEquals("Austin", vm.state.value.sleep[1].label)
+        assertEquals("Mary St, Bouldin Creek", vm.state.value.sleep[1].address)
+        assertEquals(false, vm.state.value.asking)
+        vm.saveKey("AIza-key", ""); run()
+        val austin = vm.state.value.sleep[1]
+        assertEquals("Barton Hills Bungalow", austin.label)
+        assertTrue(austin.named)
+        assertEquals(listOf(listOf("austin")), namer.asked)
+        assertEquals(false, vm.state.value.asking)
+    }
+
+    @Test fun `asking is up while a naming run is in flight`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val slow = object : PlaceNamer {
+            override val progress = MutableStateFlow<com.elsewhere.app.ingest.Progress?>(null)
+            override suspend fun name(ids: List<String>, all: Map<String, Place>, key: String): String? { gate.await(); return "Barton Hills Bungalow" }
+        }
+        val store = Fakes.Store(record()); val maps = Fakes.Maps()
+        maps.cur.value = Settings(mapsKey = "k", keyPlaces = true, keyTiles = true)
+        store.hasImport.value = true
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), slow, geo)
+        vm.start(Step.Name); run()
+        assertEquals(true, vm.state.value.asking)
+        assertEquals("Austin", vm.state.value.sleep[1].label)
+        gate.complete(Unit); run()
+        assertEquals(false, vm.state.value.asking)
+        assertEquals("Barton Hills Bungalow", vm.state.value.sleep[1].label)
+    }
+
+    @Test fun `when Places has no name for a card, it falls back to the Nominatim street`() = runTest(dispatcher) {
+        val store = Fakes.Store(record()); val maps = Fakes.Maps()
+        maps.cur.value = Settings(mapsKey = "k", keyPlaces = true, keyTiles = true)
+        store.hasImport.value = true
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), Fakes.Namer(), geo)
+        vm.start(Step.Name); run()
+        val austin = vm.state.value.sleep[1]
+        assertEquals("Austin", austin.label)
+        assertEquals("Mary St, Bouldin Creek", austin.address)
+        assertEquals(listOf(30.27 to -97.74), geo.asked)
+    }
+
+    @Test fun `settings that keep the same key and verdict do not name again`() = runTest(dispatcher) {
+        val (vm, _, maps) = imported()
+        vm.saveKey("AIza-key", ""); run()
+        assertEquals(1, namer.asked.size); assertEquals(1, geo.asked.size)
+        maps.cur.value = maps.cur.value.copy(mapId = "m", keyCheckedAt = 99); run()
+        maps.cur.value = maps.cur.value.copy(mapsKey = "", keyPlaces = false); run()
+        assertEquals(1, namer.asked.size)
+        assertEquals(1, geo.asked.size) // the Austin card already carries its street
+        assertEquals("Barton Hills Bungalow", vm.state.value.sleep[1].label)
     }
 
     @Test fun `a saved key is checked, remembered and continues to the name`() = runTest(dispatcher) {
