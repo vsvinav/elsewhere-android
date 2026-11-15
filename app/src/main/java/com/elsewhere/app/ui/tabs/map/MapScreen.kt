@@ -41,8 +41,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -71,8 +69,9 @@ import com.elsewhere.app.data.Role as PlaceRole
 import com.elsewhere.app.map.Cam
 import com.elsewhere.app.map.ClusterPin
 import com.elsewhere.app.map.Dot
-import com.elsewhere.app.map.HEAT_RADIUS_PX
 import com.elsewhere.app.map.HEAT_STOPS
+import com.elsewhere.app.map.HeatCache
+import com.elsewhere.app.map.HeatKey
 import com.elsewhere.app.map.LABEL_PX
 import com.elsewhere.app.map.MapHost
 import com.elsewhere.app.map.Pin
@@ -82,9 +81,6 @@ import com.elsewhere.app.map.PinSummary
 import com.elsewhere.app.map.SizeBy
 import com.elsewhere.app.map.Tap
 import com.elsewhere.app.map.clusterRadius
-import com.elsewhere.app.map.heatBitmap
-import com.elsewhere.app.map.heatGrid
-import com.elsewhere.app.map.heatWeight
 import com.elsewhere.app.map.rememberMapHost
 import com.elsewhere.app.map.summary
 import com.elsewhere.app.ui.world.InkButton
@@ -319,7 +315,7 @@ private fun PinCanvas(host: MapHost, layers: PinLayers, opts: PinOpts, modifier:
         val k = scene.k; val d = density
         if (opts.heat) {
             val w = size.width.toInt(); val h = size.height.toInt()
-            heat.image(HeatKey(cam, layers.shown(opts), w, h), d) { lat, lng -> host.project(lat, lng) }?.let { img ->
+            heat.image(HeatKey(cam, layers.shown(opts), w, h), d)?.let { img ->
                 drawImage(img, dstSize = IntSize(w, h), filterQuality = FilterQuality.Low)
             }
         }
@@ -360,34 +356,6 @@ private fun PinCanvas(host: MapHost, layers: PinLayers, opts: PinOpts, modifier:
 }
 
 private fun Dot.color() = Color(android.graphics.Color.parseColor(ink))
-
-private const val HEAT_CELL_PX = 8
-
-/** What the heat bitmap depends on: the view and the stops in it. Same key, same picture; the shown list is the layer's own cached instance, so identity is enough. */
-private class HeatKey(val cam: Cam, val dots: List<Dot>, val w: Int, val h: Int) {
-    override fun equals(other: Any?) = other is HeatKey && other.cam == cam && other.dots === dots && other.w == w && other.h == h
-    override fun hashCode() = cam.hashCode() * 31 + System.identityHashCode(dots)
-}
-
-/**
- * The heat bitmap for the last key, regridded only when the camera, the filter or the view size change: a pan
- * costs one splat per frame of movement, a redraw of labels or the open pin none.
- */
-private class HeatCache {
-    private var key: HeatKey? = null
-    private var image: ImageBitmap? = null
-
-    fun image(k: HeatKey, density: Float, project: (Double, Double) -> Offset?): ImageBitmap? {
-        if (k.w <= 0 || k.h <= 0) return null
-        if (k == key) return image
-        val pts = ArrayList<Offset>(k.dots.size); val wts = DoubleArray(k.dots.size); var n = 0
-        for (dot in k.dots) { val o = project(dot.lat, dot.lng) ?: continue; pts.add(o); wts[n++] = heatWeight(dot) }
-        val cols = maxOf(1, k.w / HEAT_CELL_PX); val rows = maxOf(1, k.h / HEAT_CELL_PX)
-        val grid = heatGrid(pts, wts, k.w, k.h, HEAT_CELL_PX, HEAT_RADIUS_PX * density)
-        key = k; image = heatBitmap(grid, cols, rows).asImageBitmap()
-        return image
-    }
-}
 
 /** The web's SVG markers in a 32-unit box: a teardrop with its tip at (16, 32) and a house centred on (16, 16). */
 private class PinShapes {
