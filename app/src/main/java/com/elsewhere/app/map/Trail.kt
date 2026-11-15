@@ -83,38 +83,47 @@ class Trail(val path: List<LatLng>, val ts: DoubleArray, val lens: Lens, val gue
     val t1: Double get() = ts[ts.size - 1]
 }
 
+/** Trails in record order, with the longest span kept so a window search knows how far back an enclosing leg can start. */
+class Trails(private val list: List<Trail>) : List<Trail> by list {
+    val maxSpan: Double = list.maxOfOrNull { it.t1 - it.t0 } ?: 0.0
+}
+
 /** Where the drawn trail's head is: the marker is placed from the same thinned points the canvas draws, so it never leads or trails the line. */
 data class TrailHead(val lat: Double, val lng: Double, val heading: Double)
 
 /** The record's trails, thinned per zoom and filtered per lens, cached so a frame costs lookups, not geometry. */
 class ReplayTrails(data: Record) {
-    val all: List<Trail> = legsOf(data).map { l: Leg -> Trail(l.path, l.ts, l.lens, l.guessed) }
-    private val byLens = HashMap<Lens, List<Trail>>()
-    private val simp = HashMap<String, List<Trail>>()
+    val all = Trails(legsOf(data).map { l: Leg -> Trail(l.path, l.ts, l.lens, l.guessed) })
+    private val byLens = HashMap<Lens, Trails>()
+    private val simp = HashMap<String, Trails>()
 
-    fun of(lens: Lens): List<Trail> = byLens.getOrPut(lens) { if (lens == Lens.ALL) all else all.filter { it.lens == lens } }
+    fun of(lens: Lens): Trails = byLens.getOrPut(lens) { if (lens == Lens.ALL) all else Trails(all.filter { it.lens == lens }) }
 
     /** Trails thinned to ~1.5 px at a whole-number zoom: GPS jitter is never drawn, and the canvas gets a fraction of the points when zoomed out. */
-    fun simplified(lens: Lens, zoom: Double): List<Trail> {
+    fun simplified(lens: Lens, zoom: Double): Trails {
         val zb = max(2, min(16, zoom.roundToInt()))
         return simp.getOrPut("${lens.key}:$zb") {
             val tol = degPerPx(zb) * 1.5
-            of(lens).map { t ->
+            Trails(of(lens).map { t ->
                 if (t.path.size <= 2) return@map t
                 val idx = simplifyIdx(t.path, tol)
                 if (idx.size == t.path.size) t else Trail(idx.map { t.path[it] }, DoubleArray(idx.size) { t.ts[idx[it]] }, t.lens, t.guessed)
-            }
+            })
         }
     }
 }
 
-/** Trails alive anywhere in [from, to], found by binary search on start since legs come in record order. */
-fun activeTrails(trails: List<Trail>, from: Double, to: Double): List<Trail> {
+/**
+ * Trails alive anywhere in [from, to]: binary search on start, then back past every leg that could still reach the
+ * window given the longest span, since exports do hold a walk inside a drive and the walk starts later.
+ */
+fun activeTrails(trails: Trails, from: Double, to: Double): List<Trail> {
     var lo = 0; var hi = trails.size
     while (lo < hi) { val m = (lo + hi) ushr 1; if (trails[m].t0 <= to) lo = m + 1 else hi = m }
     val out = ArrayList<Trail>()
+    val floor = from - trails.maxSpan
     var i = lo - 1
-    while (i >= 0 && trails[i].t1 >= from) { out.add(trails[i]); i-- }
+    while (i >= 0 && trails[i].t0 >= floor) { if (trails[i].t1 >= from) out.add(trails[i]); i-- }
     out.reverse()
     return out
 }

@@ -5,6 +5,8 @@ import com.elsewhere.app.Fx.H
 import com.elsewhere.app.Fx.act
 import com.elsewhere.app.Fx.visit
 import com.elsewhere.app.data.LatLng
+import com.elsewhere.app.data.Path
+import com.elsewhere.app.data.Pt
 import com.elsewhere.app.data.Role
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -43,6 +45,35 @@ class TrailTest {
         val head = trailHead(trails, H / 2.0)!!
         assertEquals(0.5, head.lng, 1e-9); assertEquals(90.0, head.heading, 1e-6)
         assertNull(trailHead(trails, 1.5 * H))
+    }
+
+    @Test fun `a long leg still draws while a short one inside it is the latest to start`() {
+        // A = [0, 100 h] encloses B = [10 h, 20 h]; a window at 50..60 h must still find A.
+        val data = Fx.record(activities = listOf(act(0, 100 * H, "IN_PASSENGER_VEHICLE", 1000.0), act(10 * H, 20 * H, "WALKING", 100.0)))
+        val trails = ReplayTrails(data).all
+        assertEquals(listOf(0.0), activeTrails(trails, 50.0 * H, 60.0 * H).map { it.t0 })
+        assertEquals(2, activeTrails(trails, 15.0 * H, 16.0 * H).size)
+    }
+
+    @Test fun `a traced leg is drawn once and an untraced flight gets a synthetic arc`() {
+        val data = Fx.record(
+            activities = listOf(act(0, 100, "IN_PASSENGER_VEHICLE", 1000.0, 0.0, 0.0, 2.0, 0.0), act(200, 300, "FLYING", 500_000.0, 0.0, 0.0, 5.0, 5.0)),
+            paths = listOf(Path(0, 100, listOf(Pt(0.0, 0.0, 0), Pt(1.0, 1.0, 50), Pt(2.0, 0.0, 100)))),
+        )
+        val trails = ReplayTrails(data).all
+        assertEquals(2, trails.size)
+        assertEquals(listOf(LatLng(0.0, 0.0), LatLng(1.0, 1.0), LatLng(0.0, 2.0)), trails[0].path); assertFalse(trails[0].guessed)
+        assertTrue(trails[1].path.size > 2); assertFalse(trails[1].guessed)
+        assertEquals(LatLng(0.0, 0.0), trails[1].path.first())
+        assertEquals(5.0, trails[1].path.last().lat, 1e-9); assertEquals(5.0, trails[1].path.last().lng, 1e-9)
+    }
+
+    @Test fun `wake is sixteen screen seconds, jitter collapses, and zooming in tightens the tolerance`() {
+        assertEquals(16 * 3600.0, wakeLength(3600.0), 1e-9)
+        val rnd = java.util.Random(7)
+        val jitter = List(50) { i -> LatLng((rnd.nextDouble() - 0.5) * 1e-5, i / 10.0) }
+        assertEquals(listOf(0, 49), simplifyIdx(jitter, 1e-3).toList())
+        assertTrue(degPerPx(14) < degPerPx(6) / 200)
     }
 
     @Test fun `arrivals print once per visit, skip home, and peel off after the TTL`() {
