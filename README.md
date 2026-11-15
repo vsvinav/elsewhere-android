@@ -2,7 +2,7 @@
 <p align="center"><strong>Your Google Maps Timeline, printed as a world-tour poster — natively on Android.</strong><br>
 Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same privacy rules as <a href="https://github.com/vsvinav/elsewhere">the web app</a>.</p>
 
-> **Status:** under construction, usable today. All eight tabs are built — Tour, Numbers, Facts, Stops, Dates, Map, Flights and Replay; place names, key verification, share cards and on-device recording come next. Install the latest APK from [Releases](https://github.com/vsvinav/elsewhere-android/releases).
+> **Status:** under construction, usable today. All eight tabs are built — Tour, Numbers, Facts, Stops, Dates, Map, Flights and Replay; share cards and on-device recording come next. Install the latest APK from [Releases](https://github.com/vsvinav/elsewhere-android/releases).
 
 <p align="center">
 <img src="docs/screenshots/tour.png" width="180" alt="Tour: ADA'S ELSEWHERE headline, nights per city, dotted route map">
@@ -22,6 +22,8 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 <img src="docs/screenshots/calendar.png" width="180" alt="Calendar sheet for picking a range">
 <img src="docs/screenshots/rangebar.png" width="180" alt="Range bar with presets">
 <img src="docs/screenshots/flights-ledger.png" width="180" alt="Flights: the route ledger">
+<img src="docs/screenshots/key-refused.png" width="180" alt="Onboarding: a refused Google key, with Google's message, a hint and the limited-maps acknowledgement">
+<img src="docs/screenshots/home-naming.png" width="180" alt="Onboarding: home candidates being named, with the naming stamp">
 </p>
 <p align="center"><sub>Rendered by the app's own screenshot tests from a synthetic record, so no real trips are shown.</sub></p>
 </details>
@@ -36,7 +38,8 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Map (Google map tiles, OpenStreetMap fallback, clusters, search) | ✅ |
 | Flights globe | ✅ |
 | Replay | ✅ |
-| Place names and photos, share cards | ⏳ |
+| Key verification · place names and photos | ✅ |
+| Share cards | ⏳ |
 | Recording new location on-device | ⏳ |
 
 ## What you get
