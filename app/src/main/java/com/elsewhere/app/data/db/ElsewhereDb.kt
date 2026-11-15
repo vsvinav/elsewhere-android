@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [VisitEntity::class, ActivityEntity::class, PathEntity::class, RawFixEntity::class, MemoryEntity::class,
         FrequentPlaceEntity::class, PlaceEnrichmentEntity::class, ImportMetaEntity::class],
-    version = 2, exportSchema = false,
+    version = 2, exportSchema = true,
 )
 abstract class ElsewhereDb : RoomDatabase() {
     abstract fun visits(): VisitDao

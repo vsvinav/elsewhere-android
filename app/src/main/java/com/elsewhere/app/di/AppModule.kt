@@ -47,7 +47,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
     @Provides @Singleton fun db(@ApplicationContext ctx: Context): ElsewhereDb =
-        Room.databaseBuilder(ctx, ElsewhereDb::class.java, "elsewhere.db").addMigrations(*MIGRATIONS).fallbackToDestructiveMigration().build()
+        Room.databaseBuilder(ctx, ElsewhereDb::class.java, "elsewhere.db").addMigrations(*MIGRATIONS).build()
 
     @Provides @Singleton fun dataStore(@ApplicationContext ctx: Context): DataStore<Preferences> =
         PreferenceDataStoreFactory.create { ctx.preferencesDataStoreFile("settings") }

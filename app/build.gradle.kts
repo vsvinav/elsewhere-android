@@ -27,6 +27,8 @@ android {
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui); implementation(libs.compose.foundation); implementation(libs.compose.material3)
