@@ -67,6 +67,25 @@ class SegmenterTest {
         assertEquals(t0 + 10 * 60, (out.single() as Emission.Visit).visit.end)
     }
 
+    @Test fun `a stay is confirmed by heartbeat fixes only`() {
+        // One good fix on arrival, then eight hours of coarse fixes that all contain the spot.
+        val s = seg()
+        s.feed(fix(t0, home))
+        for (i in 1..160) s.feed(fix(t0 + i * 180, home, acc = 900f, dLat = 0.002))
+        val out = s.feed(fix(t0 + 8 * 3600 + 60, shop))
+        val v = (out.single() as Emission.Visit).visit
+        assertEquals(t0, v.start); assertEquals(t0 + 160 * 180, v.end)
+        // The centroid stayed where the good fix put it.
+        assertTrue(abs(v.lat - home.first) < 1e-6)
+    }
+
+    @Test fun `a coarse fix far from the stay is still ignored`() {
+        val s = seg()
+        for (i in 0..10) s.feed(fix(t0 + i * 60, home))
+        assertTrue(s.feed(fix(t0 + 11 * 60, home, acc = 150f, dLat = 0.01)).isEmpty())
+        assertEquals(t0 + 10 * 60, s.state.stay!!.lastTs)
+    }
+
     @Test fun `GPS jitter inside the radius keeps one visit`() {
         val s = seg()
         val out = ArrayList<Emission>()

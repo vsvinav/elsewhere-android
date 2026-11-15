@@ -119,12 +119,15 @@ class RecordService : Service() {
         }
     }
 
-    /** Balanced power while moving; a slow, undistanced low-power request while still so stays keep getting fixes. */
+    /**
+     * Balanced power throughout: low power would hand back kilometre-wide fixes the segmenter can't place.
+     * While still the request is slower and undistanced, so a stay keeps receiving heartbeats.
+     */
     @Suppress("MissingPermission")
     private fun request(still: Boolean) {
         fused.removeLocationUpdates(callback)
         val req = if (still) {
-            LocationRequest.Builder(Priority.PRIORITY_LOW_POWER, 5 * 60_000L).setMinUpdateIntervalMillis(2 * 60_000L).build()
+            LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 3 * 60_000L).setMinUpdateIntervalMillis(90_000L).build()
         } else {
             LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 60_000L).setMinUpdateIntervalMillis(20_000L).setMinUpdateDistanceMeters(30f).build()
         }
