@@ -36,6 +36,14 @@ class KeyGateViewModelTest {
         assertFalse(keyGated(Settings(mapsKey = "k", limitedAccepted = true)))
     }
 
+    @Test fun `on a build with the Maps SDK, a key that only passed Places is good enough`() {
+        val placesOnly = Settings(mapsKey = "k", keyPlaces = true, keyTiles = false, keyCheckedAt = 5)
+        assertFalse(keyGated(placesOnly, sdk = true))
+        assertTrue(keyGated(placesOnly, sdk = false))
+        assertTrue(keyGated(Settings(mapsKey = "k", keyPlaces = false, keyTiles = true, keyCheckedAt = 5), sdk = true))
+        assertTrue(keyGated(Settings(mapsKey = "k"), sdk = true))
+    }
+
     @Test fun `an older install's unchecked key is checked once on arrival and the gate lifts on acceptance`() {
         val maps = Fakes.Maps().apply { cur.value = Settings(mapsKey = "AIza-old", keyCheckedAt = 0) }
         val checker = Fakes.Checker()

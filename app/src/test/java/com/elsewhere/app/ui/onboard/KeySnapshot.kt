@@ -23,13 +23,26 @@ class KeySnapshot {
         override fun acceptLimited() {}
     }
 
-    private fun shoot(state: OnboardState) = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { KeyScreen(state, NoOp, onCancel = null) } }
+    private fun shoot(state: OnboardState, sdk: Boolean = false) = paparazzi.snapshot {
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { KeyScreen(state, NoOp, onCancel = null, sdk = sdk) } }
     }
 
     @Test fun checking() = shoot(OnboardState(step = Step.Key, key = "AIzaSyExample", keyPhase = KeyPhase.Checking))
 
     @Test fun accepted() = shoot(OnboardState(step = Step.Key, key = "AIzaSyExample", keyPhase = KeyPhase.Result, keyReport = KeyReport(Probe.Ok, Probe.Ok)))
+
+    /** With the Maps SDK built in, Map Tiles is marked not needed rather than failed, and only the Places refusal is explained. */
+    @Test fun refusedWithSdk() = shoot(
+        OnboardState(
+            step = Step.Key, key = "AIzaSyExample", keyPhase = KeyPhase.Result,
+            keyReport = KeyReport(
+                Probe.Failed("API key not valid. Please pass a valid API key.", "INVALID_ARGUMENT", "The key was typed wrong or deleted."),
+                Probe.Failed("Map Tiles API has not been used in project 1234 before or it is disabled.", "PERMISSION_DENIED", "Enable the Map Tiles API in Google Cloud → APIs & Services → Library."),
+                sdk = true,
+            ),
+        ),
+        sdk = true,
+    )
 
     @Test fun refused() = shoot(
         OnboardState(
