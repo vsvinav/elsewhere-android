@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.analytics.Cat
 import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.Settings
+import com.elsewhere.app.data.noteGoogleFailed
+import com.elsewhere.app.data.noteGoogleLoaded
 import com.elsewhere.app.map.PinLayers
 import com.elsewhere.app.map.PinOpts
 import com.elsewhere.app.map.SizeBy
@@ -15,7 +17,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -45,18 +46,6 @@ class MapViewModel @Inject constructor(range: RangeStore, private val maps: Maps
     fun select(id: String?) = opts.update { it.copy(selected = id) }
     fun sizeBy(s: SizeBy) = opts.update { it.copy(sizeBy = s) }
 
-    /** One failed session could be the network; two on the same key and the key is taken as refused. */
-    fun googleFailed() {
-        viewModelScope.launch {
-            val s = maps.settings.first(); val n = s.googleFailures + 1
-            maps.saveSettings(s.copy(googleFailures = n, googleRejected = s.googleRejected || n >= REJECT_AFTER))
-        }
-    }
-
-    /** A session that loads wipes the slate, so "two failures" means two in a row, not two ever. */
-    fun googleLoaded() {
-        viewModelScope.launch { val s = maps.settings.first(); if (s.googleFailures != 0) maps.saveSettings(s.copy(googleFailures = 0)) }
-    }
-
-    private companion object { const val REJECT_AFTER = 2 }
+    fun googleFailed() { viewModelScope.launch { maps.noteGoogleFailed() } }
+    fun googleLoaded() { viewModelScope.launch { maps.noteGoogleLoaded() } }
 }
