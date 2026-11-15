@@ -50,8 +50,8 @@ private enum class Picking { FROM, TO }
 
 /** The section each ticket opens on. */
 @Composable
-fun TabContent(tab: Tab, go: (Tab) -> Unit) = when (tab) {
-    Tab.TOUR -> TourTab(onGo = go)
+fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}) = when (tab) {
+    Tab.TOUR -> TourTab(onGo = go, onRecord = onRecord)
     Tab.NUMBERS -> NumbersTab()
     Tab.FACTS -> FactsTab()
     Tab.STOPS -> StopsTab()
@@ -67,9 +67,9 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit) = when (tab) {
  */
 @Composable
 fun AppScaffold(
-    onChangeAnswers: () -> Unit, onMapsKey: () -> Unit,
+    onChangeAnswers: () -> Unit, onMapsKey: () -> Unit, onRecord: () -> Unit = {},
     shell: ShellViewModel = hiltViewModel(), rangeVm: RangeViewModel = hiltViewModel(),
-    content: @Composable (tab: Tab, go: (Tab) -> Unit) -> Unit = { t, g -> TabContent(t, g) },
+    content: @Composable (tab: Tab, go: (Tab) -> Unit) -> Unit = { t, g -> TabContent(t, g, onRecord) },
 ) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -99,7 +99,7 @@ fun AppScaffold(
         topBar = {
             Masthead(
                 name = profile?.name, units = profile?.units ?: Units.KM, counters = counters,
-                onHome = { go(Tab.TOUR) }, onChangeAnswers = onChangeAnswers, onMapsKey = onMapsKey,
+                onHome = { go(Tab.TOUR) }, onChangeAnswers = onChangeAnswers, onMapsKey = onMapsKey, onRecord = onRecord,
                 onToggleUnits = shell::toggleUnits, onStartOver = shell::reset,
             )
         },

@@ -9,12 +9,25 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** The recorder as the screen sees it; `RecordController` is the real one, tests use a fake. */
+interface RecordControl {
+    val recording: Flow<Recording>
+    suspend fun start()
+    suspend fun stop()
+    suspend fun pause(seconds: Long = 24 * 3600)
+    suspend fun stats(): RecordStats
+}
+
 /** Start, stop and pause recording: the settings are the truth, the service and worker follow them. */
 @Singleton
-class RecordController @Inject constructor(@ApplicationContext private val ctx: Context, private val settings: SettingsStore) {
-    val recording: Flow<Recording> get() = settings.recording
+class RecordController @Inject constructor(
+    @ApplicationContext private val ctx: Context, private val settings: SettingsStore, private val recorder: Recorder,
+) : RecordControl {
+    override val recording: Flow<Recording> get() = settings.recording
 
-    suspend fun start() {
+    override suspend fun stats() = recorder.stats()
+
+    override suspend fun start() {
         val cur = settings.recording.first()
         val now = System.currentTimeMillis() / 1000
         settings.saveRecording(Recording(enabled = true, since = if (cur.since > 0) cur.since else now, pausedUntil = 0L))
@@ -22,13 +35,13 @@ class RecordController @Inject constructor(@ApplicationContext private val ctx: 
         RecordWorker.schedule(ctx)
     }
 
-    suspend fun stop() {
+    override suspend fun stop() {
         settings.saveRecording(Recording(enabled = false, since = 0L, pausedUntil = 0L))
         RecordService.stop(ctx)
         RecordWorker.cancel(ctx)
     }
 
-    suspend fun pause(seconds: Long = 24 * 3600) {
+    override suspend fun pause(seconds: Long) {
         val cur = settings.recording.first()
         settings.saveRecording(cur.copy(pausedUntil = System.currentTimeMillis() / 1000 + seconds))
         RecordService.stop(ctx)

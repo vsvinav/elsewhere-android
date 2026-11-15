@@ -16,6 +16,7 @@ import com.elsewhere.app.data.Ready
 import com.elsewhere.app.ui.gate.KeyGate
 import com.elsewhere.app.ui.onboard.OnboardingGraph
 import com.elsewhere.app.ui.onboard.Step
+import com.elsewhere.app.ui.record.RecordRoute
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.figures.LocalLand
 
@@ -28,8 +29,9 @@ import com.elsewhere.app.ui.world.figures.LocalLand
 fun Root(
     vm: RootViewModel = hiltViewModel(),
     door: @Composable (startStep: Step, onClose: (() -> Unit)?) -> Unit = { s, close -> OnboardingGraph(s, close) },
-    app: @Composable (onChangeAnswers: () -> Unit, onMapsKey: () -> Unit) -> Unit = { a, k -> AppScaffold(a, k) },
+    app: @Composable (onChangeAnswers: () -> Unit, onMapsKey: () -> Unit, onRecord: () -> Unit) -> Unit = { a, k, r -> AppScaffold(a, k, r) },
     gate: @Composable (ready: Ready?) -> Unit = { r -> KeyGate(ready = r) },
+    recordScreen: @Composable (onClose: () -> Unit) -> Unit = { RecordRoute(it) },
 ) {
     val ready by vm.ready.collectAsStateWithLifecycle()
     val hasImport by vm.hasImport.collectAsStateWithLifecycle()
@@ -38,15 +40,17 @@ fun Root(
     val gated by vm.gated.collectAsStateWithLifecycle()
     val readyBar by vm.readyBar.collectAsStateWithLifecycle()
     var editing by rememberSaveable { mutableStateOf<Step?>(null) }
+    var recording by rememberSaveable { mutableStateOf(false) }
     val needsDoor = !hasImport || profile == null || profile!!.homes.isEmpty()
     CompositionLocalProvider(LocalLand provides land) {
         when {
             !ready || gated == null -> Box(Modifier.fillMaxSize().background(Poster.Stock))
             needsDoor -> door(Step.Import, null)
             editing != null -> door(editing!!) { editing = null }
+            recording -> recordScreen { recording = false }
             // The web shows KeyGate once there is a profile and the key is unproven; it lifts itself when the settings change.
             gated == true -> gate(readyBar)
-            else -> app({ editing = Step.Name }, { editing = Step.Key })
+            else -> app({ editing = Step.Name }, { editing = Step.Key }, { recording = true })
         }
     }
 }

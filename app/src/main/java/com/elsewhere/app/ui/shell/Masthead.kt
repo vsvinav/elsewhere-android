@@ -47,7 +47,7 @@ import java.util.Locale
 fun Masthead(
     name: String?, units: Units, counters: Counters,
     onHome: () -> Unit, onChangeAnswers: () -> Unit, onMapsKey: () -> Unit, onToggleUnits: () -> Unit, onStartOver: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier, onRecord: () -> Unit = {},
 ) {
     var menu by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf(false) }
@@ -75,6 +75,7 @@ fun Masthead(
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Poster.Stock, border = BorderStroke(2.dp, Poster.Ink), shape = RectangleShape) {
                 MenuRow("Change answers") { menu = false; onChangeAnswers() }
                 MenuRow("Maps key") { menu = false; onMapsKey() }
+                MenuRow("Record on this phone") { menu = false; onRecord() }
                 MenuRow("Units: ${units.name}") { onToggleUnits() }
                 MenuRow("Usage: ${counters.detailsCalls} names · ${counters.photoCalls} photos · $${"%.2f".format(Locale.US, counters.dollars())}", color = Poster.Ink3, enabled = false) {}
                 MenuRow("Start over", color = Poster.Red) { menu = false; confirm = true }

@@ -15,6 +15,10 @@ import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.data.db.ElsewhereDb
 import com.elsewhere.app.data.db.MIGRATIONS
+import com.elsewhere.app.record.AndroidPermissionGate
+import com.elsewhere.app.record.PermissionGate
+import com.elsewhere.app.record.RecordControl
+import com.elsewhere.app.record.RecordController
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -61,6 +65,8 @@ object AppModule {
     @Provides fun placeNamer(l: PlaceLookups): PlaceNamer = l
     @Provides fun tileService(t: GoogleTiles): TileService = t
     @Provides fun landSource(loader: LandLoader): LandSource = loader
+    @Provides fun permissionGate(gate: AndroidPermissionGate): PermissionGate = gate
+    @Provides fun recordControl(c: RecordController): RecordControl = c
 
     @Provides fun visits(db: ElsewhereDb) = db.visits()
     @Provides fun activities(db: ElsewhereDb) = db.activities()
