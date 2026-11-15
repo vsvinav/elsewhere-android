@@ -8,6 +8,9 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.elsewhere.app.SampleRecord
@@ -19,6 +22,7 @@ import com.elsewhere.app.ui.world.LocalMotion
 import com.elsewhere.app.ui.world.date
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,10 +38,10 @@ class PassportBookletTest {
     private val opened = ArrayList<Door>()
     private var saved: Set<String>? = null
 
-    private fun show(seen: Set<String>?) {
+    private fun show(seen: Set<String>?, motion: Boolean = false) {
         rule.setContent {
             ElsewhereTheme {
-                CompositionLocalProvider(LocalOpenDoor provides { opened += it }, LocalMotion provides false) {
+                CompositionLocalProvider(LocalOpenDoor provides { opened += it }, LocalMotion provides motion) {
                     PassportBooklet(pass, seen, onSeen = { saved = it })
                 }
             }
@@ -91,5 +95,40 @@ class PassportBookletTest {
         show(pass.earnedIds.filter { it != "city:Lisbon" }.toSet())
         rule.waitForIdle()
         assertEquals(pass.earnedIds.toSet(), saved)
+    }
+
+    private fun scaleOf(label: String): Float {
+        var out = 1f
+        rule.onNode(SemanticsMatcher("stamp $label") { it.config.getOrNull(StampScale) != null && it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains("Open on the map: $label") == true })
+            .fetchSemanticsNode().config[StampScale].let { out = it }
+        return out
+    }
+
+    @Test fun `a stamp earned since the last open thuds on the page already open, pressing in from 1point3`() {
+        rule.mainClock.autoAdvance = false
+        show(pass.earnedIds.filter { it != "city:Lisbon" }.toSet(), motion = true)
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        assertTrue("fresh stamp starts pressed in, was ${scaleOf("Lisbon")}", scaleOf("Lisbon") > 1.2f)
+        rule.mainClock.advanceTimeBy(THUD_MS + 100L)
+        assertEquals(1f, scaleOf("Lisbon"))
+    }
+
+    @Test fun `a stamp thuds once, not again when its page comes back into the pager`() {
+        rule.mainClock.autoAdvance = false
+        show(pass.earnedIds.filter { it != "city:Lisbon" }.toSet(), motion = true)
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        assertTrue(scaleOf("Lisbon") > 1.2f)
+        rule.mainClock.advanceTimeBy(THUD_MS + 200L)
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithContentDescription("Next page").performClick(); rule.waitForIdle()
+        rule.onNodeWithContentDescription("Next page").performClick(); rule.waitForIdle()
+        rule.onNodeWithContentDescription("Previous page").performClick(); rule.waitForIdle()
+        rule.onNodeWithContentDescription("Previous page").performClick(); rule.waitForIdle()
+        rule.mainClock.autoAdvance = false
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(1f, scaleOf("Lisbon"))
     }
 }

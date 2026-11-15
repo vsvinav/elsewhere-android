@@ -93,6 +93,45 @@ class PassportTest {
         )
     }
 
+    @Test fun `night milestones walk the visits, so a repeat destination never dates a milestone to an earlier trip`() {
+        // Paris 2015 for 2 nights, London 2016 for 10, Paris again 2024 for 50: the tenth night is London's eighth, not a 2015 date.
+        val y15 = Fx.utc(2015, 5, 1); val y16 = Fx.utc(2016, 5, 1); val y24 = Fx.utc(2024, 5, 1)
+        val d = data.copy(
+            activities = emptyList(),
+            visits = listOf(
+                v(y15, y15 + 2 * D - 12 * H, "paris", 48.85, 2.35),
+                v(y15 + 2 * D, y16 - D, "home", 42.36, -71.06),
+                v(y16, y16 + 10 * D - 12 * H, "london", 51.5, -0.12),
+                v(y16 + 10 * D, y24 - D, "home", 42.36, -71.06),
+                v(y24, y24 + 50 * D - 12 * H, "paris", 48.85, 2.35),
+            ),
+            places = data.places + ("london" to Fx.place(null, "London", "GB", lat = 51.5, lng = -0.12)),
+        )
+        val r = passport(d)
+        fun ms(id: String) = r.pages.first { it.id == "milestones" }.stamps.first { it.id == id }
+        assertEquals("52 nights", r.pages.first { it.id == "country:FR" }.stamps[0].sub)
+        assertEquals(y15, ms("ms:first-night").earnedAt)
+        assertEquals(y16 + 7 * D, ms("ms:nights-10").earnedAt)
+        assertNull(ms("ms:nights-100").earnedAt)
+    }
+
+    @Test fun `time zones ignore daylight saving, the same city in January and July is one zone`() {
+        val jul = Fx.utc(2025, 6, 1)
+        fun ny(start: Long, tz: Int) = v(start, start + 2 * D, "ny", 40.71, -74.01, tz)
+        val base = data.copy(activities = emptyList(), places = data.places + ("ny" to Fx.place(null, "New York", "US", lat = 40.71, lng = -74.01)))
+        fun ms(r: Passport, id: String) = r.pages.first { it.id == "milestones" }.stamps.first { it.id == id }
+        assertNull(ms(passport(base.copy(visits = listOf(ny(jan, -300), ny(jul, -240)))), "ms:zones").earnedAt)
+        // nine more cities, each a further 15° east: the tenth distinct zone is reached on the last of them
+        val visits = mutableListOf(ny(jan, -300), ny(jul, -240))
+        val places = base.places.toMutableMap()
+        for (i in 1 until 10) {
+            val lng = -74.01 + 15 * i
+            places["z$i"] = Fx.place(null, "Zone $i", "XX", lat = 10.0, lng = lng)
+            visits += v(jan + 10 * i * D, jan + 10 * i * D + 2 * D, "z$i", 10.0, lng, 0)
+        }
+        assertEquals(jan + 90 * D, ms(passport(base.copy(visits = visits, places = places)), "ms:zones").earnedAt)
+    }
+
     @Test fun `an empty record is a booklet of outlines`() {
         val e = passport(data.copy(visits = emptyList(), activities = emptyList()))
         assertEquals(1, e.pages.size)

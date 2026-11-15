@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
@@ -60,17 +61,21 @@ import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.Share
 import com.elsewhere.app.ui.world.date
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // Port of web/src/tabs/Facts/Passport.tsx: a booklet of country and milestone pages, each earned stamp a door.
 
-private const val THUD_MS = 240
+internal const val THUD_MS = 240
 
 @Composable
 fun PassportTab(vm: PassportViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     ui?.let { PassportBooklet(it.passport, it.seen, onSeen = vm::seen) }
 }
+
+/** The stamp's current press-in scale, so a test can watch the thud land. */
+val StampScale = SemanticsPropertyKey<Float>("StampScale")
 
 /**
  * Stamps earned since the booklet was last open press in once, then are recorded; the first ever open just records
@@ -86,7 +91,8 @@ private fun rememberFresh(pass: Passport, seen: Set<String>?, onSeen: (Set<Strin
         val was = latestSeen
         val now = if (was == null) emptyList() else earned.filter { it !in was }
         if (was == null || now.isNotEmpty()) save(earned.toSet())
-        if (now.isNotEmpty()) fresh = now.toSet()
+        // The press-in plays once: after it has landed the stamp is no longer fresh, however often its page comes back.
+        if (now.isNotEmpty()) { fresh = now.toSet(); delay(THUD_MS + 60L); fresh = emptySet() }
     }
     return fresh
 }
@@ -154,13 +160,13 @@ fun PassportStamp(s: Stamp, modifier: Modifier = Modifier, fresh: Boolean = fals
     val earned = s.earned && s.door != null
     val color = if (earned) Poster.Red else Poster.Ghost
     val thud = fresh && animate
-    val scale = remember(s.id) { Animatable(if (thud) 1.3f else 1f) }
-    LaunchedEffect(s.id, thud) { if (thud) scale.animateTo(1f, tween(THUD_MS)) }
+    val scale = remember(s.id) { Animatable(1f) }
+    LaunchedEffect(s.id, thud) { if (thud) { scale.snapTo(1.3f); scale.animateTo(1f, tween(THUD_MS)) } else scale.snapTo(1f) }
     val lean = tilt(s.id)
     val dash = if (earned) null else PathEffect.dashPathEffect(floatArrayOf(10f, 7f))
     val sem = if (earned) Modifier.door(s.door) else Modifier.semantics { role = Role.Button; contentDescription = "${s.label}: not yet"; disabled() }
     Box(
-        modifier.size(diameter).then(sem)
+        modifier.size(diameter).then(sem).semantics { this[StampScale] = scale.value }
             .graphicsLayer { scaleX = scale.value; scaleY = scale.value; rotationZ = lean }
             .drawBehind {
                 val outer = 3.dp.toPx(); val inner = 1.5.dp.toPx(); val gap = 4.dp.toPx()

@@ -3,6 +3,8 @@ package com.elsewhere.app.analytics
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.ui.nav.Door
 import java.util.Locale
+import kotlin.math.floor
+import kotlin.math.min
 
 // Port of web/src/analytics/passport.ts
 
@@ -38,6 +40,9 @@ private fun milestone(id: String, label: String, earnedAt: Long?) = Stamp("ms:$i
  * Pages per country and per milestone, every stamp dated when it was earned or left as an outline to aim for.
  * One sorted pass over the stops, one over the activities, one over the visits: O(S log S + A + V).
  */
+/** A time zone by meridian, 15° wide and centred on it, so daylight saving never counts a place twice. */
+fun zoneOf(lng: Double): Int = floor((lng + 187.5) / 15).toInt()
+
 fun passport(data: Record): Passport {
     val stops = tour(data).stops.sortedBy { it.first }
     // Insertion order is first-earned order, since the stops were sorted before grouping.
@@ -51,18 +56,21 @@ fun passport(data: Record): Passport {
         )
     }
 
-    // Nights, cities and countries all fall out of the same chronological walk.
-    val nightAt = arrayOfNulls<Long>(NIGHTS.size)
+    // Cities and countries fall out of the stops; nights need the visits themselves, since a city's stop spans every trip there.
     val cityAt = arrayOfNulls<Long>(CITIES.size)
     val countryAt = arrayOfNulls<Long>(COUNTRIES.size)
     val seen = HashSet<String>()
-    var cum = 0
     stops.forEachIndexed { i, s ->
-        NIGHTS.forEachIndexed { k, n -> if (nightAt[k] == null && cum < n && cum + s.nights >= n) nightAt[k] = s.first + (n - cum - 1) * DAY }
-        cum += s.nights
         CITIES.forEachIndexed { k, n -> if (i + 1 == n) cityAt[k] = s.first }
         val c = s.country
         if (c != null && seen.add(c)) COUNTRIES.forEachIndexed { k, n -> if (seen.size == n) countryAt[k] = s.first }
+    }
+
+    val nightAt = arrayOfNulls<Long>(NIGHTS.size)
+    var cum = 0
+    for ((v, n) in sleptAway(data).away.sortedBy { it.v.start }) {
+        NIGHTS.forEachIndexed { k, want -> if (nightAt[k] == null && cum < want && cum + n >= want) nightAt[k] = min(v.start + (want - cum - 1) * DAY, v.end) }
+        cum += n
     }
 
     var km = 0.0
@@ -72,7 +80,7 @@ fun passport(data: Record): Passport {
     val zones = HashSet<Int>()
     var zoneAt: Long? = null
     for (v in data.visits) {
-        if (v.lvl != 0 || !zones.add(v.tz)) continue
+        if (v.lvl != 0 || !zones.add(zoneOf(v.lng))) continue
         if (zones.size == ZONES) { zoneAt = v.start; break }
     }
 
