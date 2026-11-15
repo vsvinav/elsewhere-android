@@ -47,7 +47,7 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Lazy place lookups · readiness bar · startup key gate | ✅ |
 | Share cards | ✅ |
 | Recording new location on-device | ✅ |
-| Pull to refresh on every tab · bar stays while names land | ✅ |
+| Pull to refresh on the poster and list tabs (Tour, Numbers, Facts, Dates, Flights, Stops; Map and Replay are the map itself) · bar stays while names land | ✅ |
 
 ## What you get
 
