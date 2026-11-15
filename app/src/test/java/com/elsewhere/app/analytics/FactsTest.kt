@@ -10,6 +10,7 @@ import com.elsewhere.app.data.LatLng
 import com.elsewhere.app.data.Role
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.data.filterData
+import com.elsewhere.app.ui.nav.Door
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -87,4 +88,48 @@ class FactsTest {
         assertFalse(f.any { it.id == "hermit" })
         assertTrue(Regex("January 8, 2025").containsMatchIn(f.first { it.id == "furthest" }.detail))
     }
+
+    private fun door(fs: List<Fact>, id: String) = fs.first { it.id == id }.door
+
+    @Test fun `every fact opens a door, and whole-record figures open on the whole window`() {
+        val f = facts(data, Units.KM)
+        assertTrue(f.all { it.door != null }, f.filter { it.door == null }.map { it.id }.toString())
+        assertEquals(Door.Range(JAN, JAN + 10 * D, "Walked a marathon"), door(f, "walked"))
+        val home = facts(bigHome(), Units.KM)
+        assertEquals(Door.Range(JAN, JAN + 40 * D, "100% of nights in your own bed"), door(home, "homebody"))
+    }
+
+    @Test fun `a record set at one place opens on that place and its day`() {
+        val f = facts(data, Units.KM)
+        assertEquals(Door.Place("hotel", JAN + 4 * D, "5,531 km from home"), door(f, "furthest"))
+        assertEquals(Door.Place("hotel", JAN + 4 * D, "36 hours straight at Paris"), door(f, "longest-stay"))
+        // Hermit opens on the stay itself, home to home.
+        assertEquals(Door.Range(JAN, JAN + 4 * D - 12 * H, "84 hours without leaving the house"), door(f, "hermit"))
+    }
+
+    @Test fun `a streak opens on its nights, first midnight to the end of the last day`() {
+        val streak = door(facts(bigHome(), Units.KM), "streak-home") as Door.Range
+        assertEquals(Fx.utc(2025, 0, 1), streak.from)
+        assertEquals(Fx.utc(2025, 1, 10) - 1, streak.to)
+        assertEquals("40 nights in your own bed", streak.label)
+    }
+
+    @Test fun `typed-place habits open on the places that made them`() {
+        val cafes = (1..10).associate { "cafe$it" to place(null, "Boston", "US", 1, JAN, JAN, "Cafe $it", 42.36, -71.06, 1.0, primaryType = "cafe") }
+        val f = facts(data.copy(places = data.places + cafes + ("bar1" to place(null, "Boston", "US", 2, JAN, JAN, "Bar", 42.36, -71.06, 6.0, primaryType = "bar"))), Units.KM)
+        assertEquals(Door.Places(cafes.keys.toList(), "10 coffee runs"), door(f, "coffee"))
+        // One place is a Place door, not a list of one.
+        assertEquals(Door.Place("bar1", label = f.first { it.id == "bars" }.headline), door(f, "bars"))
+    }
+
+    @Test fun `a loyal restaurant opens on it`() {
+        val f = facts(data.copy(places = data.places + ("r" to place(null, "Boston", "US", 7, JAN, JAN, "Nook", 42.36, -71.06, 9.0, primaryType = "restaurant"))), Units.KM)
+        assertEquals(Door.Place("r", label = "Nook, 7 times"), door(f, "regular"))
+    }
+
+    private fun bigHome() = Fx.record(
+        visits = listOf(visit(JAN, JAN + 40 * D - 12 * H, "home", lat = 42.36, lng = -71.06)),
+        places = mapOf("home" to pl(Role.HOME, "Boston", "US", 42.36, -71.06)),
+        home = LatLng(42.36, -71.06), range = JAN..(JAN + 40 * D),
+    )
 }

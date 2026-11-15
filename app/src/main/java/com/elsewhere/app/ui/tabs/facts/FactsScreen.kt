@@ -61,6 +61,7 @@ import com.elsewhere.app.ui.world.Pass
 import com.elsewhere.app.ui.world.Share
 import com.elsewhere.app.share.SITE
 import com.elsewhere.app.share.bedText
+import com.elsewhere.app.ui.nav.door
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.RecordStamp
@@ -172,7 +173,7 @@ internal fun FlipCard(f: Fact, modifier: Modifier = Modifier) {
             if (back) {
                 // The back is read through a mirror; flip it once more so the type runs the right way.
                 Column(Modifier.graphicsLayer { rotationY = 180f }) {
-                    Text(f.headline, color = Poster.Ink, style = PosterType.Display.copy(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 0.95.em))
+                    Text(f.headline, Modifier.door(f.door), color = Poster.Ink, style = PosterType.Display.copy(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 0.95.em))
                     Spacer(Modifier.height(14.dp))
                     Text(f.detail, color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium, lineHeight = 1.4.em))
                 }
@@ -193,7 +194,7 @@ internal fun FactPass(f: Fact, index: Int, total: Int) {
     val text = { (f.figure as? Figure.Beds)?.let { bedText(it.nights, f.headline.uppercase()) } ?: "${f.headline.uppercase()}\n${f.detail}\n$SITE" }
     Pass(share = Share(f.headline, text), stub = { Field(KIND_LABEL.getValue(f.kind), "$index of $total") }) {
         val red = f.kind == Kind.EXPLORED || f.kind == Kind.RECORD
-        Text(f.headline.uppercase(), color = if (red) Poster.Red else Poster.Ink, style = PosterType.Display.copy(fontSize = 40.sp, lineHeight = 0.9.em, letterSpacing = (-0.01).em))
+        Text(f.headline.uppercase(), Modifier.door(f.door), color = if (red) Poster.Red else Poster.Ink, style = PosterType.Display.copy(fontSize = 40.sp, lineHeight = 0.9.em, letterSpacing = (-0.01).em))
         Spacer(Modifier.height(20.dp))
         Text(f.detail, color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium, lineHeight = 1.4.em))
         // Figures keep their ink text, so they print on the stock body here rather than the ink stub.

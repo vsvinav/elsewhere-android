@@ -7,6 +7,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.elsewhere.app.analytics.Fact
 import com.elsewhere.app.analytics.Kind
+import com.elsewhere.app.ui.nav.Door
+import com.elsewhere.app.ui.nav.LocalOpenDoor
+import androidx.compose.runtime.CompositionLocalProvider
+import org.junit.Assert.assertEquals
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import org.junit.Rule
 import org.junit.Test
@@ -28,5 +32,25 @@ class FactsFlipTest {
         rule.mainClock.advanceTimeBy(1000)
         rule.onNodeWithText("Most nights of the year ended at home, which is the point of a home.").assertIsDisplayed()
         rule.onNodeWithText("22 nights in your own bed").assertIsDisplayed()
+    }
+
+    private val door = Door.Range(0L, 86_399L, "22 nights in your own bed")
+    private val doorFact = Fact("beds", Kind.HABIT, "22 nights in your own bed", "Detail.", card = true, quip = "Home is where the bed is", door = door)
+
+    @Test fun theHeadlineOnTheBackOfTheCardOpensTheFactsDoor() {
+        val opened = ArrayList<Door>()
+        rule.setContent { ElsewhereTheme { CompositionLocalProvider(LocalOpenDoor provides { opened.add(it) }) { FlipCard(doorFact) } } }
+        rule.onNodeWithContentDescription("Open on the map: 22 nights in your own bed").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Fact. Tap to turn over").performClick()
+        rule.mainClock.advanceTimeBy(1000)
+        rule.onNodeWithContentDescription("Open on the map: 22 nights in your own bed").performClick()
+        assertEquals(listOf<Door>(door), opened)
+    }
+
+    @Test fun theHeadlineOnThePassOpensTheFactsDoor() {
+        val opened = ArrayList<Door>()
+        rule.setContent { ElsewhereTheme { CompositionLocalProvider(LocalOpenDoor provides { opened.add(it) }) { FactPass(doorFact, 1, 1) } } }
+        rule.onNodeWithContentDescription("Open on the map: 22 nights in your own bed").performClick()
+        assertEquals(listOf<Door>(door), opened)
     }
 }
