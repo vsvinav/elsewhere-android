@@ -56,6 +56,30 @@ class LlmTest {
         assertEquals("llama3.1", body(r)["model"]!!.jsonPrimitive.content)
     }
 
+    @Test fun `a custom endpoint with a blank key sends no Authorization at all`() {
+        val r = llmRequest(LlmConfig(LlmProvider.CUSTOM, key = "   ", baseUrl = "http://box:11434/v1"), "hi")
+        assertFalse("Authorization" in r.headers)
+        assertEquals("http://box:11434/v1/chat/completions", r.url)
+    }
+
+    @Test fun `key, model and base url are trimmed before they go out`() {
+        val r = llmRequest(LlmConfig(LlmProvider.CUSTOM, key = " k ", model = " m ", baseUrl = " http://box:11434/v1/ "), "hi")
+        assertEquals("http://box:11434/v1/chat/completions", r.url)
+        assertEquals("Bearer k", r.headers["Authorization"])
+        assertEquals("m", body(r)["model"]!!.jsonPrimitive.content)
+        assertEquals("gpt-4.1", modelOf(LlmConfig(LlmProvider.OPENAI, model = " gpt-4.1 ")))
+    }
+
+    @Test fun `the gemini key is url-encoded`() {
+        val r = llmRequest(LlmConfig(LlmProvider.GEMINI, key = "a b&c"), "hi")
+        assertEquals("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=a+b%26c", r.url)
+    }
+
+    @Test fun `a body that is not json is an empty reply`() {
+        val e = assertThrows(IllegalStateException::class.java) { parseLlmReply(LlmProvider.OPENAI, "<html>oops</html>") }
+        assertEquals("Empty reply", e.message)
+    }
+
     @Test fun `the model falls back to the provider default when blank`() {
         assertEquals("gpt-4o-mini", modelOf(LlmConfig(LlmProvider.OPENAI)))
         assertEquals("claude-3-5-haiku-latest", modelOf(LlmConfig(LlmProvider.ANTHROPIC)))

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elsewhere.app.Fakes
@@ -61,14 +62,16 @@ class SettingsScreenTest {
         node(LLM_CAPTION).assertIsDisplayed()
     }
 
-    @Test fun `choosing a custom endpoint swaps the API key for a base URL and remembers it`() {
+    @Test fun `choosing a custom endpoint adds a base URL, makes the key optional and remembers it`() {
         show()
-        node("API KEY").assertIsDisplayed()
+        // Two "API key" labels: Google's and the LLM's.
+        rule.onAllNodesWithText("API KEY").assertCountEquals(2)
         rule.onAllNodesWithText("BASE URL").assertCountEquals(0)
         node("Ollama / custom").performClick()
         rule.waitForIdle()
         node("BASE URL").assertIsDisplayed()
-        rule.onAllNodesWithText("API KEY").assertCountEquals(0)
+        node("API KEY · OPTIONAL").assertIsDisplayed()
+        rule.onAllNodesWithText("API KEY").assertCountEquals(1)
         node("http://localhost:11434/v1").assertIsDisplayed()
         assertEquals(LlmProvider.CUSTOM, llm.cur.value.provider)
         assertEquals("http://localhost:11434/v1", llm.cur.value.baseUrl)
@@ -84,6 +87,40 @@ class SettingsScreenTest {
         assertEquals(TEST_PROMPT, asker.asked[0].second)
         assertEquals("sk-test", asker.asked[0].first.key)
         assertEquals("sk-test", llm.cur.value.key)
+    }
+
+    @Test fun `TEST without a key asks for one instead of going out`() {
+        show()
+        node("TEST").performClick()
+        rule.waitForIdle()
+        node("Add a key first").assertIsDisplayed()
+        assertEquals(0, asker.asked.size)
+    }
+
+    @Test fun `switching provider keeps the typed model`() {
+        show()
+        node("Ollama / custom").performClick()
+        rule.waitForIdle()
+        node("llama3.1").performTextInput("my-model")
+        node("OpenAI").performClick()
+        rule.waitForIdle()
+        node("my-model").assertIsDisplayed()
+        assertEquals("my-model", llm.cur.value.model)
+        assertEquals(LlmProvider.OPENAI, llm.cur.value.provider)
+    }
+
+    @Test fun `saving with a blank key clears it but keeps the Map ID`() {
+        maps.cur.value = maps.cur.value.copy(mapsKey = "AIzaOld", keyPlaces = true, keyTiles = true, keyCheckedAt = 5)
+        show()
+        rule.onAllNodesWithText("SHOW")[0].performScrollTo().performClick()
+        node("AIzaOld").performTextClearance()
+        node("none").performTextInput("map-7")
+        node("SAVE").performClick()
+        rule.waitForIdle()
+        assertEquals("", maps.cur.value.mapsKey)
+        assertEquals("map-7", maps.cur.value.mapId)
+        assertEquals(0L, maps.cur.value.keyCheckedAt)
+        node("No key saved").assertIsDisplayed()
     }
 
     @Test fun `a failed TEST prints the error`() {

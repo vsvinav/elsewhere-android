@@ -57,7 +57,7 @@ val LLM_PROVIDER_LABEL: Map<LlmProvider, String> = mapOf(
     LlmProvider.OPENAI to "OpenAI", LlmProvider.ANTHROPIC to "Anthropic", LlmProvider.GEMINI to "Gemini", LlmProvider.CUSTOM to "Ollama / custom",
 )
 
-private val MAP_PROVIDER_LABEL: Map<MapProvider, String> = mapOf(MapProvider.AUTO to "Auto", MapProvider.GOOGLE_TILES to "Google tiles", MapProvider.FREE to "Free")
+private val MAP_PROVIDER_LABEL: Map<MapProvider, String> = mapOf(MapProvider.AUTO to "Auto", MapProvider.GOOGLE_TILES to "Google", MapProvider.FREE to "OpenStreetMap")
 private val UNITS_LABEL: Map<Units, String> = mapOf(Units.KM to "km", Units.MI to "mi")
 
 @Composable
@@ -104,7 +104,7 @@ private fun GoogleMaps(ui: SettingsUi, actions: SettingsActions, sdk: Boolean) {
     var key by rememberSaveable { mutableStateOf(ui.maps.mapsKey) }
     var mapId by rememberSaveable { mutableStateOf(ui.maps.mapId) }
     H2("Google Maps")
-    SecretField(key, { key = it }, label = "Google Maps key", placeholder = "AIza…")
+    SecretField(key, { key = it }, label = "API key", placeholder = "AIza…")
     Spacer(Modifier.height(24.dp))
     PosterTextField(mapId, { mapId = it }, Modifier.fillMaxWidth(), placeholder = "none", label = "Map ID · optional", mono = true)
     Spacer(Modifier.height(24.dp))
@@ -113,7 +113,7 @@ private fun GoogleMaps(ui: SettingsUi, actions: SettingsActions, sdk: Boolean) {
     Segmented(MapProvider.entries.map { it to MAP_PROVIDER_LABEL.getValue(it) }, ui.maps.mapProvider, onSelect = actions::setMapProvider)
     Spacer(Modifier.height(24.dp))
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        InkButton("Save", { actions.saveKey(key, mapId) }, enabled = key.isNotBlank() && ui.keyCheck != KeyCheck.Checking)
+        InkButton("Save", { actions.saveKey(key, mapId) }, enabled = ui.keyCheck != KeyCheck.Checking)
         KeyStatus(ui, sdk)
     }
 }
@@ -157,10 +157,8 @@ private fun AskElsewhere(ui: SettingsUi, actions: SettingsActions) {
         set(c.copy(provider = p, baseUrl = if (p == LlmProvider.CUSTOM) c.baseUrl.ifBlank { DEFAULT_CUSTOM_BASE_URL } else c.baseUrl))
     }
     Spacer(Modifier.height(24.dp))
-    if (c.provider != LlmProvider.CUSTOM) {
-        SecretField(c.key, { set(c.copy(key = it)) }, label = "API key", placeholder = "paste your key")
-        Spacer(Modifier.height(24.dp))
-    }
+    SecretField(c.key, { set(c.copy(key = it)) }, label = if (c.provider == LlmProvider.CUSTOM) "API key · optional" else "API key", placeholder = "paste your key")
+    Spacer(Modifier.height(24.dp))
     PosterTextField(c.model, { set(c.copy(model = it)) }, Modifier.fillMaxWidth(), placeholder = DEFAULT_MODEL.getValue(c.provider), label = "Model", mono = true)
     if (c.provider == LlmProvider.CUSTOM) {
         Spacer(Modifier.height(24.dp))
@@ -170,10 +168,11 @@ private fun AskElsewhere(ui: SettingsUi, actions: SettingsActions) {
     Text(LLM_CAPTION, color = Poster.Ink3, style = PosterType.Label)
     Spacer(Modifier.height(24.dp))
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        InkButton("Test", { actions.testLlm(c) }, enabled = ui.test != LlmTest.Testing && (c.provider == LlmProvider.CUSTOM || c.key.isNotBlank()))
+        InkButton("Test", { actions.testLlm(c) }, enabled = ui.test != LlmTest.Testing)
         when (val t = ui.test) {
             LlmTest.Idle -> {}
-            LlmTest.Testing -> Text("Asking…", color = Poster.Ink3, style = PosterType.Label)
+            LlmTest.Testing -> Text("Testing…", color = Poster.Ink3, style = PosterType.Label)
+            LlmTest.NeedKey -> Text("Add a key first", color = Poster.Ink3, style = PosterType.Label)
             is LlmTest.Ok -> Text("Connected · ${t.model}", color = Poster.Green, style = PosterType.Label)
             is LlmTest.Failed -> SelectionContainer { Text(t.message, color = Poster.Red, style = PosterType.Label.copy(fontFamily = FontFamily.Monospace, letterSpacing = 0.sp)) }
         }

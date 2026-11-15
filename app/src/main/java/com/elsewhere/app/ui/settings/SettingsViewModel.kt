@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.ask.LlmClient
 import com.elsewhere.app.ask.LlmConfig
+import com.elsewhere.app.ask.LlmProvider
 import com.elsewhere.app.ask.TEST_PROMPT
 import com.elsewhere.app.ask.modelOf
 import com.elsewhere.app.data.LlmSettings
@@ -36,6 +37,7 @@ sealed interface KeyCheck {
 sealed interface LlmTest {
     data object Idle : LlmTest
     data object Testing : LlmTest
+    data object NeedKey : LlmTest
     data class Ok(val model: String) : LlmTest
     data class Failed(val message: String) : LlmTest
 }
@@ -67,11 +69,16 @@ class SettingsViewModel @Inject constructor(
         SettingsUi(s, c, p?.units ?: Units.KM, k, t)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /** A blank key still saves: it clears the stored key and its verdict, keeping the Map ID. */
     override fun saveKey(key: String, mapId: String) {
-        val k = key.trim()
-        if (k.isBlank()) return
+        val k = key.trim(); val id = mapId.trim()
+        if (k.isBlank()) {
+            keyCheck.value = KeyCheck.Idle
+            viewModelScope.launch { maps.saveSettings(maps.settings.first().copy(mapsKey = "", mapId = id, keyPlaces = false, keyTiles = false, keyCheckedAt = 0)) }
+            return
+        }
         keyCheck.value = KeyCheck.Checking
-        viewModelScope.launch { keyCheck.value = KeyCheck.Done(verifier.verify(k, mapId.trim())) }
+        viewModelScope.launch { keyCheck.value = KeyCheck.Done(verifier.verify(k, id)) }
     }
 
     override fun setMapProvider(p: MapProvider) {
@@ -84,6 +91,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     override fun testLlm(c: LlmConfig) {
+        if (c.provider != LlmProvider.CUSTOM && c.key.isBlank()) { test.value = LlmTest.NeedKey; return }
         test.value = LlmTest.Testing
         viewModelScope.launch {
             test.value = runCatching { client.ask(c, TEST_PROMPT) }

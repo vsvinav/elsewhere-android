@@ -16,6 +16,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 /** Who answers "Ask Elsewhere"; `wire` is the name stored and shared with the web. */
@@ -43,7 +44,7 @@ const val LLM_MAX_TOKENS = 256
 private const val OPENAI_BASE_URL = "https://api.openai.com/v1"
 private const val LLM_TIMEOUT_MS = 30_000L
 
-fun modelOf(c: LlmConfig): String = c.model.ifBlank { DEFAULT_MODEL.getValue(c.provider) }
+fun modelOf(c: LlmConfig): String = c.model.trim().ifBlank { DEFAULT_MODEL.getValue(c.provider) }
 
 data class LlmRequest(val url: String, val headers: Map<String, String>, val body: String)
 
@@ -76,7 +77,7 @@ fun llmRequest(c: LlmConfig, prompt: String): LlmRequest {
             }.toString(),
         )
         LlmProvider.GEMINI -> LlmRequest(
-            url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key",
+            url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=${URLEncoder.encode(key, "UTF-8")}",
             headers = emptyMap(),
             body = buildJsonObject {
                 put("contents", buildJsonArray { add(buildJsonObject { put("parts", buildJsonArray { add(buildJsonObject { put("text", prompt) }) }) }) })
@@ -89,7 +90,7 @@ private fun JsonObject.arr(k: String): JsonArray? = this[k]?.jsonArray
 private fun JsonObject.obj(k: String): JsonObject? = this[k]?.jsonObject
 private fun JsonObject.str(k: String): String? = (this[k] as? JsonPrimitive)?.content
 
-/** The first reply text in a provider's response; [IllegalStateException] "Empty reply" when there is none. */
+/** The first reply text in a provider's response; [IllegalStateException] "Empty reply" when there is none or the body is not JSON. */
 fun parseLlmReply(p: LlmProvider, json: String): String {
     val root = runCatching { codec.parseToJsonElement(json).jsonObject }.getOrNull()
     val text = runCatching {
