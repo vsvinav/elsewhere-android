@@ -27,6 +27,8 @@ android {
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui); implementation(libs.compose.foundation); implementation(libs.compose.material3)
@@ -34,12 +36,13 @@ dependencies {
     implementation(libs.activity.compose); implementation(libs.lifecycle.vm.compose); implementation(libs.lifecycle.runtime.compose)
     implementation(libs.nav.compose)
     implementation(libs.hilt.android); ksp(libs.hilt.compiler); implementation(libs.hilt.nav.compose)
+    implementation(libs.hilt.work); ksp(libs.hilt.work.compiler)
     implementation(libs.room.runtime); implementation(libs.room.ktx); ksp(libs.room.compiler)
     implementation(libs.datastore)
     implementation(libs.serialization.json); implementation(libs.coroutines.android)
     implementation(libs.retrofit); implementation(libs.retrofit.serialization); implementation(libs.okhttp)
-    implementation(libs.coil.compose)
-    implementation(libs.maplibre.compose)
+    implementation(libs.coil.compose); implementation(libs.work.runtime)
+    implementation(libs.maplibre.compose); implementation(libs.play.location)
     testImplementation(libs.junit5.api); testImplementation(libs.junit5.params); testRuntimeOnly(libs.junit5.engine)
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.3")
     testImplementation(libs.coroutines.test); testImplementation(libs.okhttp.mockwebserver)

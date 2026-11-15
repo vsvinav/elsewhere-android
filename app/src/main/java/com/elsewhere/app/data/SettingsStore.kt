@@ -28,6 +28,11 @@ data class Settings(
     val limitedAccepted: Boolean = false,
 )
 
+/** Whether the phone is recording its own location, since when, and whether that is paused for a while. */
+data class Recording(val enabled: Boolean = false, val since: Long = 0L, val pausedUntil: Long = 0L) {
+    fun active(now: Long) = enabled && pausedUntil <= now
+}
+
 /** Billable Google calls made from this phone since `since` (epoch ms). */
 data class Counters(val detailsCalls: Int = 0, val photoCalls: Int = 0, val mapLoads: Int = 0, val since: Long = 0)
 
@@ -46,6 +51,10 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         val photoCalls = intPreferencesKey("photoCalls")
         val mapLoads = intPreferencesKey("mapLoads")
         val usageSince = longPreferencesKey("usageSince")
+        val recording = booleanPreferencesKey("recording")
+        val recordingSince = longPreferencesKey("recordingSince")
+        val pausedUntil = longPreferencesKey("pausedUntil")
+        val segmenter = stringPreferencesKey("segmenterState")
         val addresses = stringPreferencesKey("addresses")
     }
     private fun keyOf(kind: Kind) = when (kind) { Kind.DETAILS -> K.detailsCalls; Kind.PHOTOS -> K.photoCalls; Kind.MAPS -> K.mapLoads }
@@ -68,6 +77,18 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
     override val counters: Flow<Counters> = store.data.map { p ->
         Counters(p[K.detailsCalls] ?: 0, p[K.photoCalls] ?: 0, p[K.mapLoads] ?: 0, p[K.usageSince] ?: 0)
     }
+
+    val recording: Flow<Recording> = store.data.map { p ->
+        Recording(p[K.recording] ?: false, p[K.recordingSince] ?: 0L, p[K.pausedUntil] ?: 0L)
+    }
+
+    suspend fun saveRecording(r: Recording) {
+        store.edit { it[K.recording] = r.enabled; it[K.recordingSince] = r.since; it[K.pausedUntil] = r.pausedUntil }
+    }
+
+    /** The segmenter's open stay and leg, as JSON, so a killed process picks up where it was. */
+    suspend fun segmenterState(): String? = store.data.first()[K.segmenter]
+    suspend fun saveSegmenterState(json: String?) { store.edit { if (json == null) it.remove(K.segmenter) else it[K.segmenter] = json } }
 
     suspend fun saveProfile(profile: Profile?) {
         store.edit { if (profile == null) it.remove(K.profile) else it[K.profile] = json.encodeToString(Profile.serializer(), profile) }

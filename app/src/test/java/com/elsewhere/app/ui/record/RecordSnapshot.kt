@@ -1,0 +1,40 @@
+package com.elsewhere.app.ui.record
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import app.cash.paparazzi.DeviceConfig
+import app.cash.paparazzi.Paparazzi
+import com.elsewhere.app.data.Recording
+import com.elsewhere.app.record.RecordStats
+import com.elsewhere.app.ui.world.ElsewhereTheme
+import com.elsewhere.app.ui.world.LocalMotion
+import com.elsewhere.app.ui.world.Poster
+import org.junit.Rule
+import org.junit.Test
+
+class RecordSnapshot {
+    @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, theme = "android:Theme.Material.Light.NoActionBar")
+    private val now = 1_800_000_000L
+
+    private fun sheet(content: @Composable () -> Unit) = paparazzi.snapshot {
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { Column(Modifier.background(Poster.Stock)) { content() } } }
+    }
+
+    private fun rows(vararg states: PermState) = Perm.entries.zip(states).map { (p, s) -> PermRow(p, s) }
+
+    @Test fun disclosure() = sheet {
+        val ui = RecordUi(rows(PermState.ASK, PermState.LOCKED, PermState.ASK, PermState.ASK), false, Recording(), null, true, now)
+        RecordScreen(ui, RecordActions(), scroll = false)
+    }
+
+    @Test fun recording() = sheet {
+        val ui = RecordUi(
+            rows(PermState.GRANTED, PermState.GRANTED, PermState.GRANTED, PermState.SETTINGS), true,
+            Recording(true, now - 12 * 86400, 0L), RecordStats(3_412, 58, now - 180), batteryOk = false, now = now,
+        )
+        RecordScreen(ui, RecordActions(), scroll = false)
+    }
+}

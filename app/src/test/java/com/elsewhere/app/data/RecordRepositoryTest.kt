@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.elsewhere.app.data.db.ElsewhereDb
+import com.elsewhere.app.data.db.VisitEntity
 import com.elsewhere.app.data.db.decodePts
 import com.elsewhere.app.data.db.encodePts
 import com.elsewhere.app.ingest.Enrichment
@@ -116,11 +117,51 @@ class RecordRepositoryTest {
         assertEquals(emptyList<Pt>(), decodePts(encodePts(emptyList())))
     }
 
+    private fun deviceVisit(start: Long) = VisitEntity(
+        id = start.toInt(), start = start, end = start + 3600, tz = 0, placeId = "dev:drt2zp2", lat = 42.36, lng = -71.06,
+        type = "UNKNOWN", p = 1.0, lvl = 0, city = null, cc = null, dist = null, source = "device",
+    )
+
+    @Test fun `re-import keeps device-recorded rows and drops the old import`() = runTest {
+        repo.import({ open() }, "mini_timeline.json")
+        val imported = db.visits().count()
+        repo.insertDevice(listOf(deviceVisit(1_800_000_000L)), emptyList(), emptyList())
+        assertEquals(imported + 1, db.visits().count())
+
+        repo.import({ open() }, "mini_timeline.json")
+        assertEquals(imported + 1, db.visits().count())
+        assertEquals(1, db.visits().all().count { it.source == "device" })
+    }
+
+    @Test fun `device rows join the record and bump its version`() = runTest {
+        repo.import({ open() }, "mini_timeline.json")
+        repo.saveProfile(profile(boston))
+        val before = repo.record.first { it != null }!!
+        repo.insertDevice(listOf(deviceVisit(1_800_000_000L)), emptyList(), emptyList())
+        val after = repo.record.first { it != null && it.visits.size != before.visits.size }!!
+        assertEquals(before.visits.size + 1, after.visits.size)
+        assertEquals(1_800_000_000L, after.visits.last().start)
+        assertEquals(1_800_003_600L, after.meta.range.last)
+    }
+
+    @Test fun `device rows alone make a record, with no export ever imported`() = runTest {
+        assertFalse(repo.hasImport.first())
+        repo.insertDevice(listOf(deviceVisit(1_800_000_000L), deviceVisit(1_800_100_000L)), emptyList(), emptyList())
+        assertTrue(repo.hasImport.first { it })
+        repo.saveProfile(profile(boston))
+        val rec = repo.record.first { it != null }!!
+        assertEquals(2, rec.visits.size)
+        assertEquals("", rec.meta.sourceFile)
+        assertEquals(0, rec.meta.importReport.segmentsTotal)
+        assertEquals(2, repo.deviceVisits.value)
+    }
+
     @Test fun `reset clears everything`() = runTest {
         repo.import({ open() }, "mini_timeline.json")
         repo.saveProfile(profile(boston))
         repo.record.first { it != null }
 
+        repo.insertDevice(listOf(deviceVisit(1_800_000_000L)), emptyList(), emptyList())
         repo.reset()
         assertFalse(repo.hasImport.first { !it })
         assertNull(repo.record.first { it == null })

@@ -25,7 +25,7 @@ import java.util.Locale
 
 /** The front door's first page: the title, and a pass that takes the Timeline export. */
 @Composable
-fun ImportScreen(importing: Float?, error: String?, report: ImportReport?, onFile: (Uri, String) -> Unit) {
+fun ImportScreen(importing: Float?, error: String?, report: ImportReport?, onRecord: (() -> Unit)? = null, onFile: (Uri, String) -> Unit) {
     val ctx = LocalContext.current
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) onFile(uri, fileName(ctx, uri))
@@ -64,6 +64,10 @@ fun ImportScreen(importing: Float?, error: String?, report: ImportReport?, onFil
                     CapsText("${n(report.segmentsTotal)} segments read, ${n(skipped)} skipped", color = Poster.Ink2, size = 11.sp)
                 }
             }
+        }
+        if (onRecord != null && importing == null) {
+            Spacer(Modifier.height(24.dp))
+            CapsText("Skip — record on this phone instead →", Modifier.clickable(onClick = onRecord), color = Poster.Ink2, size = 12.sp)
         }
     }
 }

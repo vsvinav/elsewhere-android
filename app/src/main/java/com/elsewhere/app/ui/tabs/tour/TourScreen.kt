@@ -63,18 +63,18 @@ import kotlin.math.roundToInt
 // Port of web/src/tabs/Home/Home.tsx: the poster, a stack of bills you peel through.
 
 @Composable
-fun TourTab(onGo: (Tab) -> Unit, vm: TourViewModel = hiltViewModel()) {
+fun TourTab(onGo: (Tab) -> Unit, onRecord: () -> Unit = {}, vm: TourViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    ui?.let { TourScreen(it, onGo, onSeen = vm::seen) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
+    ui?.let { TourScreen(it, onGo, onSeen = vm::seen, onRecord = onRecord) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
 }
 
 private fun lensColor(mode: String) = when (lensOf(mode)) { Lens.FLY -> Poster.Red; Lens.FOOT -> Poster.Mustard; else -> Poster.Ink }
 
 /** `scroll = false` lays the whole poster out at its full height, for snapshots. */
 @Composable
-fun TourScreen(ui: TourUi, onGo: (Tab) -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true, onSeen: (String) -> Unit = {}) {
+fun TourScreen(ui: TourUi, onGo: (Tab) -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true, onSeen: (String) -> Unit = {}, onRecord: () -> Unit = {}) {
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier)) {
-        TourHero(ui, onGo)
+        TourHero(ui, onGo, onRecord)
         ui.nights?.let { NightsBill(it) }
         HeadlineBill(ui, onGo)
         SetlistBill(ui)
@@ -87,7 +87,7 @@ fun TourScreen(ui: TourUi, onGo: (Tab) -> Unit, modifier: Modifier = Modifier, s
 private fun TourUi.countries() = "${n0(facts.countries)} ${plural(facts.countries, "country", "countries")}"
 
 @Composable
-internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit) {
+internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit, onRecord: () -> Unit = {}) {
     val f = ui.facts; val t = ui.tour; val u = ui.units
     Bill(first = true) {
         Box(Modifier.fillMaxWidth()) {
@@ -100,10 +100,11 @@ internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit) {
                     DisplayText("where", 96.sp, color = Poster.Red, misreg = true)
                 }
             }
-            RecordStamp("Official record", "${t.years.second}", "live", Modifier.align(Alignment.TopEnd), size = 92.dp)
+            RecordStamp("Official record", "${t.years.second}", if (ui.deviceDays > 0) "recording" else "live", Modifier.align(Alignment.TopEnd), size = 92.dp)
         }
         Spacer(Modifier.height(28.dp))
-        Lede("${ui.yearSpan}, live from ${n0(f.days)} days of record. Everywhere your phone slept, every leg between. ${n0(f.places)} places, ${n0(f.cities)} cities, ${ui.countries()}.")
+        val counting = if (ui.deviceDays > 0) " …and still counting: ${n0(ui.deviceDays)} ${plural(ui.deviceDays, "day")} recorded on this phone." else ""
+        Lede("${ui.yearSpan}, live from ${n0(f.days)} days of record. Everywhere your phone slept, every leg between. ${n0(f.places)} places, ${n0(f.cities)} cities, ${ui.countries()}.$counting")
         Spacer(Modifier.height(40.dp))
         TrailMap(ui.trail)
         Spacer(Modifier.height(40.dp))
@@ -117,6 +118,8 @@ internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit) {
         )
         Spacer(Modifier.height(40.dp))
         Foot("${n0(f.cities)} cities · ${ui.countries()}", "${countUp(u.cv(f.totalKm))} ${u.u}")
+        Spacer(Modifier.height(20.dp))
+        CapsText(if (ui.deviceDays > 0) "Recording on this phone →" else "Record new travel →", Modifier.clickable(role = Role.Button, onClick = onRecord), color = Poster.Red, size = 12.sp)
     }
 }
 

@@ -27,7 +27,7 @@ class Cities(val lat: DoubleArray, val lng: DoubleArray, val name: List<String>,
     }
 }
 
-data class CityHit(val name: String, val cc: String)
+data class CityHit(val name: String, val cc: String, val km: Double = 0.0)
 
 fun geocoder(c: Cities): (Double, Double) -> CityHit? {
     val grid = HashMap<Int, MutableList<Int>>()
@@ -48,6 +48,6 @@ fun geocoder(c: Cities): (Double, Double) -> CityHit? {
             }
             ring++
         }
-        if (best < 0) null else CityHit(c.name[best], c.cc[best])
+        if (best < 0) null else CityHit(c.name[best], c.cc[best], bd)
     }
 }
