@@ -28,7 +28,15 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,6 +53,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -80,6 +90,8 @@ import com.elsewhere.app.map.PinOpts
 import com.elsewhere.app.map.PinSummary
 import com.elsewhere.app.map.SizeBy
 import com.elsewhere.app.map.Tap
+import com.elsewhere.app.record.NowStamp
+import com.elsewhere.app.ui.world.motionOn
 import com.elsewhere.app.map.clusterRadius
 import com.elsewhere.app.map.rememberMapHost
 import com.elsewhere.app.map.summary
@@ -151,8 +163,17 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
         }
     }
 
+    val live by vm.live.collectAsStateWithLifecycle()
+    // One projection per camera frame, read by the stamp's layout alone: the rest of the chrome never recomposes for it.
+    val liveAt = produceState<Offset?>(null, host, live) {
+        val s = live ?: run { value = null; return@produceState }
+        host.camera.collect { value = host.project(s.lat, s.lng) }
+    }
     val acts = MapActions(vm::toggle, vm::only, vm::showAll, vm::search, vm::select, vm::sizeBy, fit = { layers?.let { fit(it, opts) } }, seen = vm::seen, heat = vm::heat)
-    MapScreen(layers, opts, acts, snackbar = snackbar, origin = origin, onBack = vm::back) { m ->
+    MapScreen(
+        layers, opts, acts, snackbar = snackbar, origin = origin, onBack = vm::back, live = live, liveAt = liveAt,
+        onLive = { live?.let { host.moveTo(Cam(it.lat, it.lng, maxOf(host.camera.value.zoom, 15f)), animateMs = 400) } },
+    ) { m ->
         host.Content(m, basemap, copyright) {
             layers?.let { PinCanvas(host, it, opts, Modifier.fillMaxSize()) }
         }
@@ -163,7 +184,9 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
 @Composable
 fun MapScreen(
     layers: PinLayers?, opts: PinOpts, acts: MapActions, modifier: Modifier = Modifier,
-    snackbar: SnackbarHostState? = null, origin: Origin? = null, onBack: () -> Unit = {}, map: @Composable BoxScope.(Modifier) -> Unit,
+    snackbar: SnackbarHostState? = null, origin: Origin? = null, onBack: () -> Unit = {},
+    live: NowStamp? = null, liveAt: State<Offset?> = remember { mutableStateOf(null) }, onLive: () -> Unit = {},
+    map: @Composable BoxScope.(Modifier) -> Unit,
 ) {
     val shown = remember(layers, opts.hidden, opts.query) { layers?.shown(opts) ?: emptyList() }
     val sum = remember(shown) { summary(shown) }
@@ -173,6 +196,7 @@ fun MapScreen(
         Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth().weight(1f).border(2.dp, Poster.Ink)) {
             map(Modifier.fillMaxSize().padding(2.dp))
+            if (live != null) NowStampMark(live, liveAt, onLive, Modifier.fillMaxSize().padding(2.dp))
             OriginTag(origin, onBack, Modifier.align(Alignment.TopStart).padding(12.dp))
             val sel = opts.selected?.let { id -> layers?.all?.firstOrNull { it.id == id } ?: layers?.homes?.firstOrNull { it.id == id } }
             if (sel != null) {
@@ -181,7 +205,7 @@ fun MapScreen(
             }
             if (snackbar != null) SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
         }
-        PinHud(sum, opts.sizeBy, opts.heat, acts)
+        PinHud(sum, opts.sizeBy, opts.heat, acts, live = live != null)
     }
 }
 
@@ -223,13 +247,20 @@ private val ChipStyle get() = PosterType.Display.copy(fontSize = 15.sp, fontWeig
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PinHud(sum: PinSummary, sizeBy: SizeBy, heat: Boolean, acts: MapActions) {
+private fun PinHud(sum: PinSummary, sizeBy: SizeBy, heat: Boolean, acts: MapActions, live: Boolean = false) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(
-                "${n0(sum.stops)} ${plural(sum.stops, "stop")} · ${sum.cities} ${plural(sum.cities, "city", "cities")} · ${sum.countries} ${plural(sum.countries, "country", "countries")}",
-                color = Poster.Ink, style = PosterType.Label.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // The date slot: while the recorder's stamp is on the map, the window reads as now.
+                if (live) {
+                    Text("LIVE", color = Poster.Red, style = ChipStyle.copy(fontSize = 13.sp), modifier = Modifier.semantics { contentDescription = "Live: recording now" })
+                    Text(" · ", color = Poster.Ink3, style = PosterType.Label.copy(fontSize = 12.sp))
+                }
+                Text(
+                    "${n0(sum.stops)} ${plural(sum.stops, "stop")} · ${sum.cities} ${plural(sum.cities, "city", "cities")} · ${sum.countries} ${plural(sum.countries, "country", "countries")}",
+                    color = Poster.Ink, style = PosterType.Label.copy(fontSize = 12.sp), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
             Spacer(Modifier.height(6.dp))
             // Wraps so the heat legend drops under the chips on a narrow phone instead of squeezing them.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -301,6 +332,59 @@ private fun PinCard(d: Dot, modifier: Modifier = Modifier, onClose: () -> Unit) 
             "×", color = Poster.Ink, style = PosterType.Display.copy(fontSize = 28.sp),
             modifier = Modifier.clickable(role = Role.Button, onClick = onClose).semantics { contentDescription = "Close" }.padding(horizontal = 8.dp),
         )
+    }
+}
+
+// ---- The live stamp ----------------------------------------------------------------------------------------------
+
+internal const val NOW_STAMP_TAG = "now-stamp"
+private val RING = 44.dp
+
+/**
+ * The red "you are here, now" over the last fix: a ring and a dot pulsing once every 1.2 s (still under reduced
+ * motion), a tag below reading NOW · 14:02 · CAMBRIDGE and the fix's age. Sits at `at`, or the box centre until the
+ * host has projected it; the position is read in layout, so a camera frame moves the mark without recomposing it.
+ */
+@Composable
+private fun NowStampMark(stamp: NowStamp, at: State<Offset?>, onTap: () -> Unit, modifier: Modifier = Modifier) {
+    val motion = motionOn()
+    val pulse = if (motion) {
+        rememberInfiniteTransition(label = "now").animateFloat(
+            1f, 1.25f, infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "pulse",
+        ).value
+    } else 1f
+    val tag = "NOW · ${stamp.time} · ${stamp.city.uppercase()}"
+    Box(modifier) {
+        Column(
+            Modifier.layout { m, c ->
+                val p = m.measure(c.copy(minWidth = 0, minHeight = 0))
+                val ring = RING.roundToPx()
+                layout(c.maxWidth, c.maxHeight) {
+                    val o = at.value ?: Offset(c.maxWidth / 2f, c.maxHeight / 2f)
+                    p.place((o.x - p.width / 2f).roundToInt(), (o.y - ring / 2f).roundToInt())
+                }
+            }.testTag(NOW_STAMP_TAG).semantics(mergeDescendants = true) { contentDescription = "Now · ${stamp.time} · ${stamp.city} · ${stamp.age}" }
+                .clickable(role = Role.Button, onClick = onTap),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Canvas(Modifier.size(RING)) {
+                val r = size.minDimension / 2
+                drawCircle(Poster.Red.copy(alpha = 0.18f), r * pulse, center)
+                drawCircle(Poster.Red, (r - 3.dp.toPx()) * pulse, center, style = Stroke(3.dp.toPx()))
+                drawCircle(Poster.Stock, 7.dp.toPx(), center)
+                drawCircle(Poster.Red, 5.dp.toPx(), center)
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                tag, color = Poster.Stock, style = ChipStyle.copy(fontSize = 13.sp), softWrap = false,
+                modifier = Modifier.background(Poster.Red).padding(horizontal = 7.dp, vertical = 4.dp),
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                stamp.age.uppercase(), color = Poster.Red, style = PosterType.Caps.copy(fontSize = 10.sp), softWrap = false,
+                modifier = Modifier.background(Poster.Stock.copy(alpha = 0.9f)).padding(horizontal = 4.dp, vertical = 1.dp),
+            )
+        }
     }
 }
 

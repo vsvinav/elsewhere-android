@@ -12,6 +12,10 @@ import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordSource
 import com.elsewhere.app.data.RecordStore
+import com.elsewhere.app.data.Recording
+import com.elsewhere.app.data.db.RawFixEntity
+import com.elsewhere.app.record.RecordControl
+import com.elsewhere.app.record.RecordStats
 import com.elsewhere.app.data.Settings
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.ingest.DetailsSource
@@ -98,5 +102,18 @@ object Fakes {
 
     object Land : LandSource {
         override suspend fun get() = FeatureCollection(emptyList())
+    }
+
+    /** A recorder with settable counters and a newest fix; starts and stops only flip the flag. */
+    class Control(initial: Recording = Recording()) : RecordControl {
+        override val recording = MutableStateFlow(initial)
+        var stats = RecordStats(0, 0, null)
+        var fix: RawFixEntity? = null
+        var reads = 0
+        override suspend fun start() { recording.value = Recording(true, 1_800_000_000L, 0L) }
+        override suspend fun stop() { recording.value = Recording() }
+        override suspend fun pause(seconds: Long) { recording.value = recording.value.copy(pausedUntil = 1_800_000_000L + seconds) }
+        override suspend fun stats() = stats
+        override suspend fun latestFix(): RawFixEntity? { reads++; return fix }
     }
 }

@@ -13,6 +13,8 @@ import com.elsewhere.app.map.Basemaps
 import com.elsewhere.app.map.PinLayers
 import com.elsewhere.app.map.PinOpts
 import com.elsewhere.app.map.SizeBy
+import com.elsewhere.app.record.Live
+import com.elsewhere.app.record.NowStamp
 import com.elsewhere.app.ui.nav.DoorNav
 import com.elsewhere.app.ui.nav.Opening
 import com.elsewhere.app.ui.nav.Origin
@@ -32,7 +34,9 @@ import javax.inject.Inject
 /** The Map tab's state: the pins of the record in the current window, what the chips and search leave of them, and the base map. */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class MapViewModel @Inject constructor(private val range: RangeStore, maps: MapsSettings, tiles: TileService, meter: CostMeter, private val lookups: PlaceLookups, private val doors: DoorNav) : ViewModel() {
+class MapViewModel @Inject constructor(
+    private val range: RangeStore, maps: MapsSettings, tiles: TileService, meter: CostMeter, private val lookups: PlaceLookups, private val doors: DoorNav, live: Live,
+) : ViewModel() {
     fun seen(id: String) { range.filtered.value?.let { lookups.need(listOf(id), it.places) } }
     private val basemaps = Basemaps(viewModelScope, maps, tiles, meter)
     val basemap: StateFlow<Basemap> get() = basemaps.basemap
@@ -45,6 +49,9 @@ class MapViewModel @Inject constructor(private val range: RangeStore, maps: Maps
         .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val opts = MutableStateFlow(PinOpts())
+
+    /** The recorder's newest fix as a stamp, refreshed every half minute while the tab is on screen; null when there is none to show. */
+    val live: StateFlow<NowStamp?> = live.stamps.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun toggle(cat: Cat) = opts.update { o -> o.copy(hidden = if (cat in o.hidden) o.hidden - cat else o.hidden + cat) }
     fun only(cat: Cat) = opts.update { it.copy(hidden = Cat.entries.toSet() - cat) }
