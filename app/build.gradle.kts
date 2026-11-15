@@ -68,7 +68,7 @@ dependencies {
     implementation(libs.hilt.android); ksp(libs.hilt.compiler); implementation(libs.hilt.nav.compose)
     implementation(libs.hilt.work); ksp(libs.hilt.work.compiler)
     implementation(libs.room.runtime); implementation(libs.room.ktx); ksp(libs.room.compiler)
-    implementation(libs.datastore)
+    implementation(libs.datastore); implementation(libs.exifinterface)
     implementation(libs.serialization.json); implementation(libs.coroutines.android)
     implementation(libs.retrofit); implementation(libs.retrofit.serialization); implementation(libs.okhttp)
     implementation(libs.coil.compose); implementation(libs.work.runtime)

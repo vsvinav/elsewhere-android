@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
+import kotlinx.coroutines.flow.Flow
 
 @Dao interface VisitDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(rows: List<VisitEntity>)
@@ -36,6 +37,16 @@ import androidx.room.Upsert
     @Query("SELECT COUNT(*) FROM raw_fixes") suspend fun countAll(): Int
     @Query("DELETE FROM raw_fixes WHERE ts < :ts") suspend fun pruneBefore(ts: Long)
     @Query("DELETE FROM raw_fixes") suspend fun clear()
+}
+
+@Dao interface PhotoDao {
+    @Upsert suspend fun upsert(row: PhotoEntity)
+    @Query("SELECT * FROM photos ORDER BY ts DESC") fun all(): Flow<List<PhotoEntity>>
+    @Query("SELECT * FROM photos ORDER BY ts DESC") suspend fun list(): List<PhotoEntity>
+    @Query("SELECT * FROM photos WHERE placeId = :placeId ORDER BY ts DESC") suspend fun forPlace(placeId: String): List<PhotoEntity>
+    @Query("SELECT * FROM photos WHERE id = :id") suspend fun get(id: String): PhotoEntity?
+    @Query("DELETE FROM photos WHERE id = :id") suspend fun delete(id: String)
+    @Query("DELETE FROM photos") suspend fun clear()
 }
 
 @Dao interface MemoryDao {

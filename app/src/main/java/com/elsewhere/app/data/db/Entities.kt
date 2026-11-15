@@ -45,6 +45,13 @@ data class RawFixEntity(
     val speedMps: Float?, val altitude: Double?, val activity: String?, val batteryPct: Int?,
 )
 
+/** A photo snapped at a place: the original and its thumbnail live under `filesDir/photos/`, named by [id]. */
+@Entity(tableName = "photos")
+data class PhotoEntity(
+    @PrimaryKey val id: String, val ts: Long, val lat: Double?, val lng: Double?, val placeId: String?, val city: String?,
+    val caption: String?, val file: String,
+)
+
 @Entity(tableName = "memories")
 data class MemoryEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val start: Long, val end: Long, val km: Double, val dests: String)
 

@@ -7,8 +7,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [VisitEntity::class, ActivityEntity::class, PathEntity::class, RawFixEntity::class, MemoryEntity::class,
-        FrequentPlaceEntity::class, PlaceEnrichmentEntity::class, ImportMetaEntity::class],
-    version = 2, exportSchema = true,
+        FrequentPlaceEntity::class, PlaceEnrichmentEntity::class, ImportMetaEntity::class, PhotoEntity::class],
+    version = 3, exportSchema = true,
 )
 abstract class ElsewhereDb : RoomDatabase() {
     abstract fun visits(): VisitDao
@@ -19,6 +19,7 @@ abstract class ElsewhereDb : RoomDatabase() {
     abstract fun frequentPlaces(): FrequentPlaceDao
     abstract fun placeEnrichment(): PlaceEnrichmentDao
     abstract fun importMeta(): ImportMetaDao
+    abstract fun photos(): PhotoDao
 }
 
 /** 1 → 2: rows learn where they came from, and the phone's own fixes get a table. */
@@ -32,4 +33,14 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
-val MIGRATIONS = arrayOf<Migration>(MIGRATION_1_2)
+/** 2 → 3: photos snapped at places. */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `photos` (`id` TEXT NOT NULL, `ts` INTEGER NOT NULL, `lat` REAL, `lng` REAL, `placeId` TEXT, `city` TEXT, " +
+                "`caption` TEXT, `file` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        )
+    }
+}
+
+val MIGRATIONS = arrayOf<Migration>(MIGRATION_1_2, MIGRATION_2_3)

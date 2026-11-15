@@ -65,6 +65,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         val llmModel = stringPreferencesKey("llmModel")
         val llmBaseUrl = stringPreferencesKey("llmBaseUrl")
         val passportSeen = stringSetPreferencesKey("passportSeen")
+        val photosPrivacySeen = booleanPreferencesKey("photosPrivacySeen")
     }
     private fun keyOf(kind: Kind) = when (kind) { Kind.DETAILS -> K.detailsCalls; Kind.PHOTOS -> K.photoCalls; Kind.MAPS -> K.mapLoads }
 
@@ -139,6 +140,10 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
     override suspend fun load(): Map<String, String?> =
         store.data.first()[K.addresses]?.let { runCatching { json.decodeFromString(addressBook, it) }.getOrNull() } ?: emptyMap()
     override suspend fun save(book: Map<String, String?>) { store.edit { it[K.addresses] = json.encodeToString(addressBook, book) } }
+
+    /** Whether the one-time note before the first snap has been read. */
+    val photosPrivacySeen: Flow<Boolean> = store.data.map { it[K.photosPrivacySeen] ?: false }
+    suspend fun markPhotosPrivacySeen() { store.edit { it[K.photosPrivacySeen] = true } }
 
     suspend fun clearAll() { store.edit { it.clear() } }
 }

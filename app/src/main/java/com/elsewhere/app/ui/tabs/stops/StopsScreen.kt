@@ -29,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +58,9 @@ import com.elsewhere.app.ui.world.LocalMuted
 import com.elsewhere.app.ui.world.Pass
 import com.elsewhere.app.ui.world.PlacePhoto
 import com.elsewhere.app.ui.world.PlaceSticker
+import com.elsewhere.app.ui.photos.PhotoStrip
+import com.elsewhere.app.ui.photos.SnapButtons
+import com.elsewhere.app.ui.photos.SnapPlace
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.countUp
@@ -228,6 +232,10 @@ internal fun StopDetail(s: Stop, onBack: () -> Unit) {
         Spacer(Modifier.height(28.dp))
         PlaceSticker(p, s.name, s.sub, Modifier.fillMaxWidth(0.8f).align(Alignment.CenterHorizontally), tilt = 1.5f)
         Spacer(Modifier.height(28.dp))
+        val snapPlace = remember(s) { SnapPlace(s.id, s.name, p.lat, p.lng, p.city, p.address) }
+        PhotoStrip(snapPlace, Modifier.padding(bottom = 20.dp))
+        SnapButtons(snapPlace)
+        Spacer(Modifier.height(12.dp))
         InkButton("Back to all places", onBack, quiet = true)
     }
 }

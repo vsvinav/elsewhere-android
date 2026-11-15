@@ -3,6 +3,7 @@ package com.elsewhere.app.data
 import androidx.room.withTransaction
 import com.elsewhere.app.data.db.ActivityEntity
 import com.elsewhere.app.data.db.ElsewhereDb
+import com.elsewhere.app.photos.PhotoFiles
 import com.elsewhere.app.data.db.FrequentPlaceEntity
 import com.elsewhere.app.data.db.ImportMetaEntity
 import com.elsewhere.app.data.db.MemoryEntity
@@ -69,6 +70,7 @@ class RecordRepository @Inject constructor(
     private val cities: CitiesLoader,
     scope: CoroutineScope,
     private val readyState: ReadyState = ReadyState(),
+    private val photoFiles: PhotoFiles? = null,
 ) : RecordSource, RecordStore, EnrichmentStore {
     private val importVersion = MutableStateFlow(0)
     /** Set by `build()` so the UI can tell an export-only record from one the phone is adding to. */
@@ -230,7 +232,7 @@ class RecordRepository @Inject constructor(
 
     private suspend fun clearRows() {
         db.visits().clear(); db.activities().clear(); db.paths().clear(); db.rawFixes().clear(); db.memories().clear()
-        db.frequentPlaces().clear(); db.placeEnrichment().clear(); db.importMeta().clear()
+        db.frequentPlaces().clear(); db.placeEnrichment().clear(); db.importMeta().clear(); db.photos().clear()
     }
 
     override suspend fun saveProfile(p: Profile) = settings.saveProfile(p)
@@ -253,6 +255,7 @@ class RecordRepository @Inject constructor(
 
     override suspend fun reset() {
         db.withTransaction { clearRows() }
+        photoFiles?.clear()
         settings.clearAll()
         importVersion.update { it + 1 }
     }

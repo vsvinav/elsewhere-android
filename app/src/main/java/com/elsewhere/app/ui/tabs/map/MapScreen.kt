@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
@@ -85,6 +86,9 @@ import com.elsewhere.app.map.rememberMapHost
 import com.elsewhere.app.map.summary
 import com.elsewhere.app.ui.nav.Origin
 import com.elsewhere.app.ui.world.InkButton
+import com.elsewhere.app.ui.photos.PhotoStrip
+import com.elsewhere.app.ui.photos.SnapPlace
+import com.elsewhere.app.ui.photos.SnapStamp
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterTextField
 import com.elsewhere.app.ui.world.PosterType
@@ -277,8 +281,10 @@ private operator fun IntArray.component4() = this[3]
 /** The open pin's tag: what and where, two figures, a way to close it. */
 @Composable
 private fun PinCard(d: Dot, modifier: Modifier = Modifier, onClose: () -> Unit) {
+    val snapPlace = remember(d) { SnapPlace(d.id, d.title.ifEmpty { "Unnamed stop" }, d.place.lat, d.place.lng, d.place.city, d.place.address) }
+    Box(modifier.fillMaxWidth()) {
     Row(
-        modifier.fillMaxWidth().background(Color.White).border(2.dp, Poster.Ink).padding(start = 12.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+        Modifier.fillMaxWidth().background(Color.White).border(2.dp, Poster.Ink).padding(start = 12.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
         Column(Modifier.weight(1f)) {
@@ -296,11 +302,14 @@ private fun PinCard(d: Dot, modifier: Modifier = Modifier, onClose: () -> Unit) 
                     "  ·  ${n0(d.place.nVisits)}× · ${hours(d.place.totalHours)}",
                 color = Poster.Ink3, style = PosterType.Label.copy(fontSize = 12.sp), maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
+            PhotoStrip(snapPlace, Modifier.padding(top = 8.dp), compact = true)
         }
         Text(
             "×", color = Poster.Ink, style = PosterType.Display.copy(fontSize = 28.sp),
             modifier = Modifier.clickable(role = Role.Button, onClick = onClose).semantics { contentDescription = "Close" }.padding(horizontal = 8.dp),
         )
+    }
+    SnapStamp(snapPlace, Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 10.dp))
     }
 }
 

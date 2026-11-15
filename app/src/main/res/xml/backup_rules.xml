@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Photos: the database and thumbnails go along; the originals stay on the phone. -->
+<full-backup-content>
+    <include domain="database" path="elsewhere.db" />
+    <include domain="file" path="photos/thumbs/" />
+    <exclude domain="file" path="photos/originals/" />
+</full-backup-content>
