@@ -33,6 +33,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
@@ -57,6 +58,7 @@ class RecordService : Service() {
     private var still = false
     private var paused = false
     private var lastFixTs: Long? = null
+    private var stillJob: Job? = null
 
     private val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -96,12 +98,15 @@ class RecordService : Service() {
     }
 
     private fun stopListening() {
+        stillJob?.cancel(); stillJob = null
         fused.removeLocationUpdates(callback)
         runCatching { ActivityRecognition.getClient(this).removeActivityTransitionUpdates(ActivityTransitionReceiver.pendingIntent(this)) }
     }
 
     @Suppress("MissingPermission")
     private fun startListening() {
+        // Every start intent lands here; only one set of listeners may be live.
+        stillJob?.cancel()
         request(still)
         runCatching {
             val types = listOf(DetectedActivity.STILL, DetectedActivity.WALKING, DetectedActivity.RUNNING, DetectedActivity.ON_BICYCLE, DetectedActivity.IN_VEHICLE)
@@ -111,7 +116,7 @@ class RecordService : Service() {
             }
             ActivityRecognition.getClient(this).requestActivityTransitionUpdates(ActivityTransitionRequest(transitions), ActivityTransitionReceiver.pendingIntent(this))
         }
-        scope.launch {
+        stillJob = scope.launch {
             hints.still.collectLatest { s ->
                 if (s == still) return@collectLatest
                 still = s
