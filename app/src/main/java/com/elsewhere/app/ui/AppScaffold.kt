@@ -31,6 +31,7 @@ import com.elsewhere.app.ui.shell.TicketStrip
 import com.elsewhere.app.ui.shell.dayOf
 import com.elsewhere.app.ui.tabs.dates.DatesTab
 import com.elsewhere.app.ui.tabs.facts.FactsTab
+import com.elsewhere.app.ui.tabs.flights.FlightsTab
 import com.elsewhere.app.ui.tabs.map.MapTab
 import com.elsewhere.app.ui.tabs.numbers.NumbersTab
 import com.elsewhere.app.ui.tabs.stops.StopsTab
@@ -41,7 +42,7 @@ import com.elsewhere.app.ui.world.Poster
 
 private enum class Picking { FROM, TO }
 
-/** The section each ticket opens on. Flights and Replay still print a placeholder. */
+/** The section each ticket opens on. Replay still prints a placeholder. */
 @Composable
 fun TabContent(tab: Tab, go: (Tab) -> Unit) = when (tab) {
     Tab.TOUR -> TourTab(onGo = go)
@@ -49,6 +50,7 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit) = when (tab) {
     Tab.FACTS -> FactsTab()
     Tab.STOPS -> StopsTab()
     Tab.DATES -> DatesTab()
+    Tab.FLIGHTS -> FlightsTab()
     Tab.MAP -> MapTab()
     else -> Placeholder(tab)
 }
