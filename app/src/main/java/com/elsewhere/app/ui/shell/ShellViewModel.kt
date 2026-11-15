@@ -12,6 +12,7 @@ import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.shellReady
 import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.ingest.Progress
+import com.elsewhere.app.ui.nav.DoorNav
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,10 +26,12 @@ import javax.inject.Inject
 
 private const val REFRESH_TIMEOUT_MS = 15_000L
 
-/** What the masthead menu reads and does: the name on the record, usage, start over. */
+/** What the masthead menu reads and does: the name on the record, usage, start over; and the doors the figures open. */
 @HiltViewModel
 class ShellViewModel @Inject constructor(
-    private val repo: RecordStore, private val source: RecordSource, settings: MapsSettings, private val lookups: PlaceLookups, readyState: ReadyState = ReadyState(),
+    private val repo: RecordStore, private val source: RecordSource, settings: MapsSettings, private val lookups: PlaceLookups,
+    /** Every figure on the posters opens through here. */
+    val doors: DoorNav, readyState: ReadyState = ReadyState(),
 ) : ViewModel() {
     private val _refreshing = MutableStateFlow(false)
     /** True from a pull until the rebuilt record has landed, or the wait has given up. */

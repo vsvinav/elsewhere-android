@@ -59,6 +59,7 @@ import com.elsewhere.app.ui.world.n0
 import com.elsewhere.app.ui.world.plural
 import com.elsewhere.app.analytics.toFixed
 import com.elsewhere.app.ui.world.u
+import com.elsewhere.app.ui.nav.span
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -107,12 +108,16 @@ internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit, onRecord: () -> Unit = {}
         }
         Spacer(Modifier.height(28.dp))
         val counting = if (ui.deviceDays > 0) " …and still counting: ${n0(ui.deviceDays)} ${plural(ui.deviceDays, "day")} recorded on this phone." else ""
-        Lede("${ui.yearSpan}, live from ${n0(f.days)} days of record. Everywhere your phone slept, every leg between. ${n0(f.places)} places, ${n0(f.cities)} cities, ${ui.countries()}.$counting")
+        val d = ui.doors
+        Lede(listOf(
+            span("${ui.yearSpan}, live from "), span("${n0(f.days)} days", d.days), span(" of record. Everywhere your phone slept, every leg between. "),
+            span("${n0(f.places)} places", d.places), span(", "), span("${n0(f.cities)} cities", d.cities), span(", "), span(ui.countries(), d.countries), span(".$counting"),
+        ))
         Spacer(Modifier.height(40.dp))
         TrailMap(ui.trail)
         Spacer(Modifier.height(40.dp))
         DatesList(
-            t.stops.take(6).map { DateRow(it.city, it.country, "${it.nights}", plural(it.nights, "night")) },
+            t.stops.take(6).mapIndexed { i, it -> DateRow(it.city, it.country, "${it.nights}", plural(it.nights, "night"), door = ui.doors.stops.getOrNull(i)) },
             more = when {
                 printing -> null
                 t.stops.size > 6 -> ({ CapsText("+ ${t.stops.size - 6} more cities →", Modifier.clickable(role = Role.Button) { onGo(Tab.DATES) }, size = 12.sp) })
@@ -121,7 +126,7 @@ internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit, onRecord: () -> Unit = {}
             },
         )
         Spacer(Modifier.height(40.dp))
-        Foot("${n0(f.cities)} cities · ${ui.countries()}", "${countUp(u.cv(f.totalKm))} ${u.u}")
+        Foot(listOf(span("${n0(f.cities)} cities", d.cities), span(" · "), span(ui.countries(), d.countries)), listOf(span("${countUp(u.cv(f.totalKm))} ${u.u}", d.distance)))
         if (!printing) {
             Spacer(Modifier.height(20.dp))
             CapsText(if (ui.deviceDays > 0) "Recording on this phone →" else "Record new travel →", Modifier.clickable(role = Role.Button, onClick = onRecord), color = Poster.Red, size = 12.sp)
@@ -138,13 +143,13 @@ internal fun HeadlineBill(ui: TourUi, onGo: (Tab) -> Unit) {
         Spacer(Modifier.height(16.dp))
         Word(act.city)
         Spacer(Modifier.height(16.dp))
-        Lede("${n0(u.cv(act.km))} ${u.u} from home. ${act.nights} ${plural(act.nights, "night")}, ${date(act.start)} → ${date(act.end)}.")
+        Lede(listOf(span("${n0(u.cv(act.km))} ${u.u} from home", ui.doors.act), span(". "), span("${act.nights} ${plural(act.nights, "night")}, ${date(act.start)} → ${date(act.end)}", ui.doors.actNights), span(".")))
         Spacer(Modifier.height(40.dp))
         DatesList(buildList {
-            f.longestTrip?.let { add(DateRow("Longest trip", it.trip.anchorCities.take(2).joinToString(" · ").ifEmpty { "away" }, "${it.trip.nights}", "nights")) }
-            add(DateRow("Nights away", null, n0(t.nightsAway)))
-            add(DateRow("Nights home", null, n0(t.nightsHome)))
-            add(DateRow("Trips", null, "${f.trips}"))
+            f.longestTrip?.let { add(DateRow("Longest trip", it.trip.anchorCities.take(2).joinToString(" · ").ifEmpty { "away" }, "${it.trip.nights}", "nights", door = ui.doors.longestTrip)) }
+            add(DateRow("Nights away", null, n0(t.nightsAway), door = ui.doors.nightsAway))
+            add(DateRow("Nights home", null, n0(t.nightsHome), door = ui.doors.nightsHome))
+            add(DateRow("Trips", null, "${f.trips}", door = ui.doors.trips))
         })
         Spacer(Modifier.height(48.dp))
         Box(Modifier.fillMaxWidth().padding(end = 12.dp), contentAlignment = Alignment.CenterEnd) {
@@ -162,14 +167,14 @@ internal fun SetlistBill(ui: TourUi) {
     Bill(share = Share("setlist")) {
         CapsText("Setlist · ${if (u == Units.MI) "miles" else "kilometres"} by mode")
         Spacer(Modifier.height(16.dp))
-        BigNum(countUp(u.cv(f.totalKm)), u.u)
+        BigNum(countUp(u.cv(f.totalKm)), u.u, door = ui.doors.distanceOnRecord)
         Spacer(Modifier.height(28.dp))
         val top = f.kmByMode.firstOrNull()?.second ?: 1.0
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            for ((m, km) in f.kmByMode) SetlistRow(label(m), (km / top).toFloat(), lensColor(m), n0(u.cv(km)), u.u)
+            for ((m, km) in f.kmByMode) SetlistRow(label(m), (km / top).toFloat(), lensColor(m), n0(u.cv(km)), u.u, door = ui.doors.modes[m])
         }
         Spacer(Modifier.height(40.dp))
-        Foot("${toFixed(f.totalKm / 40075, 1)}× around the Earth", "${f.flights} ${plural(f.flights, "flight")}")
+        Foot(listOf(span("${toFixed(f.totalKm / 40075, 1)}× around the Earth", ui.doors.laps)), listOf(span("${f.flights} ${plural(f.flights, "flight")}", ui.doors.flights)))
     }
 }
 
@@ -181,12 +186,12 @@ internal fun ResidencyBill(ui: TourUi, onSeen: (String) -> Unit = {}) {
     Bill(Tone.RED, share = Share("residency")) {
         CapsText("Residency · where the hours went")
         Spacer(Modifier.height(16.dp))
-        BigNum(countUp(f.hours.other), "h out")
+        BigNum(countUp(f.hours.other), "h out", door = ui.doors.hoursOut)
         Spacer(Modifier.height(16.dp))
         Lede("${pct(f.hours.home)}% home · ${if (ui.hasWork) "${pct(f.hours.work)}% work · " else ""}${pct(f.hours.other)}% elsewhere · ${pct(f.hours.transit)}% moving. About ${toFixed(f.hours.other / max(1, f.days).toDouble(), 1)} hours a day somewhere else.")
         if (f.thirdPlaces.isNotEmpty()) {
             Spacer(Modifier.height(40.dp))
-            DatesList(f.thirdPlaces.map { DateRow(it.name, it.place.city, "${it.place.nVisits}", "visits", id = it.id.takeIf { _ -> it.place.name == null || it.place.photo == null }) }, onSeen = onSeen)
+            DatesList(f.thirdPlaces.mapIndexed { i, it -> DateRow(it.name, it.place.city, "${it.place.nVisits}", "visits", id = it.id.takeIf { _ -> it.place.name == null || it.place.photo == null }, door = ui.doors.thirdPlaces.getOrNull(i)) }, onSeen = onSeen)
         }
     }
 }
@@ -199,12 +204,12 @@ internal fun RecordsBill(ui: TourUi) {
         CapsText("Records · personal bests")
         Spacer(Modifier.height(24.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-            f.records.longestDay?.let { RecordStamp("Longest day", n0(u.cv(it.km)), "${u.u} · ${dateISO(it.date).take(6)}", color = Poster.Ink, size = 112.dp) }
-            f.records.busiestDay?.let { RecordStamp("Busiest day", "${it.places}", "places · ${dateISO(it.date).take(6)}", size = 112.dp) }
-            f.records.farthest?.let { RecordStamp("Farthest", n0(u.cv(it.km)), "${u.u} · ${it.city ?: "away"}", color = Poster.Ink, size = 112.dp) }
+            f.records.longestDay?.let { RecordStamp("Longest day", n0(u.cv(it.km)), "${u.u} · ${dateISO(it.date).take(6)}", color = Poster.Ink, size = 112.dp, door = ui.doors.longestDay) }
+            f.records.busiestDay?.let { RecordStamp("Busiest day", "${it.places}", "places · ${dateISO(it.date).take(6)}", size = 112.dp, door = ui.doors.busiestDay) }
+            f.records.farthest?.let { RecordStamp("Farthest", n0(u.cv(it.km)), "${u.u} · ${it.city ?: "away"}", color = Poster.Ink, size = 112.dp, door = ui.doors.act) }
         }
         Spacer(Modifier.height(22.dp))
-        PTable(listOf("Year", u.u, "Places", "Trips", "Flights"), f.years.map { y -> listOf("${y.year}", n0(u.cv(y.km)), n0(y.places), "${y.trips}", "${y.flights}") })
+        PTable(listOf("Year", u.u, "Places", "Trips", "Flights"), f.years.map { y -> listOf("${y.year}", n0(u.cv(y.km)), n0(y.places), "${y.trips}", "${y.flights}") }, doors = ui.doors.years)
     }
 }
 
@@ -218,7 +223,7 @@ internal fun BackstageBill(ui: TourUi) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(40.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Field("Name on the bill", ui.name.ifEmpty { "—" })
             Field("Home", ui.homeCity ?: "—")
-            Field("Record", "${date(f.range.first)} → ${date(f.range.last)}")
+            Field("Record", "${date(f.range.first)} → ${date(f.range.last)}", door = ui.doors.record)
         }
         Spacer(Modifier.height(28.dp))
         val rep = ui.record.meta.importReport

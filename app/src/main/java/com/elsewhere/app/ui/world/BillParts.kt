@@ -27,6 +27,10 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.elsewhere.app.ui.nav.Door
+import com.elsewhere.app.ui.nav.DoorText
+import com.elsewhere.app.ui.nav.Span
+import com.elsewhere.app.ui.nav.door
 
 // The recurring printed matter of a bill (web .bill h2.word / .lede / .num / .foot / .legend).
 
@@ -36,15 +40,23 @@ fun Word(text: String, modifier: Modifier = Modifier, size: TextUnit = 64.sp, co
     Text(text.uppercase(), modifier, color = color, style = PosterType.Display.copy(fontSize = size, letterSpacing = (-0.01).em))
 }
 
+private val LedeStyle get() = PosterType.Lede.copy(fontWeight = FontWeight.Medium, fontSize = 18.sp, lineHeight = 1.35.em)
+
 @Composable
 fun Lede(text: String, modifier: Modifier = Modifier, color: Color = LocalContentColor.current) {
-    Text(text, modifier, color = color, style = PosterType.Lede.copy(fontWeight = FontWeight.Medium, fontSize = 18.sp, lineHeight = 1.35.em))
+    Text(text, modifier, color = color, style = LedeStyle)
+}
+
+/** A lede whose figures are doors. */
+@Composable
+fun Lede(spans: List<Span>, modifier: Modifier = Modifier, color: Color = LocalContentColor.current, pressed: Int? = null) {
+    DoorText(spans, modifier, style = LedeStyle, color = color, pressed = pressed)
 }
 
 /** A big number with its unit set small beside it: "22 away". */
 @Composable
-fun BigNum(value: String, small: String? = null, modifier: Modifier = Modifier, size: TextUnit = 84.sp, color: Color = LocalContentColor.current, align: TextAlign = TextAlign.Start) {
-    Row(modifier, verticalAlignment = Alignment.Bottom, horizontalArrangement = if (align == TextAlign.End) Arrangement.End else Arrangement.Start) {
+fun BigNum(value: String, small: String? = null, modifier: Modifier = Modifier, size: TextUnit = 84.sp, color: Color = LocalContentColor.current, align: TextAlign = TextAlign.Start, door: Door? = null) {
+    Row(modifier.door(door), verticalAlignment = Alignment.Bottom, horizontalArrangement = if (align == TextAlign.End) Arrangement.End else Arrangement.Start) {
         Text(value, color = color, style = PosterType.Display.copy(fontSize = size, letterSpacing = (-0.01).em), softWrap = false)
         if (small != null) {
             Spacer(Modifier.width(6.dp))
@@ -53,16 +65,22 @@ fun BigNum(value: String, small: String? = null, modifier: Modifier = Modifier, 
     }
 }
 
-/** The rule and the two bold lines that close a bill. */
+/** The rule and the two bold lines that close a bill; `door` makes the two lines one door. */
 @Composable
-fun Foot(left: String, right: String?, modifier: Modifier = Modifier) {
+fun Foot(left: String, right: String?, modifier: Modifier = Modifier, door: Door? = null) {
+    Foot(listOf(Span(left)), right?.let { listOf(Span(it)) }, modifier, door)
+}
+
+/** A foot whose figures are doors of their own. */
+@Composable
+fun Foot(left: List<Span>, right: List<Span>?, modifier: Modifier = Modifier, door: Door? = null) {
     Column(modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(Rule).background(LocalContentColor.current))
         Spacer(Modifier.height(16.dp))
         val style = PosterType.Display.copy(fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.02.em, lineHeight = 1.em)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-            Text(left.uppercase(), Modifier.weight(1f, fill = false), style = style)
-            if (right != null) { Spacer(Modifier.width(24.dp)); Text(right.uppercase(), style = style, textAlign = TextAlign.End) }
+        Row(Modifier.fillMaxWidth().door(door), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+            DoorText(left.map { it.copy(text = it.text.uppercase()) }, Modifier.weight(1f, fill = false), style = style, color = LocalContentColor.current)
+            if (right != null) { Spacer(Modifier.width(24.dp)); DoorText(right.map { it.copy(text = it.text.uppercase()) }, style = style.copy(textAlign = TextAlign.End), color = LocalContentColor.current) }
         }
     }
 }
@@ -81,8 +99,8 @@ fun Legend(items: List<Pair<String, Color>>, modifier: Modifier = Modifier) {
 }
 
 /** One line of a .dates list: the place, a small note, the number and its unit. */
-/** `id` names the place the row prints, when it should be looked up as it scrolls in. */
-data class DateRow(val where: String, val whereSmall: String? = null, val n: String, val nSmall: String? = null, val id: String? = null)
+/** `id` names the place the row prints, when it should be looked up as it scrolls in; `door` is where its figure leads. */
+data class DateRow(val where: String, val whereSmall: String? = null, val n: String, val nSmall: String? = null, val id: String? = null, val door: Door? = null)
 
 private val Small = PosterType.Caps.copy(fontSize = 11.sp, letterSpacing = 0.2.em)
 
@@ -93,7 +111,7 @@ fun DatesList(rows: List<DateRow>, modifier: Modifier = Modifier, loud: Boolean 
     Column(modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(Rule).background(ink))
         for (r in rows) {
-            Row(Modifier.fillMaxWidth().seenAs(r.id, onSeen).padding(top = 14.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
+            Row(Modifier.fillMaxWidth().seenAs(r.id, onSeen).door(r.door).padding(top = 14.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     Text(r.where.uppercase(), Modifier.weight(1f, fill = false), style = PosterType.Display.copy(fontSize = if (loud) 34.sp else 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.01.em, lineHeight = 1.em), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (r.whereSmall != null) { Spacer(Modifier.width(10.dp)); Text(r.whereSmall.uppercase(), color = LocalMuted.current, style = Small, maxLines = 1) }
@@ -112,8 +130,8 @@ fun DatesList(rows: List<DateRow>, modifier: Modifier = Modifier, loud: Boolean 
 
 /** One bar of the setlist: a mode, its share of the longest bar, the figure. */
 @Composable
-fun SetlistRow(label: String, frac: Float, color: Color, n: String, small: String, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+fun SetlistRow(label: String, frac: Float, color: Color, n: String, small: String, modifier: Modifier = Modifier, door: Door? = null) {
+    Row(modifier.fillMaxWidth().door(door), verticalAlignment = Alignment.CenterVertically) {
         Text(label.uppercase(), Modifier.width(96.dp), style = PosterType.Display.copy(fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.width(12.dp))
         Box(Modifier.weight(1f).height(22.dp).background(Poster.Stock2)) { Box(Modifier.fillMaxWidth(frac.coerceIn(0f, 1f)).height(22.dp).background(color)) }
@@ -126,9 +144,9 @@ fun SetlistRow(label: String, frac: Float, color: Color, n: String, small: Strin
     }
 }
 
-/** The web's `.ptable`: caps headers over a rule, then rows of display figures, first column larger. */
+/** The web's `.ptable`: caps headers over a rule, then rows of display figures, first column larger. `doors` runs row for row. */
 @Composable
-fun PTable(headers: List<String>, rows: List<List<String>>, modifier: Modifier = Modifier, compact: Boolean = false) {
+fun PTable(headers: List<String>, rows: List<List<String>>, modifier: Modifier = Modifier, compact: Boolean = false, doors: List<List<Door?>> = emptyList()) {
     val ink = LocalContentColor.current
     val first = PosterType.Display.copy(fontSize = if (compact) 24.sp else 36.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em)
     val cell = PosterType.Display.copy(fontSize = if (compact) 22.sp else 24.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em)
@@ -139,10 +157,10 @@ fun PTable(headers: List<String>, rows: List<List<String>>, modifier: Modifier =
             }
         }
         Box(Modifier.fillMaxWidth().height(Rule).background(ink))
-        for (r in rows) {
+        rows.forEachIndexed { ri, r ->
             Row(Modifier.fillMaxWidth().padding(vertical = if (compact) 10.dp else 12.dp), verticalAlignment = Alignment.Bottom) {
                 r.forEachIndexed { i, v ->
-                    Text(v.uppercase(), Modifier.weight(if (i == 0) 1.4f else 1f), style = if (i == 0) first else cell, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(v.uppercase(), Modifier.weight(if (i == 0) 1.4f else 1f).door(doors.getOrNull(ri)?.getOrNull(i)), style = if (i == 0) first else cell, textAlign = if (i == 0) TextAlign.Start else TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             Box(Modifier.fillMaxWidth().height(2.dp).background(ink))

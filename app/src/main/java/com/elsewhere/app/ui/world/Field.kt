@@ -24,6 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
+import com.elsewhere.app.ui.nav.Door
+import com.elsewhere.app.ui.nav.DoorText
+import com.elsewhere.app.ui.nav.Span
+import com.elsewhere.app.ui.nav.door
 
 /**
  * A printed input: ink on stock, a rule beneath instead of a box. `display` sets the headline
@@ -64,15 +68,25 @@ fun PosterTextField(
  * value prints as a ghost "not on record" (or "—" when big), as the web does.
  */
 @Composable
-fun Field(label: String, value: String?, modifier: Modifier = Modifier, big: Boolean = false) {
+fun Field(label: String, value: String?, modifier: Modifier = Modifier, big: Boolean = false, door: Door? = null) {
     val onInk = LocalContentColor.current == Poster.Stock
     val empty = value.isNullOrEmpty()
-    Column(modifier) {
+    Column(modifier.door(door)) {
         CapsText(label, size = 11.sp)
         Spacer(Modifier.height(6.dp))
         val color = if (empty) (if (onInk) Poster.Ink3 else Poster.Ghost) else LocalContentColor.current
         val shown = if (empty) (if (big) "—" else "not on record") else value!!
         if (big) Text(shown.uppercase(), color = color, style = PosterType.Display.copy(fontSize = 44.sp, lineHeight = 0.9.em), maxLines = 1)
         else Text(shown, color = color, style = PosterType.Lede.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, lineHeight = 1.2.em))
+    }
+}
+
+/** A field whose value holds doors of its own. */
+@Composable
+fun Field(label: String, value: List<Span>, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        CapsText(label, size = 11.sp)
+        Spacer(Modifier.height(6.dp))
+        DoorText(value, color = LocalContentColor.current, style = PosterType.Lede.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, lineHeight = 1.2.em))
     }
 }

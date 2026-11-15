@@ -10,6 +10,7 @@ import com.elsewhere.app.data.LatLng
 import com.elsewhere.app.data.Role
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.data.filterData
+import com.elsewhere.app.ui.nav.Door
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -87,4 +88,68 @@ class FactsTest {
         assertFalse(f.any { it.id == "hermit" })
         assertTrue(Regex("January 8, 2025").containsMatchIn(f.first { it.id == "furthest" }.detail))
     }
+
+    private fun door(fs: List<Fact>, id: String) = fs.first { it.id == id }.door
+
+    @Test fun `every fact opens a door that reads as its headline, and whole-record figures open on the whole window`() {
+        val f = facts(data, Units.KM)
+        assertTrue(f.all { it.door != null }, f.filter { it.door == null }.map { it.id }.toString())
+        for (x in f) assertEquals(x.headline, x.door!!.label)
+        assertEquals(Door.Range(JAN, JAN + 10 * D, "Walked a marathon"), door(f, "walked"))
+        val home = facts(bigHome(), Units.KM)
+        assertEquals(Door.Range(JAN, JAN + 40 * D, "100% of nights in your own bed"), door(home, "homebody"))
+    }
+
+    @Test fun `a record set at one place opens on that place and its day`() {
+        val f = facts(data, Units.KM)
+        assertEquals(Door.Place("hotel", JAN + 4 * D, "5,531 km from home"), door(f, "furthest"))
+        assertEquals(Door.Place("hotel", JAN + 4 * D, "36 hours straight at Paris"), door(f, "longest-stay"))
+        // Hermit opens on the stay itself, home to home.
+        assertEquals(Door.Range(JAN, JAN + 4 * D - 12 * H, "84 hours without leaving the house"), door(f, "hermit"))
+    }
+
+    @Test fun `a streak opens on its nights, first midnight to the end of the last day`() {
+        val streak = door(facts(bigHome(), Units.KM), "streak-home") as Door.Range
+        assertEquals(Fx.utc(2025, 0, 1), streak.from)
+        assertEquals(Fx.utc(2025, 1, 10) - 1, streak.to)
+        assertEquals("40 nights in your own bed, straight", streak.label)
+    }
+
+    @Test fun `typed-place habits open on the places that made them`() {
+        val cafes = (1..10).associate { "cafe$it" to place(null, "Boston", "US", 1, JAN, JAN, "Cafe $it", 42.36, -71.06, 1.0, primaryType = "cafe") }
+        val f = facts(data.copy(places = data.places + cafes + ("bar1" to place(null, "Boston", "US", 2, JAN, JAN, "Bar", 42.36, -71.06, 6.0, primaryType = "bar"))), Units.KM)
+        assertEquals(Door.Places(cafes.keys.toList(), "10 coffee runs · one every 1 days"), door(f, "coffee"))
+        // A set of places stays a set, even a set of one.
+        assertEquals(Door.Places(listOf("bar1"), f.first { it.id == "bars" }.headline), door(f, "bars"))
+    }
+
+    @Test fun `the fastest leg opens on the leg itself, and the beds you slept in open as pins`() {
+        val drive = act(JAN + 2 * D, JAN + 2 * D + 2 * H, "IN_PASSENGER_VEHICLE", 200_000.0, sLat = 42.36, sLng = -71.06, eLat = 43.0, eLng = -72.0)
+        // A second city slept in, so the beds are a figure.
+        val lyon = visit(JAN + 9 * D, JAN + 10 * D - 12 * H, "lyon", lat = 45.76, lng = 4.84)
+        val f = facts(data.copy(activities = data.activities + drive, visits = data.visits + lyon, places = data.places + ("lyon" to pl(null, "Lyon", "FR", 45.76, 4.84))), Units.KM)
+        assertEquals(Door.Range(JAN + 2 * D, JAN + 2 * D + 2 * H, "100 km/h door to door"), door(f, "fastest"))
+        val density = door(f, "density") as Door.Places
+        assertEquals(listOf("hotel", "hotel2", "lyon"), density.placeIds.sorted())
+    }
+
+    @Test fun `a city fact opens on every place the record names there, even ones with a role or none visited`() {
+        val passes = (1..5).map { i -> visit(JAN + i * D + 10 * H, JAN + i * D + 11 * H, "cam$i", lat = 42.37, lng = -71.11) }
+        val cam = (1..5).associate { "cam$it" to pl(null, "Cambridge", "US", 42.37, -71.11) }
+        val extra = mapOf("cam-office" to pl(Role.WORK, "Cambridge", "US", 42.37, -71.11), "cam-quiet" to pl(null, "Cambridge", "US", 42.37, -71.11), "paris-desk" to pl(Role.WORK, "Paris", "FR", 48.85, 2.35))
+        val f = facts(data.copy(visits = data.visits + passes, places = data.places + cam + extra), Units.KM)
+        assertEquals((cam.keys + "cam-office" + "cam-quiet").sorted(), (door(f, "passed") as Door.Places).placeIds.sorted())
+        assertEquals(listOf("hotel", "hotel2", "paris-desk"), (door(f, "second-city") as Door.Places).placeIds.sorted())
+    }
+
+    @Test fun `a loyal restaurant opens on it`() {
+        val f = facts(data.copy(places = data.places + ("r" to place(null, "Boston", "US", 7, JAN, JAN, "Nook", 42.36, -71.06, 9.0, primaryType = "restaurant"))), Units.KM)
+        assertEquals(Door.Place("r", label = "Nook, 7 times"), door(f, "regular"))
+    }
+
+    private fun bigHome() = Fx.record(
+        visits = listOf(visit(JAN, JAN + 40 * D - 12 * H, "home", lat = 42.36, lng = -71.06)),
+        places = mapOf("home" to pl(Role.HOME, "Boston", "US", 42.36, -71.06)),
+        home = LatLng(42.36, -71.06), range = JAN..(JAN + 40 * D),
+    )
 }

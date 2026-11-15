@@ -92,6 +92,14 @@ class PinLayersTest {
         assertNull(homeless.fitBounds(PinOpts(hidden = setOf(Cat.EAT))))
     }
 
+    @Test fun `a door's stops are framed by id, a lone one given room, unknown ids ignored`() {
+        val two = layers.boundsOf(listOf("home", "tokyo", "nope"))!!
+        assertEquals(35.68, two.swLat, 1e-9); assertEquals(-71.06, two.swLng, 1e-9); assertEquals(42.36, two.neLat, 1e-9); assertEquals(139.69, two.neLng, 1e-9)
+        val lone = layers.boundsOf(listOf("home"))!!
+        assertEquals(Bounds(42.355, -71.065, 42.365, -71.055), lone)
+        assertNull(layers.boundsOf(listOf("nope")))
+    }
+
     @Test fun `a stop summary counts cities and countries of what is shown`() {
         val s = summary(layers.shown(PinOpts(hidden = setOf(Cat.EAT))))
         assertEquals(4, s.cities); assertEquals(3, s.countries)

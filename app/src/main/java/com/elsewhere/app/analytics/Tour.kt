@@ -11,7 +11,8 @@ import kotlin.math.min
 
 // Port of web/src/analytics/tour.ts
 
-data class Stop(val city: String, val country: String?, var nights: Int, var visits: Int, var first: Long, var last: Long, val lat: Double, val lng: Double)
+/** `placeIds` is every bed slept in there, in first-slept order. */
+data class Stop(val city: String, val country: String?, var nights: Int, var visits: Int, var first: Long, var last: Long, val lat: Double, val lng: Double, val placeIds: MutableList<String> = ArrayList())
 data class HeadlineAct(val city: String, val country: String?, val km: Double, val nights: Int, val start: Long, val end: Long, val placeId: String)
 data class Tour(val stops: List<Stop>, val nightsAway: Int, val nightsHome: Int, val headline: HeadlineAct?, val years: Pair<Int, Int>)
 
@@ -38,6 +39,7 @@ fun tour(data: Record): Tour {
     val byCity = LinkedHashMap<String, Stop>()
     var nightsHome = 0; var nightsAway = 0
     var headline: HeadlineAct? = null
+    val beds = HashMap<String, HashSet<String>>()
     for (v in data.visits) {
         if (v.lvl != 0) continue
         val n = nightsIn(v)
@@ -48,6 +50,7 @@ fun tour(data: Record): Tour {
         val city = p?.city ?: "Unknown city"
         val s = byCity.getOrPut(city) { Stop(city, p?.countryCode, 0, 0, v.start, v.end, v.lat, v.lng) }
         s.nights += n; s.visits++
+        if (beds.getOrPut(city) { HashSet() }.add(v.placeId)) s.placeIds.add(v.placeId)
         s.first = min(s.first, v.start); s.last = max(s.last, v.end)
         val km = distanceKm(homeOf(data, v.start), v)
         if (headline == null || km > headline.km) headline = HeadlineAct(city, p?.countryCode, km, n, v.start, v.end, v.placeId)

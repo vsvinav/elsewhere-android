@@ -92,6 +92,8 @@ private operator fun DoubleArray.component4() = this[3]
  * cached per filter and its clusters and labels per half-zoom, so a pan costs a map lookup and a zoom one regrid.
  */
 class PinLayers(record: Record) {
+    /** The window these pins were cut to; a door checks it before framing them. */
+    val range: LongRange = record.meta.range
     /** Non-home stops, most visited first. */
     val all: List<Dot> = record.places.entries.filter { !isHome(it.value) }
         .map { (id, p) -> val cat = categoryOf(p); Dot(id, p, (p.name ?: p.label ?: "").trim(), cat, cat.color) }
@@ -100,6 +102,8 @@ class PinLayers(record: Record) {
     val homes: List<Dot> = record.places.entries.filter { isHome(it.value) }
         .map { (id, p) -> Dot(id, p, (p.name ?: p.label ?: "Home").trim(), Cat.OTHER, HOME_INK) }
     val counts: Map<Cat, Int> = all.groupingBy { it.cat }.eachCount()
+
+    private val byId: Map<String, Dot> by lazy { (all + homes).associateBy { it.id } }
 
     private class Shown(val dots: List<Dot>) {
         val clusters = HashMap<Double, List<ClusterPin>>()
@@ -152,9 +156,19 @@ class PinLayers(record: Record) {
     }
 
     /** The box around every shown stop and every home; null when there is nothing to frame. */
-    fun fitBounds(o: PinOpts): Bounds? {
-        val pts = shownFor(o).dots + homes
-        if (pts.isEmpty()) return null
-        return Bounds(pts.minOf { it.lat }, pts.minOf { it.lng }, pts.maxOf { it.lat }, pts.maxOf { it.lng })
+    fun fitBounds(o: PinOpts): Bounds? = boundsAround(shownFor(o).dots + homes)
+
+    /**
+     * The box around the stops named, ignoring unknown ids; null when none is on the map. O(ids) after the first
+     * call. A lone stop gets a box about a kilometre across, so a door onto it does not land at street level.
+     */
+    fun boundsOf(ids: Collection<String>): Bounds? {
+        val b = boundsAround(ids.mapNotNull { byId[it] }) ?: return null
+        return if (b.swLat == b.neLat && b.swLng == b.neLng) Bounds(b.swLat - LONE_PAD, b.swLng - LONE_PAD, b.neLat + LONE_PAD, b.neLng + LONE_PAD) else b
     }
 }
+
+private const val LONE_PAD = 0.005
+
+private fun boundsAround(pts: List<Located>): Bounds? =
+    if (pts.isEmpty()) null else Bounds(pts.minOf { it.lat }, pts.minOf { it.lng }, pts.maxOf { it.lat }, pts.maxOf { it.lng })

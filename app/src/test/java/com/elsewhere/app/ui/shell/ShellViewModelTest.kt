@@ -14,6 +14,7 @@ import com.elsewhere.app.ingest.MemoryCostMeter
 import com.elsewhere.app.ingest.MemoryEnrichmentStore
 import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.ingest.Progress
+import com.elsewhere.app.ui.nav.DoorNav
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -55,7 +56,7 @@ class ShellViewModelTest {
     private fun vm(source: Source = Source(rec)): ShellViewModel {
         val maps = Fakes.Maps()
         val lookups = PlaceLookups(object : DetailsSource { override suspend fun details(id: String, key: String) = Enrichment.NONE }, MemoryEnrichmentStore(), MemoryCostMeter(), enrich, CoroutineScope(dispatcher), maps.settings)
-        return ShellViewModel(Fakes.Store(rec), source, maps, lookups, readyState)
+        return ShellViewModel(Fakes.Store(rec), source, maps, lookups, DoorNav(RangeStore(source, CoroutineScope(dispatcher)), CoroutineScope(dispatcher)), readyState)
     }
 
     @Test fun `a naming burst carries the bar from the names to done, and never shows the old done bar again`() = runTest(dispatcher) {

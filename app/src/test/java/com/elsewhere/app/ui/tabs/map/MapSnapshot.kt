@@ -13,6 +13,8 @@ import com.elsewhere.app.SampleRecord
 import com.elsewhere.app.analytics.Cat
 import com.elsewhere.app.map.PinLayers
 import com.elsewhere.app.map.PinOpts
+import com.elsewhere.app.ui.Tab
+import com.elsewhere.app.ui.nav.Origin
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import com.elsewhere.app.ui.world.LocalMotion
 import com.elsewhere.app.ui.world.Poster
@@ -28,6 +30,17 @@ class MapSnapshot {
         ElsewhereTheme {
             CompositionLocalProvider(LocalMotion provides false) {
                 MapScreen(layers, PinOpts(hidden = setOf(Cat.EAT), selected = "market", query = "ha"), MapActions(), Modifier.height(640.dp)) { m ->
+                    Box(m.fillMaxSize().background(Poster.Stock))
+                }
+            }
+        }
+    }
+
+    @Test fun origin() = paparazzi.snapshot {
+        val layers = PinLayers(SampleRecord.record)
+        ElsewhereTheme {
+            CompositionLocalProvider(LocalMotion provides false) {
+                MapScreen(layers, PinOpts(), MapActions(), Modifier.height(640.dp), origin = Origin("42 countries", Tab.TOUR)) { m ->
                     Box(m.fillMaxSize().background(Poster.Stock))
                 }
             }
