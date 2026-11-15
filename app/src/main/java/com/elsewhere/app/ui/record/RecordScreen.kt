@@ -3,6 +3,7 @@ package com.elsewhere.app.ui.record
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -64,6 +65,7 @@ const val DISCLOSURE = "Elsewhere records where your phone goes, on this phone o
 
 @Composable
 fun RecordRoute(onClose: () -> Unit, vm: RecordViewModel = hiltViewModel()) {
+    BackHandler { onClose() }
     val ui by vm.ui.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
