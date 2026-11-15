@@ -1,19 +1,14 @@
 package com.elsewhere.app.ui.onboard
 
+import com.elsewhere.app.Fakes
 import com.elsewhere.app.Fx
 import com.elsewhere.app.data.Home
 import com.elsewhere.app.data.ImportReport
-import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
-import com.elsewhere.app.data.RecordStore
-import com.elsewhere.app.data.Settings
 import com.elsewhere.app.data.Units
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -24,7 +19,6 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
-import java.io.InputStream
 import java.time.YearMonth
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -43,32 +37,14 @@ class OnboardViewModelTest {
         )
     }
 
-    private class FakeStore(private val rec: Record) : RecordStore {
-        override val hasImport = MutableStateFlow(false)
-        override val profile = MutableStateFlow<Profile?>(null)
-        var saved: Profile? = null
-        override suspend fun import(open: () -> InputStream, fileName: String, onProgress: (Float) -> Unit): ImportReport {
-            open().use { it.readBytes() }; onProgress(1f); hasImport.value = true
-            return ImportReport(100, 98, mapOf("bad_json" to 2))
-        }
-        override suspend fun provisionalRecord(): Record = rec
-        override suspend fun saveProfile(p: Profile) { saved = p; profile.value = p }
-    }
-
-    private class FakeMaps : MapsSettings {
-        val cur = MutableStateFlow(Settings())
-        override val settings: Flow<Settings> = cur
-        override suspend fun saveSettings(s: Settings) { cur.value = s }
-    }
-
     private val dispatcher = StandardTestDispatcher()
     @BeforeEach fun up() = Dispatchers.setMain(dispatcher)
     @AfterEach fun down() = Dispatchers.resetMain()
 
     private fun run() = dispatcher.scheduler.runCurrent()
 
-    private fun imported(): Triple<OnboardViewModel, FakeStore, FakeMaps> {
-        val store = FakeStore(record()); val maps = FakeMaps()
+    private fun imported(): Triple<OnboardViewModel, Fakes.Store, Fakes.Maps> {
+        val store = Fakes.Store(record()); val maps = Fakes.Maps()
         val vm = OnboardViewModel(store, maps)
         vm.start(Step.Import); run()
         vm.import({ ByteArrayInputStream("{}".toByteArray()) }, "Timeline.json"); run()

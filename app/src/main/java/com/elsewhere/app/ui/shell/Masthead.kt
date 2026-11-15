@@ -1,7 +1,7 @@
 package com.elsewhere.app.ui.shell
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -26,6 +26,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -35,7 +39,6 @@ import com.elsewhere.app.data.Units
 import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
-import androidx.compose.ui.text.SpanStyle
 import java.util.Locale
 
 /** The web's `.tourline`: the mark, "ELSEWHERE · {name}'s record", and the ▾ account menu. */
@@ -57,13 +60,17 @@ fun Masthead(
             Text(
                 buildAnnotatedString {
                     append("ELSE"); withStyle(SpanStyle(color = Poster.Red)) { append("WHERE") }
-                    append(" · "); append(if (name != null) "${name.uppercase(Locale.US)}'S RECORD" else "YOUR RECORD")
+                    append(" · "); append(if (!name.isNullOrBlank()) "${name.uppercase(Locale.US)}'S RECORD" else "YOUR RECORD")
                 },
                 color = Poster.Ink, style = PosterType.Caps.copy(fontSize = 12.sp), maxLines = 1,
             )
         }
         Box {
-            Text("▾", Modifier.clickable { menu = true }.padding(horizontal = 10.dp, vertical = 12.dp), color = Poster.Ink, style = PosterType.Label)
+            Text(
+                "▾",
+                Modifier.clickable(role = Role.Button) { menu = true }.semantics { contentDescription = "Menu" }.padding(horizontal = 10.dp, vertical = 12.dp),
+                color = Poster.Ink, style = PosterType.Label,
+            )
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Poster.Stock, border = BorderStroke(2.dp, Poster.Ink), shape = RectangleShape) {
                 MenuRow("Change answers") { menu = false; onChangeAnswers() }
                 MenuRow("Maps key") { menu = false; onMapsKey() }

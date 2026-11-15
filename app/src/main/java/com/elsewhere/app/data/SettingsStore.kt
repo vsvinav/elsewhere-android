@@ -47,7 +47,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         )
     }
 
-    val counters: Flow<Counters> = store.data.map { p ->
+    override val counters: Flow<Counters> = store.data.map { p ->
         Counters(p[K.detailsCalls] ?: 0, p[K.photoCalls] ?: 0, p[K.mapLoads] ?: 0)
     }
 

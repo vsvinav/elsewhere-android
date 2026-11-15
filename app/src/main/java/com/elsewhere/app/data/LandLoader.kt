@@ -41,13 +41,18 @@ class FeatureCollection(val rings: List<DoubleArray>) {
     }
 }
 
+/** Where the land outlines come from; `LandLoader` is the real one, tests hand over a fixture. */
+interface LandSource {
+    suspend fun get(): FeatureCollection
+}
+
 /** Reads `assets/land.json` (world-atlas 1:110m countries, Antarctica dropped) once. */
 @Singleton
-class LandLoader @Inject constructor(@ApplicationContext private val context: Context) {
+class LandLoader @Inject constructor(@ApplicationContext private val context: Context) : LandSource {
     private val lock = Mutex()
     @Volatile private var cached: FeatureCollection? = null
 
-    suspend fun get(): FeatureCollection = cached ?: lock.withLock {
+    override suspend fun get(): FeatureCollection = cached ?: lock.withLock {
         cached ?: withContext(Dispatchers.IO) {
             FeatureCollection.fromJson(context.assets.open("land.json").bufferedReader().readText())
         }.also { cached = it }

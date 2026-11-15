@@ -4,8 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.data.Counters
 import com.elsewhere.app.data.Profile
-import com.elsewhere.app.data.RecordRepository
-import com.elsewhere.app.data.SettingsStore
+import com.elsewhere.app.data.MapsSettings
+import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -16,7 +16,7 @@ import javax.inject.Inject
 
 /** What the masthead menu reads and does: the name on the record, units, usage, start over. */
 @HiltViewModel
-class ShellViewModel @Inject constructor(private val repo: RecordRepository, settings: SettingsStore) : ViewModel() {
+class ShellViewModel @Inject constructor(private val repo: RecordStore, settings: MapsSettings) : ViewModel() {
     val profile: StateFlow<Profile?> = repo.profile
     val counters: StateFlow<Counters> = settings.counters.stateIn(viewModelScope, SharingStarted.Eagerly, Counters())
 

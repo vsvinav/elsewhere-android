@@ -9,6 +9,8 @@ import androidx.room.Room
 import com.elsewhere.app.data.RecordRepository
 import com.elsewhere.app.data.RecordSource
 import com.elsewhere.app.data.RecordStore
+import com.elsewhere.app.data.LandLoader
+import com.elsewhere.app.data.LandSource
 import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.data.db.ElsewhereDb
@@ -36,6 +38,7 @@ object AppModule {
     @Provides fun recordSource(repo: RecordRepository): RecordSource = repo
     @Provides fun recordStore(repo: RecordRepository): RecordStore = repo
     @Provides fun mapsSettings(store: SettingsStore): MapsSettings = store
+    @Provides fun landSource(loader: LandLoader): LandSource = loader
 
     @Provides fun visits(db: ElsewhereDb) = db.visits()
     @Provides fun activities(db: ElsewhereDb) = db.activities()

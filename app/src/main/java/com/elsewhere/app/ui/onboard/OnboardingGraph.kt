@@ -23,12 +23,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun OnboardingGraph(startStep: Step, onClose: (() -> Unit)?, vm: OnboardViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val ctx = LocalContext.current
+    val app = LocalContext.current.applicationContext
     // Once per visit to the door, not again on rotation.
     var started by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { if (!started) { started = true; vm.start(startStep) } }
-    LaunchedEffect(state.step) { if (state.step == Step.Done) onClose?.invoke() }
+    // The view model outlives a visit, so it may still read Done from the last one: only a Done
+    // seen after a live step on this visit closes the door.
+    var armed by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(state.step) {
+        if (state.step != Step.Done) armed = true
+        else if (armed) onClose?.invoke()
+    }
     BackHandler(enabled = state.questionIndex > 0) { vm.back() }
+    BackHandler(enabled = onClose != null && state.questionIndex <= 0) { onClose?.invoke() }
 
     AnimatedContent(
         targetState = state.step,
@@ -37,7 +44,7 @@ fun OnboardingGraph(startStep: Step, onClose: (() -> Unit)?, vm: OnboardViewMode
     ) { step ->
         when (step) {
             Step.Import -> ImportScreen(state.importing, state.importError, state.report) { uri, name ->
-                vm.import({ ctx.contentResolver.openInputStream(uri) ?: throw IllegalStateException("Couldn't open that file") }, name)
+                vm.import({ app.contentResolver.openInputStream(uri) ?: throw IllegalStateException("Couldn't open that file") }, name)
             }
             Step.Key -> KeyScreen(state.key, state.mapId, onSave = vm::saveKey, onSkip = vm::skipKey, onCancel = onClose)
             Step.Done -> Unit

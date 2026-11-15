@@ -25,8 +25,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -61,13 +63,25 @@ class RecordRepository @Inject constructor(
     private val importVersion = MutableStateFlow(0)
     private val placesVersion = MutableStateFlow(0)
 
-    override val profile: StateFlow<Profile?> = settings.profile.stateIn(scope, SharingStarted.Eagerly, null)
+    private val profileRead = MutableStateFlow(false)
+    private val importRead = MutableStateFlow(false)
+
+    override val profile: StateFlow<Profile?> = settings.profile
+        .onEach { profileRead.value = true }
+        .stateIn(scope, SharingStarted.Eagerly, null)
 
     override val hasImport: StateFlow<Boolean> = importVersion
         .map { db.importMeta().get() != null }
+        .onEach { importRead.value = true }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
-    override val record: StateFlow<Record?> = combine(importVersion, profile, placesVersion) { _, p, _ -> p }
+    override val ready: StateFlow<Boolean> = combine(profileRead, importRead) { a, b -> a && b }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
+    /** Only the homes and works shape the record; a new name or unit must not rebuild it. */
+    private val shape = profile.distinctUntilChangedBy { it?.homes to it?.works }
+
+    override val record: StateFlow<Record?> = combine(importVersion, shape, placesVersion) { _, p, _ -> p }
         .mapLatest { p -> if (p == null || p.homes.isEmpty()) null else build(p) }
         .flowOn(Dispatchers.Default)
         .stateIn(scope, SharingStarted.Eagerly, null)
@@ -152,7 +166,7 @@ class RecordRepository @Inject constructor(
 
     suspend fun saveEnrichment(row: PlaceEnrichmentEntity) { db.placeEnrichment().upsert(row); bumpPlacesVersion() }
 
-    suspend fun reset() {
+    override suspend fun reset() {
         db.withTransaction { clearRows() }
         settings.clearAll()
         importVersion.update { it + 1 }

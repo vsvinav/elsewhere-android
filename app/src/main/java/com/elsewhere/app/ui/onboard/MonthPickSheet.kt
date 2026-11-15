@@ -25,6 +25,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -48,9 +51,9 @@ fun MonthPickSheet(label: String, value: YearMonth?, min: YearMonth, max: YearMo
             CapsText(label)
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Arrow("‹", year > min.year) { year-- }
+                Arrow("‹", "Previous year", year > min.year) { year-- }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { DisplayText(year.toString(), 28.sp) }
-                Arrow("›", year < max.year) { year++ }
+                Arrow("›", "Next year", year < max.year) { year++ }
             }
             Spacer(Modifier.height(10.dp))
             Box(Modifier.fillMaxWidth().height(2.dp).background(Poster.Ink))
@@ -82,9 +85,11 @@ fun MonthPickSheet(label: String, value: YearMonth?, min: YearMonth, max: YearMo
 }
 
 @Composable
-private fun Arrow(glyph: String, enabled: Boolean, onClick: () -> Unit) {
+private fun Arrow(glyph: String, description: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(32.dp).alpha(if (enabled) 1f else 0.3f).border(2.dp, Poster.Ink).clickable(enabled = enabled, onClick = onClick),
+        Modifier.size(32.dp).alpha(if (enabled) 1f else 0.3f).border(2.dp, Poster.Ink)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) { Text(glyph, color = Poster.Ink, style = PosterType.Display.copy(fontSize = 22.sp, lineHeight = 1.em)) }
 }

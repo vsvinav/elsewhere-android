@@ -26,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -72,13 +74,13 @@ fun Calendar(value: LocalDate, min: LocalDate, max: LocalDate, other: LocalDate,
 
     Column(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Arrow("‹", canPrev) { month = month.minusMonths(1) }
+            Arrow("‹", "Previous month", canPrev) { month = month.minusMonths(1) }
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.Bottom) {
                 DisplayText(month.month.getDisplayName(TextStyle.FULL, Locale.US), 28.sp)
                 Spacer(Modifier.size(8.dp))
                 CapsText(month.year.toString(), Modifier.padding(bottom = 3.dp), color = Poster.Red, size = 12.sp)
             }
-            Arrow("›", canNext) { month = month.plusMonths(1) }
+            Arrow("›", "Next month", canNext) { month = month.plusMonths(1) }
         }
         Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth().height(2.dp).background(Poster.Ink))
@@ -107,9 +109,11 @@ fun Calendar(value: LocalDate, min: LocalDate, max: LocalDate, other: LocalDate,
 }
 
 @Composable
-private fun Arrow(glyph: String, enabled: Boolean, onClick: () -> Unit) {
+private fun Arrow(glyph: String, description: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(32.dp).alpha(if (enabled) 1f else 0.3f).border(2.dp, Poster.Ink).clickable(enabled = enabled, onClick = onClick),
+        Modifier.size(32.dp).alpha(if (enabled) 1f else 0.3f).border(2.dp, Poster.Ink)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) { Text(glyph, color = Poster.Ink, style = PosterType.Display.copy(fontSize = 22.sp, lineHeight = 1.em)) }
 }
