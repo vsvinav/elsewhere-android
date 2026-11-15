@@ -6,3 +6,7 @@ local.properties
 .DS_Store
 app/release/
 .kotlin/
+docs/superpowers/
+PRODUCT.md
+.impeccable/
+**/DESIGN.md
