@@ -45,7 +45,7 @@ fun arrange(list: List<Fact>, seed: Int): List<Fact> {
     }
 }
 
-data class FactsUi(val all: List<Fact>, val cards: List<Fact>, val rest: List<Fact>, val units: Units, val year: Int) {
+data class FactsUi(val all: List<Fact>, val cards: List<Fact>, val rest: List<Fact>, val units: Units, val year: Int, val raw: Record? = null, val today: String? = null) {
     val kinds: List<Kind> get() = Kind.entries.filter { k -> rest.any { it.kind == k } }
     fun count(k: Kind) = rest.count { it.kind == k }
 }
@@ -53,11 +53,11 @@ data class FactsUi(val all: List<Fact>, val cards: List<Fact>, val rest: List<Fa
 /** The thirty most visited places, the ones the facts are likeliest to name. */
 fun busiest(places: Map<String, Place>, n: Int = 30): List<String> = places.entries.sortedByDescending { it.value.nVisits }.take(n).map { it.key }
 
-fun factsUi(data: Record, raw: Record, profile: Profile?): FactsUi {
+fun factsUi(data: Record, raw: Record, profile: Profile?, today: String? = null): FactsUi {
     val units = profile?.units ?: Units.KM
     val all = facts(data, units, raw)
     val (cards, rest) = splitFacts(all)
-    return FactsUi(all, cards, rest, units, yearOf(data.meta.range.last))
+    return FactsUi(all, cards, rest, units, yearOf(data.meta.range.last), raw, today)
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

@@ -65,6 +65,9 @@ class RangeViewModel @Inject constructor(store: RangeStore) : ViewModel() {
         return max(r.first, a)..min(r.last, b)
     }
 
+    /** Both ends at once, for a door that opens an exact span. */
+    fun setRange(r: LongRange) { _range.value = clamp(r.first, r.last) }
+
     fun setFrom(day: LocalDate) {
         val cur = _range.value
         _range.value = clamp(min(day.epoch(), midnight(cur.last)), cur.last)

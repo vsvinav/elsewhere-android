@@ -35,6 +35,10 @@ class RecordSnapshot {
             rows(PermState.GRANTED, PermState.GRANTED, PermState.GRANTED, PermState.SETTINGS), true,
             Recording(true, now - 12 * 86400, 0L), RecordStats(3_412, 58, now - 180), batteryOk = false, now = now,
         )
-        RecordScreen(ui, RecordActions(), scroll = false)
+        RecordScreen(ui, RecordActions(), scroll = false, highlightsAt = 8 * 60)
     }
+
+    @Test fun highlightsOff() = sheet { HighlightsBill(null, {}) }
+
+    @Test fun highlightsOn() = sheet { HighlightsBill(21 * 60 + 15, {}) }
 }
