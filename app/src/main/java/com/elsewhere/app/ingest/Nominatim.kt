@@ -1,5 +1,8 @@
 package com.elsewhere.app.ingest
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -71,7 +74,9 @@ class Nominatim(
         val c = cache ?: book.load().toMutableMap().also { cache = it }
         val k = keyOf(lat, lng)
         if (k in c) return c[k]
-        val a = runCatching { fetchOne(lat, lng) }.getOrNull()
+        // A cancelled lookup is nobody's answer: only a real reply or failure goes in the book.
+        val a = try { fetchOne(lat, lng) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        currentCoroutineContext().ensureActive()
         c[k] = a
         runCatching { book.save(c.toMap()) }
         sleep(GAP_MS)

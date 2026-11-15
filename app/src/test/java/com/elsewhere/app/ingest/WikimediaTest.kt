@@ -1,6 +1,10 @@
 package com.elsewhere.app.ingest
 
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -39,5 +43,16 @@ class WikimediaTest {
         assertEquals(1, server.requestCount)
         server.enqueue(MockResponse().setResponseCode(500))
         assertNull(wiki.photo(0.0, 0.0))
+    }
+
+    @Test fun `a lookup cancelled mid-flight is not remembered as "no photo"`() {
+        server.enqueue(MockResponse().setBody("""{"query":{"pages":{}}}""").setHeadersDelay(2, TimeUnit.SECONDS))
+        server.enqueue(MockResponse().setBody("""{"query":{"pages":{"2":{"title":"File:Hall.jpg","imageinfo":[{"thumburl":"b"}]}}}}"""))
+        runBlocking {
+            val job = launch { wiki.photo(1.0, 1.0) }
+            delay(300); job.cancel(); job.join()
+            assertEquals("b", wiki.photo(1.0, 1.0))
+        }
+        assertEquals(2, server.requestCount)
     }
 }

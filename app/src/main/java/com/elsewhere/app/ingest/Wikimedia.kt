@@ -1,5 +1,8 @@
 package com.elsewhere.app.ingest
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -61,7 +64,8 @@ class Wikimedia(
     suspend fun photo(lat: Double, lng: Double): String? = lock.withLock {
         val k = keyOf(lat, lng)
         if (k in cache) return cache[k]
-        val u = runCatching { fetchOne(lat, lng) }.getOrNull()
+        val u = try { fetchOne(lat, lng) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        currentCoroutineContext().ensureActive()
         cache[k] = u
         sleep(GAP_MS)
         u

@@ -1,6 +1,10 @@
 package com.elsewhere.app.ingest
 
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -47,5 +51,17 @@ class NominatimTest {
         assertNull(nom.address(1.0, 1.0))
         assertNull(nom.address(1.0, 1.0))
         assertEquals(1, server.requestCount)
+    }
+
+    @Test fun `a lookup cancelled mid-flight leaves no entry, so the point is asked again`() {
+        server.enqueue(MockResponse().setBody("""{"address":{"road":"Slow Rd"}}""").setHeadersDelay(2, TimeUnit.SECONDS))
+        server.enqueue(MockResponse().setBody("""{"address":{"road":"Elm Rd"}}"""))
+        runBlocking {
+            val job = launch { nom.address(1.0, 1.0) }
+            delay(300); job.cancel(); job.join()
+            assertEquals(emptyMap<String, String?>(), book.saved)
+            assertEquals("Elm Rd", nom.address(1.0, 1.0))
+        }
+        assertEquals(2, server.requestCount)
     }
 }
