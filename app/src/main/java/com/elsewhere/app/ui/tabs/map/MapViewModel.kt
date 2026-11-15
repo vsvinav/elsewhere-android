@@ -25,7 +25,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -52,7 +51,9 @@ class MapViewModel @Inject constructor(range: RangeStore, private val maps: Maps
     /** Google's own words when the tile session could not be opened; the screen says so once. */
     val tilesError: StateFlow<String?> = _tilesError
 
-    private val copyright = MutableStateFlow<String?>(null)
+    private val _copyright = MutableStateFlow<String?>(null)
+    /** The attribution line for what the camera shows; kept apart from [basemap] so it never reloads the style. */
+    val copyright: StateFlow<String?> = _copyright
     private val viewports = MutableSharedFlow<Viewport>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private val session: StateFlow<Pair<String, TileSession>?> = maps.settings
@@ -72,8 +73,8 @@ class MapViewModel @Inject constructor(range: RangeStore, private val maps: Maps
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    val basemap: StateFlow<Basemap> = combine(session, copyright) { ks, c ->
-        ks?.let { (key, s) -> Basemap.Google(rasterStyle(tileTemplate(s, key)), c) } ?: Basemap.Free
+    val basemap: StateFlow<Basemap> = session.map { ks ->
+        ks?.let { (key, s) -> Basemap.Google(rasterStyle(tileTemplate(s, key))) } ?: Basemap.Free
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Basemap.Free)
 
     init {
@@ -81,7 +82,7 @@ class MapViewModel @Inject constructor(range: RangeStore, private val maps: Maps
         viewModelScope.launch {
             viewports.debounce(1000).collect { vp ->
                 val (key, s) = session.value ?: return@collect
-                copyright.value = tiles.copyright(s, key, vp)
+                _copyright.value = tiles.copyright(s, key, vp)
             }
         }
     }

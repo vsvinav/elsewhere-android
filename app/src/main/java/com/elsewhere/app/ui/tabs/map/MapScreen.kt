@@ -100,6 +100,7 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
     val opts by vm.opts.collectAsStateWithLifecycle()
     val basemap by vm.basemap.collectAsStateWithLifecycle()
     val tilesError by vm.tilesError.collectAsStateWithLifecycle()
+    val copyright by vm.copyright.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val host = rememberMapHost()
     LaunchedEffect(tilesError) { tilesError?.let { snackbar.showSnackbar("Google refused the map tiles — using the free map. $it") } }
@@ -126,7 +127,7 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
 
     val acts = MapActions(vm::toggle, vm::only, vm::showAll, vm::search, vm::select, vm::sizeBy, fit = { layers?.let { fit(it, opts) } })
     MapScreen(layers, opts, acts, snackbar = snackbar) { m ->
-        host.Content(m, basemap) {
+        host.Content(m, basemap, copyright) {
             layers?.let { PinCanvas(host, it, opts, Modifier.fillMaxSize()) }
         }
     }

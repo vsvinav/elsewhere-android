@@ -56,7 +56,7 @@ class MapViewModelTest {
         val vm = vm()
         val g = vm.basemap.value as Basemap.Google
         assertTrue(g.styleJson.contains("session=tok-AIza&key=AIza"), g.styleJson)
-        assertNull(g.copyright)
+        assertNull(vm.copyright.value)
         assertEquals(1, tiles.sessions)
         assertEquals(1, meter.counters.value.mapLoads)
         vm.idle(Viewport(12, 1.0, 0.0, 1.0, 0.0)); run()
@@ -69,7 +69,9 @@ class MapViewModelTest {
         vm.idle(Viewport(5, 1.0, 0.0, 1.0, 0.0)); advanceTimeBy(300)
         vm.idle(Viewport(6, 1.0, 0.0, 1.0, 0.0)); advanceTimeBy(1100)
         assertEquals(listOf(6), tiles.viewports.map { it.zoom })
-        assertEquals("Map data ©2024 Google (6)", (vm.basemap.value as Basemap.Google).copyright)
+        val before = vm.basemap.value
+        assertEquals("Map data ©2024 Google (6)", vm.copyright.value)
+        assertEquals(before, vm.basemap.value) // attribution never touches the style
         assertEquals(1, meter.counters.value.mapLoads)
     }
 
