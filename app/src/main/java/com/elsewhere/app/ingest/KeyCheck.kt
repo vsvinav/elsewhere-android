@@ -44,6 +44,8 @@ fun hintFor(message: String, status: String?): String? {
         "referer" in m || "referrer" in m -> "This key is restricted to websites. In Google Cloud → Credentials → this key, set Application restrictions to None (or create a second key for the phone)."
         api != null -> "Enable the $api in Google Cloud → APIs & Services → Library."
         "api key not valid" in m -> "The key was typed wrong or deleted."
+        "billing" in m -> "Enable billing on the project in Cloud Console."
+        status == "RESOURCE_EXHAUSTED" || "quota" in m -> "Raise the quota or wait for it to reset in APIs & Services → Quotas."
         else -> null
     }
 }

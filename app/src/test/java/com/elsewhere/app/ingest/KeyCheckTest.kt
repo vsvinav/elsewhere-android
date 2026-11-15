@@ -97,6 +97,16 @@ class KeyCheckTest {
         assertTrue(hintFor("Requests from referer https://x are blocked", null)!!.contains("Application restrictions"))
         assertTrue(hintFor("API_KEY_HTTP_REFERRER_BLOCKED", null)!!.contains("Application restrictions"))
         assertEquals("The key was typed wrong or deleted.", hintFor("API key not valid. Please pass a valid API key.", "INVALID_ARGUMENT"))
-        assertNull(hintFor("Quota exceeded", "RESOURCE_EXHAUSTED"))
+        assertNull(hintFor("Something else entirely", "UNKNOWN"))
+    }
+
+    @Test fun `billing and quota refusals get their own hints, by status or by wording`() {
+        val billing = "Enable billing on the project in Cloud Console."
+        assertEquals(billing, hintFor("This API method requires billing to be enabled. Please enable billing on project #1.", "PERMISSION_DENIED"))
+        assertEquals(billing, hintFor("Billing account for project is disabled", null))
+        val quota = "Raise the quota or wait for it to reset in APIs & Services → Quotas."
+        assertEquals(quota, hintFor("Quota exceeded for quota metric 'Requests'", "RESOURCE_EXHAUSTED"))
+        assertEquals(quota, hintFor("Something opaque", "RESOURCE_EXHAUSTED"))
+        assertEquals(quota, hintFor("You have exceeded your daily request quota for this API.", null))
     }
 }
