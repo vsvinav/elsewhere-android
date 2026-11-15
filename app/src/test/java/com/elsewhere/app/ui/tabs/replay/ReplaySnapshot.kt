@@ -25,7 +25,8 @@ class ReplaySnapshot {
     @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, theme = "android:Theme.Material.Light.NoActionBar")
 
     @Test fun chrome() = paparazzi.snapshot {
-        val data = SampleRecord.record
+        // The HUD finds the stay by binary search, as a parsed record is sorted by start; the sample is not.
+        val data = SampleRecord.record.let { it.copy(visits = it.visits.sortedBy { v -> v.start }) }
         val at = Fx.utc(2024, 4, 15) + 12 * Fx.H
         val state = PlayState(playhead = at.toDouble(), playing = true, speed = 8.0, lens = Lens.FLY, follow = false)
         val tags = listOf(Arrival(1, "lisbon", 1, at - 3000), Arrival(2, "lisbon-cafe", 1, at))
