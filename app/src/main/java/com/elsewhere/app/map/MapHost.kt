@@ -61,7 +61,8 @@ class MoveWatch {
     }
 }
 
-private fun Cam.near(o: Cam) = abs(lat - o.lat) < 1e-7 && abs(lng - o.lng) < 1e-7 && abs(zoom - o.zoom) < 1e-3 && abs(bearing - o.bearing) < 1e-3
+/** Within the SDKs' own rounding of a position: the same view, so writing it again would only cost a render. */
+internal fun Cam.near(o: Cam) = abs(lat - o.lat) < 1e-7 && abs(lng - o.lng) < 1e-7 && abs(zoom - o.zoom) < 1e-3 && abs(bearing - o.bearing) < 1e-3
 
 /** A tap on the bare map, in degrees; overlays decide what it hit. */
 data class Tap(val lat: Double, val lng: Double)

@@ -64,6 +64,8 @@ class GoogleMapHost(private val scope: CoroutineScope, initial: Cam, private val
     private val watch = MoveWatch()
 
     override fun moveTo(cam: Cam, animateMs: Int) {
+        // The follow-cam reports a still camera twice a second; the map is already there, so nothing is written.
+        if (animateMs <= 0 && cam.near(_camera.value)) return
         watch.wrote(cam)
         val update = CameraUpdateFactory.newCameraPosition(cam.toGoogle())
         if (animateMs <= 0) { state.move(update); _camera.value = cam }
@@ -123,7 +125,7 @@ class GoogleMapHost(private val scope: CoroutineScope, initial: Cam, private val
         const val IDLE_MS = 150L
         val UI = MapUiSettings(
             compassEnabled = false, indoorLevelPickerEnabled = false, mapToolbarEnabled = false, myLocationButtonEnabled = false,
-            rotationGesturesEnabled = true, tiltGesturesEnabled = false, zoomControlsEnabled = false,
+            rotationGesturesEnabled = false, tiltGesturesEnabled = false, zoomControlsEnabled = false,
         )
     }
 }
