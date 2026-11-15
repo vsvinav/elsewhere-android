@@ -15,6 +15,8 @@ import javax.inject.Singleton
 data class Settings(
     val mapsKey: String = "", val mapId: String = "", val mapProvider: MapProvider = MapProvider.AUTO,
     val googleRejected: Boolean = false,
+    /** Sessions in which Google failed to come up on this key; two in a row persist `googleRejected`. */
+    val googleFailures: Int = 0,
 )
 
 data class Counters(val detailsCalls: Int = 0, val photoCalls: Int = 0, val mapLoads: Int = 0)
@@ -27,6 +29,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         val mapId = stringPreferencesKey("mapId")
         val mapProvider = stringPreferencesKey("mapProvider")
         val googleRejected = booleanPreferencesKey("googleRejected")
+        val googleFailures = intPreferencesKey("googleFailures")
         val detailsCalls = intPreferencesKey("detailsCalls")
         val photoCalls = intPreferencesKey("photoCalls")
         val mapLoads = intPreferencesKey("mapLoads")
@@ -43,7 +46,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         Settings(
             mapsKey = p[K.mapsKey] ?: "", mapId = p[K.mapId] ?: "",
             mapProvider = p[K.mapProvider]?.let { runCatching { MapProvider.valueOf(it) }.getOrNull() } ?: MapProvider.AUTO,
-            googleRejected = p[K.googleRejected] ?: false,
+            googleRejected = p[K.googleRejected] ?: false, googleFailures = p[K.googleFailures] ?: 0,
         )
     }
 
@@ -58,7 +61,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
     override suspend fun saveSettings(s: Settings) {
         store.edit {
             it[K.mapsKey] = s.mapsKey; it[K.mapId] = s.mapId
-            it[K.mapProvider] = s.mapProvider.name; it[K.googleRejected] = s.googleRejected
+            it[K.mapProvider] = s.mapProvider.name; it[K.googleRejected] = s.googleRejected; it[K.googleFailures] = s.googleFailures
         }
     }
 
