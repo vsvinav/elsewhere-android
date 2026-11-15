@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import com.elsewhere.app.R
@@ -57,6 +58,8 @@ class GoogleMapHost(
     override val camera: StateFlow<Cam> = _camera.asStateFlow()
     private val _events = MutableSharedFlow<MapEvent>(extraBufferCapacity = 64)
     override val events: SharedFlow<MapEvent> = _events.asSharedFlow()
+    private val _taps = MutableSharedFlow<Tap>(extraBufferCapacity = 8)
+    override val taps: SharedFlow<Tap> = _taps.asSharedFlow()
 
     private var loaded by mutableStateOf(false)
     private var pendingFit: (() -> Unit)? = null
@@ -75,6 +78,9 @@ class GoogleMapHost(
         }
         if (loaded) go() else pendingFit = { go() }
     }
+
+    override fun project(lat: Double, lng: Double): Offset? =
+        state.projection?.toScreenLocation(LatLng(lat, lng))?.let { Offset(it.x.toFloat(), it.y.toFloat()) }
 
     private fun fail() { if (!failed) { failed = true; onFailed() } }
 
@@ -131,6 +137,7 @@ class GoogleMapHost(
                     compassEnabled = false, indoorLevelPickerEnabled = false, mapToolbarEnabled = false,
                     myLocationButtonEnabled = false, tiltGesturesEnabled = false, zoomControlsEnabled = false,
                 ),
+                onMapClick = { _taps.tryEmit(Tap(it.latitude, it.longitude)) },
                 onMapLoaded = { loaded = true; pendingFit?.invoke(); pendingFit = null; if (keyLive) onLoaded() },
             )
             overlays()

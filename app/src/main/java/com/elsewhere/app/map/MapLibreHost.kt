@@ -8,10 +8,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import com.elsewhere.app.ui.world.Poster
 import dev.sargunv.maplibrecompose.compose.CameraState
+import dev.sargunv.maplibrecompose.compose.ClickResult
 import dev.sargunv.maplibrecompose.compose.MaplibreMap
 import dev.sargunv.maplibrecompose.core.CameraMoveReason
 import dev.sargunv.maplibrecompose.core.CameraPosition
@@ -39,8 +42,11 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
     override val camera: StateFlow<Cam> = _camera.asStateFlow()
     private val _events = MutableSharedFlow<MapEvent>(extraBufferCapacity = 64)
     override val events: SharedFlow<MapEvent> = _events.asSharedFlow()
+    private val _taps = MutableSharedFlow<Tap>(extraBufferCapacity = 8)
+    override val taps: SharedFlow<Tap> = _taps.asSharedFlow()
 
     private var sizePx = IntSize.Zero
+    private var density = 1f
     private var pendingFit: (() -> Unit)? = null
 
     override fun moveTo(cam: Cam, animateMs: Int) {
@@ -54,9 +60,14 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
         if (sizePx != IntSize.Zero) go() else pendingFit = go
     }
 
+    /** The library answers in dp and throws before the map exists, so scale here and treat "no map yet" as null. */
+    override fun project(lat: Double, lng: Double): Offset? =
+        runCatching { state.screenLocationFromPosition(Position(lng, lat)) }.getOrNull()?.let { Offset(it.x.value * density, it.y.value * density) }
+
     @OptIn(FlowPreview::class)
     @Composable
     override fun Content(modifier: Modifier, overlays: @Composable () -> Unit) {
+        density = LocalDensity.current.density
         LaunchedEffect(Unit) {
             // The library exposes no "is moving" flag: a camera change after a quiet spell starts a move (a drag
             // when the reason is a gesture), and a quiet spell after changes ends it.
@@ -87,6 +98,7 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
                     isCompassEnabled = false, isScaleBarEnabled = false,
                 ),
                 cameraState = state,
+                onMapClick = { p, _ -> _taps.tryEmit(Tap(p.latitude, p.longitude)); ClickResult.Pass },
             )
             overlays()
         }
