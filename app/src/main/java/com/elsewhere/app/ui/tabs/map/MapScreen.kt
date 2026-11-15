@@ -72,6 +72,7 @@ import com.elsewhere.app.map.Tap
 import com.elsewhere.app.map.clusterRadius
 import com.elsewhere.app.map.rememberMapHost
 import com.elsewhere.app.map.summary
+import com.elsewhere.app.ui.nav.Origin
 import com.elsewhere.app.ui.world.InkButton
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterTextField
@@ -100,6 +101,8 @@ data class MapActions(
 fun MapTab(vm: MapViewModel = hiltViewModel()) {
     val layers by vm.layers.collectAsStateWithLifecycle()
     val opts by vm.opts.collectAsStateWithLifecycle()
+    val origin by vm.origin.collectAsStateWithLifecycle()
+    val opening by vm.opening.collectAsStateWithLifecycle()
     val basemap by vm.basemap.collectAsStateWithLifecycle()
     val tilesError by vm.tilesError.collectAsStateWithLifecycle()
     val copyright by vm.copyright.collectAsStateWithLifecycle()
@@ -115,6 +118,15 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
     var fitted by remember { mutableStateOf(false) }
     // An empty window has nothing to frame yet; the latch waits for the first fit that actually happens.
     LaunchedEffect(host, layers) { val l = layers; if (!fitted && l != null && fit(l, vm.opts.value)) fitted = true }
+    // A door's opening waits for the pins cut to its window, then selects its pin and frames what it names.
+    LaunchedEffect(host, layers, opening) {
+        val o = opening ?: return@LaunchedEffect; val l = layers ?: return@LaunchedEffect
+        if (l.range != o.range) return@LaunchedEffect
+        vm.apply(o)
+        val b = o.fit?.let { l.boundsOf(it) } ?: l.fitBounds(vm.opts.value)
+        if (b != null) { host.fit(b, with(density) { FIT_PAD.roundToPx() }); fitted = true }
+        vm.opened()
+    }
 
     LaunchedEffect(host) {
         host.taps.collect { tap ->
@@ -128,18 +140,18 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
     }
 
     val acts = MapActions(vm::toggle, vm::only, vm::showAll, vm::search, vm::select, vm::sizeBy, fit = { layers?.let { fit(it, opts) } }, seen = vm::seen)
-    MapScreen(layers, opts, acts, snackbar = snackbar) { m ->
+    MapScreen(layers, opts, acts, snackbar = snackbar, origin = origin, onBack = vm::back) { m ->
         host.Content(m, basemap, copyright) {
             layers?.let { PinCanvas(host, it, opts, Modifier.fillMaxSize()) }
         }
     }
 }
 
-/** Chips and search above the map, the pin HUD below it, the open pin's card over its bottom edge. */
+/** Chips and search above the map, the pin HUD below it, the open pin's card over its bottom edge, a door's stub over its top. */
 @Composable
 fun MapScreen(
     layers: PinLayers?, opts: PinOpts, acts: MapActions, modifier: Modifier = Modifier,
-    snackbar: SnackbarHostState? = null, map: @Composable BoxScope.(Modifier) -> Unit,
+    snackbar: SnackbarHostState? = null, origin: Origin? = null, onBack: () -> Unit = {}, map: @Composable BoxScope.(Modifier) -> Unit,
 ) {
     val shown = remember(layers, opts.hidden, opts.query) { layers?.shown(opts) ?: emptyList() }
     val sum = remember(shown) { summary(shown) }
@@ -149,6 +161,7 @@ fun MapScreen(
         Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth().weight(1f).border(2.dp, Poster.Ink)) {
             map(Modifier.fillMaxSize().padding(2.dp))
+            OriginTag(origin, onBack, Modifier.align(Alignment.TopStart).padding(12.dp))
             val sel = opts.selected?.let { id -> layers?.all?.firstOrNull { it.id == id } ?: layers?.homes?.firstOrNull { it.id == id } }
             if (sel != null) {
                 LaunchedEffect(sel.id) { if (sel.place.name == null || sel.place.photo == null) acts.seen(sel.id) }

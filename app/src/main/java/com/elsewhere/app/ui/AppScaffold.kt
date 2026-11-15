@@ -14,6 +14,8 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +31,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.ui.nav.LocalOpenDoor
 import com.elsewhere.app.ui.shell.DatePickSheet
 import com.elsewhere.app.ui.shell.Masthead
 import com.elsewhere.app.ui.shell.RangeBar
@@ -85,6 +88,21 @@ fun AppScaffold(
         // Returning home pops back to the live Tour entry so its view model and scroll survive.
         if (t == Tab.TOUR) { if (!nav.popBackStack(Tab.TOUR.route, inclusive = false)) nav.navigate(t.route) { launchSingleTop = true } }
         else nav.navigate(t.route) { popUpTo(Tab.TOUR.route); launchSingleTop = true }
+        // Leaving the map by the strip is not going back through a door.
+        if (t != Tab.MAP) shell.doors.leave()
+    }
+    val origin by shell.doors.origin.collectAsStateWithLifecycle()
+    val jump by shell.doors.jump.collectAsStateWithLifecycle()
+    // A door's jump keeps the bill it left so the way back lands on the same scroll; the way back restores it.
+    LaunchedEffect(jump) {
+        val t = jump ?: return@LaunchedEffect
+        selected = t
+        when (t) {
+            Tab.MAP -> nav.navigate(t.route) { popUpTo(Tab.TOUR.route) { saveState = true }; launchSingleTop = true }
+            Tab.TOUR -> if (!nav.popBackStack(Tab.TOUR.route, inclusive = false)) nav.navigate(t.route) { launchSingleTop = true }
+            else -> nav.navigate(t.route) { popUpTo(Tab.TOUR.route); launchSingleTop = true; restoreState = true }
+        }
+        shell.doors.jumped()
     }
     BackHandler(enabled = tab != Tab.TOUR) { go(Tab.TOUR) }
 
@@ -99,6 +117,7 @@ fun AppScaffold(
     val from = dayOf(range.first); val to = dayOf(range.last)
     var picking by remember { mutableStateOf<Picking?>(null) }
 
+    CompositionLocalProvider(LocalOpenDoor provides { d -> shell.doors.go(d, tab) }) {
     Box {
     Scaffold(
         containerColor = Poster.Stock,
@@ -124,7 +143,11 @@ fun AppScaffold(
                 indicator = { PullToRefreshDefaults.Indicator(pull, refreshing, Modifier.align(Alignment.TopCenter), containerColor = Poster.Stock, color = Poster.Mustard) },
             ) {
                 NavHost(nav, startDestination = Tab.TOUR.route, Modifier.fillMaxSize()) {
-                    for (t in Tab.entries) composable(t.route) { content(t, go) }
+                    for (t in Tab.entries) composable(t.route) {
+                        // Inside the host, so it outranks the host's own pop: Back on a map opened through a door goes back through it.
+                        if (t == Tab.MAP) BackHandler(enabled = origin != null) { shell.doors.back() }
+                        content(t, go)
+                    }
                 }
             }
             NamingStamp(naming, Modifier.align(Alignment.TopEnd).padding(12.dp))
@@ -132,6 +155,7 @@ fun AppScaffold(
     }
     // Along the very top edge, over the masthead, as the web fixes `.ready` at top 0.
     ReadyBar(ready, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars))
+    }
     }
 
     val p = picking

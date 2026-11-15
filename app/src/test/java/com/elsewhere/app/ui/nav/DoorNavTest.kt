@@ -75,8 +75,9 @@ class DoorNavTest {
         nav.jumped(); nav.opened()
         assertNull(nav.jump.value); assertNull(nav.opening.value)
         assertEquals(Origin("a day", Tab.TOUR), nav.origin.value)
-        assertEquals(Origin("a day", Tab.TOUR), nav.back())
+        nav.back()
         assertNull(nav.origin.value)
+        assertEquals(Tab.TOUR, nav.jump.value)
     }
 
     @Test fun `moving the window by hand dismisses the origin but the door's own move does not`() = runTest(dispatcher) {

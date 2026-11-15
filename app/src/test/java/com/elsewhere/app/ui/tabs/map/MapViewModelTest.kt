@@ -9,6 +9,7 @@ import com.elsewhere.app.data.Viewport
 import com.elsewhere.app.ingest.Kind
 import com.elsewhere.app.ingest.MemoryCostMeter
 import com.elsewhere.app.map.Basemap
+import com.elsewhere.app.ui.nav.DoorNav
 import com.elsewhere.app.ui.shell.RangeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +43,8 @@ class MapViewModelTest {
     private val maps = Fakes.Maps()
     private val tiles = Tiles()
     private val meter = MemoryCostMeter()
-    private fun vm() = MapViewModel(RangeStore(Fakes.Source(null), CoroutineScope(dispatcher)), maps, tiles, meter, Fakes.lookups(maps, CoroutineScope(dispatcher))).also { run() }
+    private val range = RangeStore(Fakes.Source(null), CoroutineScope(dispatcher))
+    private fun vm() = MapViewModel(range, maps, tiles, meter, Fakes.lookups(maps, CoroutineScope(dispatcher)), DoorNav(range, CoroutineScope(dispatcher))).also { run() }
 
     @Test fun `without a working key the base map is free and nothing is spent`() = runTest(dispatcher) {
         val vm = vm()

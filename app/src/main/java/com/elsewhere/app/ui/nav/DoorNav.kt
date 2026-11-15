@@ -72,8 +72,8 @@ class DoorNav @Inject constructor(private val store: RangeStore, scope: Coroutin
     /** The pin the map now shows; any pin but the door's own closes the way back. */
     fun pinChanged(id: String?) { if (_origin.value != null && id != doorPin) dismiss() }
 
-    /** Back through the door: the origin to return to, forgotten on the way. */
-    fun back(): Origin? = _origin.value.also { dismiss() }
+    /** Back through the door: the shell is asked for the tab the reader came from, and the origin is forgotten. */
+    fun back() { val o = _origin.value ?: return; dismiss(); _jump.value = o.backTab }
 
     /** The reader left the map some other way; the tag would be stale when they return. */
     fun leave() = dismiss()
