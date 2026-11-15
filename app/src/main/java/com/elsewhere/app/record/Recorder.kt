@@ -78,6 +78,8 @@ class Recorder(
 
     suspend fun stats(): RecordStats = RecordStats(db.rawFixes().countAll(), db.visits().countDevice(), db.rawFixes().latest()?.ts)
 
+    suspend fun latestFix(): RawFixEntity? = db.rawFixes().latest()
+
     private suspend fun commit(out: List<Emission>) {
         if (out.isEmpty()) return
         val geo = resolver()

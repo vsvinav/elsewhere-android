@@ -13,6 +13,8 @@ import com.elsewhere.app.analytics.Cat
 import com.elsewhere.app.ui.nav.DoorNav
 import com.elsewhere.app.ui.nav.Opening
 import com.elsewhere.app.map.SizeBy
+import com.elsewhere.app.record.Live
+import java.time.ZoneOffset
 import com.elsewhere.app.ui.shell.RangeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,7 +49,8 @@ class MapViewModelTest {
     private val tiles = Tiles()
     private val meter = MemoryCostMeter()
     private val range = RangeStore(Fakes.Source(null), CoroutineScope(dispatcher))
-    private fun vm() = MapViewModel(range, maps, tiles, meter, Fakes.lookups(maps, CoroutineScope(dispatcher)), DoorNav(range, CoroutineScope(dispatcher))).also { run() }
+    private val live = Live(Fakes.Control(), { _, _ -> null }, { 1_800_000_000L }, { ZoneOffset.UTC }, 30_000)
+    private fun vm() = MapViewModel(range, maps, tiles, meter, Fakes.lookups(maps, CoroutineScope(dispatcher)), DoorNav(range, CoroutineScope(dispatcher)), live).also { run() }
 
     @Test fun `without a working key the base map is free and nothing is spent`() = runTest(dispatcher) {
         val vm = vm()

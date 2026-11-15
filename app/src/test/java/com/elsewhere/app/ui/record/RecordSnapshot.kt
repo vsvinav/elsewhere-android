@@ -30,6 +30,11 @@ class RecordSnapshot {
         RecordScreen(ui, RecordActions(), scroll = false)
     }
 
+    @Test fun off() = sheet {
+        val ui = RecordUi(rows(PermState.GRANTED, PermState.GRANTED, PermState.GRANTED, PermState.GRANTED), true, Recording(), RecordStats(1_204, 7, now - 3 * 3600), true, now)
+        RecordScreen(ui, RecordActions(), scroll = false)
+    }
+
     @Test fun recording() = sheet {
         val ui = RecordUi(
             rows(PermState.GRANTED, PermState.GRANTED, PermState.GRANTED, PermState.SETTINGS), true,

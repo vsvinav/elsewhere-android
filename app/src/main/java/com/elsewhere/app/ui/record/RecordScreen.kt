@@ -8,7 +8,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +36,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.State
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import com.elsewhere.app.record.RecordState
+import com.elsewhere.app.record.TicketTone
+import com.elsewhere.app.ui.world.Lede
+import com.elsewhere.app.ui.world.Pass
+import com.elsewhere.app.ui.world.Tone
+import com.elsewhere.app.ui.world.motionOn
+import com.elsewhere.app.ui.world.n0
+import com.elsewhere.app.ui.world.plural
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.elsewhere.app.highlights.HighlightsViewModel
 import androidx.lifecycle.Lifecycle
@@ -45,15 +67,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elsewhere.app.ui.world.Bill
 import com.elsewhere.app.ui.world.CapsText
 import com.elsewhere.app.ui.world.DisplayText
-import com.elsewhere.app.ui.world.Foot
 import com.elsewhere.app.ui.world.InkButton
-import com.elsewhere.app.ui.world.Lede
 import com.elsewhere.app.ui.world.LocalMuted
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
-import com.elsewhere.app.ui.world.RecordStamp
 import com.elsewhere.app.ui.world.Rule
-import com.elsewhere.app.ui.world.Tone
 import com.elsewhere.app.ui.world.date
 
 /** What the screen can do; the route wires these to launchers and intents, snapshots pass no-ops. */
@@ -108,78 +126,101 @@ fun RecordScreen(ui: RecordUi, actions: RecordActions, modifier: Modifier = Modi
             Spacer(Modifier.weight(1f))
             CapsText("Close", Modifier.clickable(onClick = actions.onClose).padding(8.dp), color = Poster.Ink, size = 11.sp)
         }
-        when (ui.phase) {
-            Phase.DISCLOSURE -> DisclosureBill(actions)
-            Phase.PERMISSIONS -> ReadyBill(ui, actions)
-            Phase.RECORDING, Phase.PAUSED -> StatusBill(ui, actions)
-        }
-        PermissionsBill(ui, actions)
+        TicketBill(ui, actions)
+        DetailsBill(ui, actions)
         if (!ui.batteryOk && ui.phase != Phase.DISCLOSURE) BatteryBill(actions)
         HighlightsBill(highlightsAt, onHighlightsAt)
     }
 }
 
+internal const val DETAILS_TAG = "record-details"
+
+/**
+ * The hero: one boarding-pass ticket. Headline and the fixes · last line on the body, the buttons on the stub.
+ * Before location is allowed the body carries the disclosure, since that is what the first tap agrees to.
+ */
 @Composable
-internal fun DisclosureBill(actions: RecordActions) {
+internal fun TicketBill(ui: RecordUi, actions: RecordActions) {
+    val t = ui.ticket
+    val state = ui.state
+    val color = when (t.tone) { TicketTone.RED -> Poster.Red; TicketTone.INK -> Poster.Ink; TicketTone.GHOST -> Poster.Ink3 }
     Bill(first = true) {
-        Box(Modifier.fillMaxWidth()) {
-            Column {
-                DisplayText("Record", 72.sp, misreg = true)
-                DisplayText("new travel", 72.sp, color = Poster.Red, misreg = true)
-            }
-            RecordStamp("On this", "phone", "only", Modifier.align(Alignment.TopEnd), size = 92.dp)
-        }
-        Spacer(Modifier.height(28.dp))
-        Lede(DISCLOSURE)
+        CapsText("Recording · your record, live", color = Poster.Ink)
         Spacer(Modifier.height(16.dp))
-        Lede("Google is winding down Timeline exports. From here on, your phone can keep the record itself: stays of five minutes or more become stops, the legs between become routes, in the same ledger your export filled.", color = LocalMuted.current)
-        Spacer(Modifier.height(40.dp))
-        InkButton("Allow location", { actions.onAllow(Perm.FINE) }, Modifier.fillMaxWidth(), red = true)
-        Spacer(Modifier.height(40.dp))
-        Foot("Nothing is uploaded", "Stop any time")
-    }
-}
-
-@Composable
-internal fun ReadyBill(ui: RecordUi, actions: RecordActions) {
-    Bill(first = true) {
-        DisplayText("Ready to", 72.sp, misreg = true)
-        DisplayText("record", 72.sp, color = Poster.Red, misreg = true)
-        Spacer(Modifier.height(28.dp))
-        Lede(if (ui.canStart) "Location is allowed all the time. Start, and the poster grows on its own." else "Location is allowed while the app is open. For the record to grow in your pocket, allow it all the time below.")
-        Spacer(Modifier.height(40.dp))
-        InkButton("Start recording", actions.onStart, Modifier.fillMaxWidth(), red = true, enabled = ui.canStart)
-    }
-}
-
-@Composable
-internal fun StatusBill(ui: RecordUi, actions: RecordActions) {
-    val paused = ui.phase == Phase.PAUSED
-    Bill(if (paused) Tone.STOCK else Tone.RED, first = true) {
-        Box(Modifier.fillMaxWidth()) {
-            Column {
-                DisplayText(if (paused) "Paused" else "Recording", 72.sp, color = if (paused) Poster.Ink else Poster.Stock, misreg = true)
+        Pass(Modifier.fillMaxWidth(), stub = {
+            when (state) {
+                RecordState.NEEDS_PERMISSION -> InkButton("Allow location", { actions.onAllow(Perm.FINE) }, Modifier.fillMaxWidth(), red = true)
+                RecordState.OFF -> InkButton("Start recording", actions.onStart, Modifier.fillMaxWidth(), red = true, enabled = ui.canStart)
+                RecordState.RECORDING -> {
+                    InkButton("Pause for 24 h", actions.onPause, quiet = true)
+                    InkButton("Stop recording", actions.onStop, red = true)
+                }
+                RecordState.PAUSED -> {
+                    InkButton("Resume", actions.onStart, red = true)
+                    InkButton("Stop", actions.onStop, quiet = true)
+                }
             }
-            RecordStamp("Live", "${ui.stats?.stays ?: 0}", "stays", Modifier.align(Alignment.TopEnd), color = if (paused) Poster.Red else Poster.Stock, size = 92.dp)
+        }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CapsText("Boarding pass · status", Modifier.weight(1f), size = 11.sp)
+                Spacer(Modifier.width(12.dp))
+                if (state == RecordState.RECORDING) { PulseDot(); Spacer(Modifier.width(6.dp)) }
+                Text(t.headline, color = color, style = PosterType.Caps.copy(fontSize = 11.sp), softWrap = false, maxLines = 1)
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(t.headline, color = color, style = PosterType.Display.copy(fontSize = 56.sp, lineHeight = 0.9.em), maxLines = 2)
+            Spacer(Modifier.height(10.dp))
+            Text("${t.fixes} · ${t.last}", color = Poster.Ink, style = PosterType.Label.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold))
+            val note = when (state) {
+                RecordState.NEEDS_PERMISSION -> DISCLOSURE
+                RecordState.OFF -> if (ui.canStart) "Location is allowed all the time. Start, and the poster grows on its own." else "Location is allowed while the app is open. For the record to grow in your pocket, allow it all the time under Details."
+                RecordState.PAUSED -> "Paused until ${date(ui.recording.pausedUntil)}. The record picks up again by itself."
+                RecordState.RECORDING -> "Since ${date(ui.recording.since)} · ${n0(ui.stats?.stays ?: 0)} ${plural(ui.stats?.stays ?: 0, "stay")} · on this phone only, nothing uploaded."
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(note, color = LocalMuted.current, style = PosterType.Label.copy(fontSize = 13.sp))
         }
-        Spacer(Modifier.height(28.dp))
-        Lede(if (paused) "Paused until ${date(ui.recording.pausedUntil)}. The record picks up again by itself." else ui.statusLine)
-        Spacer(Modifier.height(40.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (paused) InkButton("Resume", actions.onStart, Modifier.weight(1f))
-            else InkButton("Pause for 24 h", actions.onPause, Modifier.weight(1f), quiet = true)
-            InkButton("Stop", actions.onStop, Modifier.weight(1f), quiet = !paused, red = paused)
-        }
-        Spacer(Modifier.height(40.dp))
-        Foot("On this phone only", "Nothing uploaded")
     }
 }
 
+/** The recording light: a red dot breathing once a second, still under reduced motion. */
 @Composable
-internal fun PermissionsBill(ui: RecordUi, actions: RecordActions) {
+private fun PulseDot(modifier: Modifier = Modifier) {
+    val alpha: State<Float> = if (motionOn()) {
+        rememberInfiniteTransition(label = "rec").animateFloat(1f, 0.25f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "dot")
+    } else rememberUpdatedState(1f)
+    Box(modifier.size(8.dp).graphicsLayer { this.alpha = alpha.value }.background(Poster.Red, CircleShape).semantics { contentDescription = "Recording" })
+}
+
+/**
+ * The permission checklist behind a DETAILS row: folded by default, open on its own while anything is missing.
+ * The reader's own tap wins over the automatic fold once they have touched it.
+ */
+@Composable
+internal fun DetailsBill(ui: RecordUi, actions: RecordActions) {
+    var open by rememberSaveable(ui.missing) { mutableStateOf(ui.missing) }
     Bill {
-        CapsText("Permissions · what Android asks for")
-        Spacer(Modifier.height(16.dp))
+        Row(
+            Modifier.fillMaxWidth().clickable(role = Role.Button) { open = !open }.testTag(DETAILS_TAG)
+                .semantics { stateDescription = if (open) "Details shown" else "Details hidden" }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CapsText("Details · what Android asks for", color = Poster.Ink)
+            Spacer(Modifier.weight(1f))
+            if (ui.missing) DisplayText("!", 22.sp, color = Poster.Red)
+            Spacer(Modifier.width(8.dp))
+            DisplayText(if (open) "▴" else "▾", 22.sp)
+        }
+        if (open) {
+            Spacer(Modifier.height(16.dp))
+            PermissionRows(ui, actions)
+        }
+    }
+}
+
+@Composable
+internal fun PermissionRows(ui: RecordUi, actions: RecordActions) {
+    Column(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth()) {
             Box(Modifier.fillMaxWidth().height(Rule).background(Poster.Ink))
             for (row in ui.rows) {

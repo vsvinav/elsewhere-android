@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import com.elsewhere.app.data.Recording
 import com.elsewhere.app.data.SettingsStore
+import com.elsewhere.app.data.db.RawFixEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -17,6 +18,8 @@ interface RecordControl {
     suspend fun stop()
     suspend fun pause(seconds: Long = 24 * 3600)
     suspend fun stats(): RecordStats
+    /** The newest raw fix, for the live stamp. */
+    suspend fun latestFix(): RawFixEntity?
 }
 
 /** The platform side of recording (service and worker), behind a seam so the controller is testable. */
@@ -46,6 +49,7 @@ class RecordController @Inject constructor(
     override val recording: Flow<Recording> get() = settings.recording
 
     override suspend fun stats() = recorder.stats()
+    override suspend fun latestFix() = recorder.latestFix()
 
     override suspend fun start() {
         val cur = settings.recording.first()

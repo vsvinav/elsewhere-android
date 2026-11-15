@@ -1,9 +1,12 @@
 package com.elsewhere.app.ui.record
 
 import com.elsewhere.app.data.Recording
+import com.elsewhere.app.data.db.RawFixEntity
 import com.elsewhere.app.record.PermissionGate
 import com.elsewhere.app.record.RecordControl
 import com.elsewhere.app.record.RecordStats
+import com.elsewhere.app.record.Ticket
+import com.elsewhere.app.record.TicketTone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +36,7 @@ class RecordViewModelTest {
         override suspend fun stop() { stops++; recording.value = Recording() }
         override suspend fun pause(seconds: Long) { pauses++; recording.value = recording.value.copy(pausedUntil = 1_800_000_000L + seconds) }
         override suspend fun stats() = stats
+        override suspend fun latestFix(): RawFixEntity? = null
     }
 
     private val dispatcher = StandardTestDispatcher()
@@ -93,16 +97,34 @@ class RecordViewModelTest {
         var ui = v.ui.value
         assertEquals(1, control.starts)
         assertEquals(Phase.RECORDING, ui.phase)
-        assertEquals("Recording since JAN 15, 2027 · 120 fixes · 4 stays · last fix 3 min ago", ui.statusLine)
+        assertEquals(Ticket("RECORDING", "120 fixes", "last 3 min ago", TicketTone.RED), ui.ticket)
         assertFalse(ui.batteryOk)
 
         v.pause(); run()
         ui = v.ui.value
         assertEquals(1, control.pauses)
         assertEquals(Phase.PAUSED, ui.phase)
+        assertEquals(Ticket("PAUSED", "120 fixes", "last 3 min ago", TicketTone.INK), ui.ticket)
 
         v.stop(); run()
         assertEquals(1, control.stops)
         assertEquals(Phase.PERMISSIONS, v.ui.value.phase)
+        assertEquals(Ticket("OFF", "120 fixes", "last 3 min ago", TicketTone.GHOST), v.ui.value.ticket)
+    }
+
+    @Test fun `the ticket before location is granted, and once the counters arrive`() {
+        val gate = Gate()
+        val control = Control()
+        val v = vm(gate, control)
+        var ui = v.ui.value
+        assertEquals(Ticket("NEEDS PERMISSION", "0 fixes", "no fixes yet", TicketTone.INK), ui.ticket)
+        assertTrue(ui.missing)
+
+        gate.granted += Perm.entries.map { it.permission }
+        control.stats = RecordStats(1, 0, 1_800_000_000L - 59)
+        v.refresh(); run()
+        ui = v.ui.value
+        assertEquals(Ticket("OFF", "1 fix", "last just now", TicketTone.GHOST), ui.ticket)
+        assertFalse(ui.missing)
     }
 }

@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.cash.paparazzi.DeviceConfig
@@ -13,6 +15,7 @@ import com.elsewhere.app.SampleRecord
 import com.elsewhere.app.analytics.Cat
 import com.elsewhere.app.map.PinLayers
 import com.elsewhere.app.map.PinOpts
+import com.elsewhere.app.record.NowStamp
 import com.elsewhere.app.ui.Tab
 import com.elsewhere.app.ui.nav.Origin
 import com.elsewhere.app.ui.world.ElsewhereTheme
@@ -41,6 +44,17 @@ class MapSnapshot {
         ElsewhereTheme {
             CompositionLocalProvider(LocalMotion provides false) {
                 MapScreen(layers, PinOpts(), MapActions(), Modifier.height(640.dp), origin = Origin("42 countries", Tab.TOUR)) { m ->
+                    Box(m.fillMaxSize().background(Poster.Stock))
+                }
+            }
+        }
+    }
+
+    @Test fun live() = paparazzi.snapshot {
+        val layers = PinLayers(SampleRecord.record)
+        ElsewhereTheme {
+            CompositionLocalProvider(LocalMotion provides false) {
+                MapScreen(layers, PinOpts(), MapActions(), Modifier.height(640.dp), live = NowStamp(42.37, -71.11, "14:02", "Cambridge", "3 min ago"), liveAt = mutableStateOf(Offset(560f, 720f))) { m ->
                     Box(m.fillMaxSize().background(Poster.Stock))
                 }
             }
