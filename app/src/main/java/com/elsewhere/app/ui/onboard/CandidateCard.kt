@@ -1,5 +1,11 @@
 package com.elsewhere.app.ui.onboard
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,25 +18,29 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.elsewhere.app.ui.world.CapsText
 import com.elsewhere.app.ui.world.DisplayText
+import com.elsewhere.app.ui.world.LocalMotion
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.Rule
 import com.elsewhere.app.ui.world.Sticker
 
-/** The web's `.ob-tag`: a pass for one ranked place; pressed, it prints in ink. */
+/** The web's `.ob-tag`: a pass for one ranked place; pressed, it prints in ink. `asking` while names are still being looked up. */
 @Composable
-fun CandidateCard(c: Candidate, tag: String?, sub: String, selected: Boolean, onClick: () -> Unit, sticker: Boolean = false, modifier: Modifier = Modifier) {
+fun CandidateCard(c: Candidate, tag: String?, sub: String, selected: Boolean, onClick: () -> Unit, sticker: Boolean = false, asking: Boolean = false, modifier: Modifier = Modifier) {
     val bg = if (selected) Poster.Ink else Poster.Stock
     val fg = if (selected) Poster.Stock else Poster.Ink
     val dim = if (selected) Poster.Mustard else Poster.Ink3
+    val pending = asking && !c.named
     Column(modifier.fillMaxWidth().background(bg).border(2.dp, Poster.Ink).semantics { this.selected = selected }.clickable(onClick = onClick)) {
         Box(Modifier.fillMaxWidth().height(Rule).background(if (selected) Poster.Red else Poster.Ink))
         Column(Modifier.padding(16.dp)) {
@@ -38,7 +48,7 @@ fun CandidateCard(c: Candidate, tag: String?, sub: String, selected: Boolean, on
                 Column(Modifier.weight(1f)) {
                     if (tag != null && !sticker) CapsText(tag, color = dim, size = 10.sp)
                     if (tag != null) Spacer(Modifier.height(8.dp))
-                    DisplayText(c.label, 26.sp, color = fg, maxLines = 2)
+                    if (pending) PendingName(c.label, dim) else DisplayText(c.label, 26.sp, color = fg, maxLines = 2)
                 }
                 if (tag != null && sticker) Sticker(tag, color = if (selected) Poster.Mustard else Poster.Red, textColor = if (selected) Poster.Ink else Poster.Stock)
             }
@@ -47,6 +57,16 @@ fun CandidateCard(c: Candidate, tag: String?, sub: String, selected: Boolean, on
             if (c.address != null) Text(c.address, color = dim, style = PosterType.Label.copy(fontSize = 12.sp, letterSpacing = 0.sp))
         }
     }
+}
+
+/** The web's `.naming-name`: the city in muted ink with a trailing ellipsis, breathing until the real name lands. */
+@Composable
+private fun PendingName(label: String, color: androidx.compose.ui.graphics.Color) {
+    val alpha = if (LocalMotion.current) {
+        val a by rememberInfiniteTransition(label = "naming").animateFloat(1f, 0.45f, infiniteRepeatable(tween(700, easing = LinearEasing), RepeatMode.Reverse), label = "pulse")
+        a
+    } else 0.6f
+    DisplayText("$label…", 26.sp, Modifier.alpha(alpha), color = color, maxLines = 2)
 }
 
 fun nights(n: Double): String = "${n.toInt()} ${if (n.toInt() == 1) "night" else "nights"}"

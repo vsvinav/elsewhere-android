@@ -24,9 +24,14 @@ import com.elsewhere.app.ingest.Progress
 import com.elsewhere.app.ingest.properName
 import com.elsewhere.app.ingest.KeyReport
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.InputStream
@@ -69,6 +74,8 @@ data class OnboardState(
     val sleep: List<Candidate> = emptyList(),
     /** Set while the shared lookups are still naming candidate cards (the web's `useNaming`). */
     val naming: Progress? = null,
+    /** True while a naming run is in flight, so cards still saying a city can show they are being asked about. */
+    val asking: Boolean = false,
     val weekday: List<Candidate> = emptyList(),
     val moves: List<Move> = emptyList(),
     val name: String = "",
@@ -117,8 +124,17 @@ class OnboardViewModel @Inject constructor(
     val ready: StateFlow<Ready?> = readyState.ready
     private val _state = MutableStateFlow(OnboardState())
     val state: StateFlow<OnboardState> = _state
+    /** The record the cards were ranked from, kept so a new key can name them again. */
+    private var rec: Record? = null
+    private var naming: Job? = null
 
-    init { viewModelScope.launch { namer.progress.collect { p -> _state.update { it.copy(naming = p) } } } }
+    init {
+        viewModelScope.launch { namer.progress.collect { p -> _state.update { it.copy(naming = p) } } }
+        // The web's naming effect is keyed on `mapsKey`: a key verified after import names the cards again.
+        viewModelScope.launch {
+            maps.settings.map { it.mapsKey to it.keyPlaces }.distinctUntilChanged().collect { (key, places) -> rename(key, places) }
+        }
+    }
     /** Open the door at `step`: the import for a new record, a question or the key when editing. Resets what was there. */
     fun start(step: Step) {
         val editing = step != Step.Import
@@ -148,39 +164,57 @@ class OnboardViewModel @Inject constructor(
 
     private suspend fun suggest() {
         val rec = store.provisionalRecord() ?: return
+        this.rec = rec
         _state.update {
             it.copy(range = rec.meta.range, sleep = sleepPlaces(rec, 8).map { s -> candidate(s, rec) }, weekday = weekdayPlaces(rec).map { s -> candidate(s, rec) }, moves = moveMonths(rec))
         }
-        nameCandidates(rec)
+        val s = maps.settings.first()
+        rename(s.mapsKey, s.keyPlaces)
     }
 
+    /** The web's `label(s)`: a Places name, else the stored name, else the city. */
     private fun candidate(s: Suggestion, rec: Record): Candidate {
         val p = rec.places[s.placeId]
         val named = p != null && properName(p.name, p.types, p.primaryType)
-        return Candidate(s.placeId, s.lat, s.lng, s.city, s.cc, p?.name ?: p?.label ?: s.city ?: "Unnamed place", p?.address, s.score, s.share, s.members, named)
+        return Candidate(s.placeId, s.lat, s.lng, s.city, s.cc, p?.name ?: s.city ?: "Unnamed place", p?.address, s.score, s.share, s.members, named)
+    }
+
+    /** Name whatever cards still only say a city; one run at a time, the last word on the key winning. */
+    private fun rename(key: String, keyPlaces: Boolean) {
+        val rec = rec ?: return
+        val prev = naming
+        naming = viewModelScope.launch {
+            prev?.cancelAndJoin()
+            val todo = (_state.value.sleep + _state.value.weekday).filter { !it.named }.distinctBy { it.placeId }
+            if (todo.isEmpty()) return@launch
+            _state.update { it.copy(asking = true) }
+            // Only the run still on record lowers the flag, so an older job's unwind cannot clear a newer run's.
+            try { nameCandidates(todo, rec, key, key.isNotBlank() && keyPlaces) } finally { if (naming === coroutineContext[Job]) _state.update { it.copy(asking = false) } }
+        }
     }
 
     /**
      * Cards that only say a city get a better line, as the web's Onboarding does: a Places name when the key
      * works, else a street and neighbourhood from Nominatim. Each lands as it arrives.
      */
-    private suspend fun nameCandidates(rec: Record) {
-        val s = maps.settings.first()
-        val paid = s.mapsKey.isNotBlank() && s.keyPlaces
-        val todo = (_state.value.sleep + _state.value.weekday).filter { !it.named }.distinctBy { it.placeId }
-        for (c in todo) name(c, rec, s.mapsKey, paid)
+    private suspend fun nameCandidates(todo: List<Candidate>, rec: Record, key: String, paid: Boolean) {
+        for (c in todo) name(c, rec, key, paid)
     }
 
     private suspend fun name(c: Candidate, rec: Record, key: String, paid: Boolean) {
-        val patch: (Candidate) -> Candidate = if (paid) {
-            val name = runCatching { namer.name(c.memberIds, rec.places, key) }.getOrNull() ?: return
+        val name = if (paid) attempt { namer.name(c.memberIds, rec.places, key) } else null
+        val patch: (Candidate) -> Candidate = if (name != null) {
             { it.copy(label = name, named = true) }
         } else {
-            val addr = runCatching { geocoder.address(c.lat, c.lng) }.getOrNull() ?: return
+            if (c.address != null) return
+            val addr = attempt { geocoder.address(c.lat, c.lng) } ?: return
             { it.copy(address = it.address ?: addr) }
         }
         _state.update { st -> st.copy(sleep = st.sleep.map { if (it.placeId == c.placeId) patch(it) else it }, weekday = st.weekday.map { if (it.placeId == c.placeId) patch(it) else it }) }
     }
+
+    /** A failed lookup is just a card left as it was; a cancellation must still stop the run. */
+    private inline fun <T> attempt(block: () -> T): T? = try { block() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
 
     /** Save the key, then ask Google about it; the page shows the probes running, then the verdict. */
     override fun saveKey(key: String, mapId: String) {

@@ -49,7 +49,7 @@ fun QuestionsScreen(state: OnboardState, actions: OnboardActions, onCancel: (() 
                         val on = state.homes.size == 1 && c.matches(state.homes[0])
                         val city = if (c.city != null && c.label != c.city) "${c.city} · " else ""
                         val merged = if (c.members > 1) " · ${c.members} labels merged" else ""
-                        CandidateCard(c, c.sure.label, "$city${nights(c.score)} · ${pct(c.share)}$merged", on, { actions.pickHome(c) }, sticker = c.sure != Sure.STAYED)
+                        CandidateCard(c, c.sure.label, "$city${nights(c.score)} · ${pct(c.share)}$merged", on, { actions.pickHome(c) }, sticker = c.sure != Sure.STAYED, asking = state.asking)
                     }
                     if (state.sleep.isEmpty()) Text("No overnight stays found in this record.", color = Poster.Ink2, style = PosterType.Lede)
                 }
@@ -74,7 +74,7 @@ fun QuestionsScreen(state: OnboardState, actions: OnboardActions, onCancel: (() 
                         val mv = state.moves.firstOrNull { it.to == c.placeId }
                         val tag = when { last != null -> "Moved back"; mv != null -> "From ${mv.month}"; else -> c.cc ?: "—" }
                         val sub = if (last != null) "again, after ${fmtMonth(monthOf(last.to!!))}" else "${nights(c.score)} · ${pct(c.share)}"
-                        CandidateCard(c, tag, sub, selected = false, onClick = { actions.addHome(c) })
+                        CandidateCard(c, tag, sub, selected = false, onClick = { actions.addHome(c) }, asking = state.asking)
                     }
                 }
                 Spacer(Modifier.height(30.dp))
@@ -88,7 +88,7 @@ fun QuestionsScreen(state: OnboardState, actions: OnboardActions, onCancel: (() 
                 Cards {
                     for (c in state.weekday) {
                         val on = state.works.any { it.placeId == c.placeId }
-                        CandidateCard(c, c.cc ?: "—", "${Math.round(c.score)} weekday hours", on, { actions.toggleWork(c) })
+                        CandidateCard(c, c.cc ?: "—", "${Math.round(c.score)} weekday hours", on, { actions.toggleWork(c) }, asking = state.asking)
                     }
                     if (state.weekday.isEmpty()) Text("No regular weekday place stands out.", color = Poster.Ink2, style = PosterType.Lede)
                 }
