@@ -1,7 +1,14 @@
 package com.elsewhere.app.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsDisplayed
@@ -47,8 +54,13 @@ class DoorFlowTest {
             ElsewhereTheme {
                 AppScaffold({}, {}, {}, shell, range, content = { t, _ ->
                     // Every bill prints one figure as a door; the map wears the stub it came in on.
-                    com.elsewhere.app.ui.nav.Door(Door.Range(Fx.utc(2024, 2, 1), Fx.utc(2024, 2, 31), "${t.label} figure")) { Text("${t.label} figure") }
-                    if (t == Tab.MAP) { val o = doors.origin.collectAsState().value; OriginTag(o, doors::back) }
+                    Column {
+                        com.elsewhere.app.ui.nav.Door(Door.Range(Fx.utc(2024, 2, 1), Fx.utc(2024, 2, 31), "${t.label} figure")) { Text("${t.label} figure") }
+                        // Stands in for a bill's scroll: saved and restored with the entry, lost when the entry is.
+                        var bumps by rememberSaveable { mutableIntStateOf(0) }
+                        Text("${t.label} bumped $bumps", Modifier.clickable { bumps++ })
+                        if (t == Tab.MAP) { val o = doors.origin.collectAsState().value; OriginTag(o, doors::back) }
+                    }
                 })
             }
         }
@@ -91,6 +103,26 @@ class DoorFlowTest {
         rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
         rule.onNodeWithText("Tour figure").assertIsDisplayed()
+    }
+
+    @Test fun `a way back that dies on the map forgets the bill it saved, so the next door saves the bill as it is`() {
+        show()
+        rule.onNodeWithText("NUMBERS").performClick()
+        rule.onNodeWithText("Numbers bumped 0").performClick()
+        rule.onNodeWithContentDescription("Open on the map: Numbers figure").performClick()
+        rule.waitForIdle()
+        doors.pinChanged("somewhere")
+        rule.waitForIdle()
+        assertNull(doors.origin.value)
+        rule.onNodeWithText("NUMBERS").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Numbers bumped 0").performClick()
+        rule.onNodeWithText("Numbers bumped 1").performClick()
+        rule.onNodeWithContentDescription("Open on the map: Numbers figure").performClick()
+        rule.waitForIdle()
+        rule.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        rule.waitForIdle()
+        rule.onNodeWithText("Numbers bumped 2").assertIsDisplayed()
     }
 
     @Test fun `the replay is still the map, so switching to it keeps the stub`() {

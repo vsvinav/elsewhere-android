@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -31,6 +32,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.ui.nav.Door
 import com.elsewhere.app.ui.nav.LocalOpenDoor
 import com.elsewhere.app.ui.shell.DatePickSheet
 import com.elsewhere.app.ui.shell.Masthead
@@ -104,6 +106,14 @@ fun AppScaffold(
         }
         shell.doors.jumped()
     }
+    // A way back that dies on the map, by a pin, the window or the strip, leaves the bill it saved orphaned:
+    // the next door from that bill would save over it or lose the fresh one. Forget it unless we are using it.
+    var lastOrigin by remember { mutableStateOf(origin) }
+    LaunchedEffect(origin) {
+        val prev = lastOrigin
+        lastOrigin = origin
+        if (prev != null && origin == null && shell.doors.jump.value == null && prev.backTab != Tab.TOUR) nav.clearBackStack(prev.backTab.route)
+    }
     BackHandler(enabled = tab != Tab.TOUR) { go(Tab.TOUR) }
 
     val profile by shell.profile.collectAsStateWithLifecycle()
@@ -117,7 +127,10 @@ fun AppScaffold(
     val from = dayOf(range.first); val to = dayOf(range.last)
     var picking by remember { mutableStateOf<Picking?>(null) }
 
-    CompositionLocalProvider(LocalOpenDoor provides { d -> shell.doors.go(d, tab) }) {
+    // One lambda for the life of the shell, so the bills do not recompose on every tick of the shell's state.
+    val tabState = rememberUpdatedState(tab)
+    val open = remember(shell) { { d: Door -> shell.doors.go(d, tabState.value) } }
+    CompositionLocalProvider(LocalOpenDoor provides open) {
     Box {
     Scaffold(
         containerColor = Poster.Stock,
