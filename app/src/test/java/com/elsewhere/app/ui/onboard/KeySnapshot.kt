@@ -29,7 +29,10 @@ class KeySnapshot {
 
     @Test fun checking() = shoot(OnboardState(step = Step.Key, key = "AIzaSyExample", keyPhase = KeyPhase.Checking))
 
-    @Test fun accepted() = shoot(OnboardState(step = Step.Key, key = "AIzaSyExample", keyPhase = KeyPhase.Result, keyReport = KeyReport(Probe.Ok, Probe.Ok)))
+    @Test fun accepted() = shoot(OnboardState(step = Step.Key, key = "AIzaSyExample", keyPhase = KeyPhase.Result, keyReport = KeyReport(Probe.Ok, Probe.Ok, sdk = false)))
+
+    /** Skipping on an SDK build still gets the Google map, so the page only warns about names and photos. */
+    @Test fun skippedWithSdk() = shoot(OnboardState(step = Step.Key, keyPhase = KeyPhase.Result, keyReport = null), sdk = true)
 
     /** With the Maps SDK built in, Map Tiles is marked not needed rather than failed, and only the Places refusal is explained. */
     @Test fun refusedWithSdk() = shoot(
@@ -53,6 +56,7 @@ class KeySnapshot {
                     "This key is restricted to websites. In Google Cloud → Credentials → this key, set Application restrictions to None (or create a second key for the phone).",
                 ),
                 Probe.Ok,
+                sdk = false,
             ),
         ),
     )

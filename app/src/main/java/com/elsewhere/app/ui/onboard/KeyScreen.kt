@@ -44,7 +44,9 @@ interface KeyActions {
     fun acceptLimited()
 }
 
-const val LIMITED_ACK = "I understand maps and place names will be limited"
+/** What a skipped or refused key costs: on an SDK build the Google map still draws, so only the names and photos go. */
+fun limitedAck(sdk: Boolean) = if (sdk) "I understand place names and photos will be limited" else "I understand maps and place names will be limited"
+private fun limitedButton(sdk: Boolean) = if (sdk) "Continue without place names" else "Continue with limited maps"
 
 /**
  * The optional Google key, checked the moment it is saved: the field, then "Checking your key…",
@@ -71,7 +73,11 @@ private const val TILES_NOT_NEEDED = "not needed — this build has Google Maps 
 private fun Entry(k: String, id: String, onKey: (String) -> Unit, onId: (String) -> Unit, editing: Boolean, actions: KeyActions, sdk: Boolean) {
     DisplayText("A Maps key", 64.sp)
     Spacer(Modifier.height(28.dp))
-    Text("A Google Maps key draws the maps and names your stops. Skip and we'll use OpenStreetMap.", color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 18.sp))
+    Text(
+        if (sdk) "A Google Maps key names your stops and finds their photos. Skip and you'll get the map without them."
+        else "A Google Maps key draws the maps and names your stops. Skip and we'll use OpenStreetMap.",
+        color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 18.sp),
+    )
     Spacer(Modifier.height(32.dp))
     PosterTextField(k, onKey, Modifier.fillMaxWidth(), placeholder = "AIza…", label = "Google Maps key", mono = true)
     Spacer(Modifier.height(24.dp))
@@ -108,12 +114,17 @@ internal fun Result(report: KeyReport?, k: String, id: String, onKey: (String) -
         report == null -> {
             DisplayText("No key", 64.sp)
             Spacer(Modifier.height(24.dp))
-            Text("Without a key the maps come from OpenStreetMap and your stops keep the names in your export: cities, not places or photos.", color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 17.sp))
+            Text(
+                if (sdk) "Without a key your stops keep the names in your export: cities, not places or photos."
+                else "Without a key the maps come from OpenStreetMap and your stops keep the names in your export: cities, not places or photos.",
+                color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 17.sp),
+            )
             Spacer(Modifier.height(28.dp))
-            TickRow(ack, actions::setLimitedAck, LIMITED_ACK)
+            TickRow(ack, actions::setLimitedAck, limitedAck(sdk))
             Spacer(Modifier.height(28.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                InkButton("Continue with limited maps", { actions.acceptLimited() }, enabled = ack)
+            // Stacked like the refusal's buttons: side by side they run off a phone's width.
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                InkButton(limitedButton(sdk), { actions.acceptLimited() }, enabled = ack)
                 InkButton("Enter a key", { actions.editKey() }, quiet = true)
             }
         }
@@ -149,11 +160,11 @@ internal fun Result(report: KeyReport?, k: String, id: String, onKey: (String) -
             Spacer(Modifier.height(24.dp))
             PosterTextField(k, onKey, Modifier.fillMaxWidth(), placeholder = "AIza…", label = "Google Maps key", mono = true)
             Spacer(Modifier.height(24.dp))
-            TickRow(ack, actions::setLimitedAck, LIMITED_ACK)
+            TickRow(ack, actions::setLimitedAck, limitedAck(sdk))
             Spacer(Modifier.height(24.dp))
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 InkButton("Try again", { actions.saveKey(k, id) }, enabled = k.isNotBlank())
-                InkButton("Continue with limited maps", { actions.acceptLimited() }, quiet = true, enabled = ack)
+                InkButton(limitedButton(sdk), { actions.acceptLimited() }, quiet = true, enabled = ack)
             }
         }
     }
