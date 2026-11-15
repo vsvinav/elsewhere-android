@@ -27,7 +27,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -45,7 +44,7 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
     private var pendingFit: (() -> Unit)? = null
 
     override fun moveTo(cam: Cam, animateMs: Int) {
-        if (animateMs <= 0) state.position = cam.toLibre()
+        if (animateMs <= 0) { state.position = cam.toLibre(); _camera.value = cam }
         else scope.launch { state.animateTo(cam.toLibre(), animateMs.milliseconds) }
     }
 
@@ -62,17 +61,18 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
             // The library exposes no "is moving" flag: a camera change after a quiet spell starts a move (a drag
             // when the reason is a gesture), and a quiet spell after changes ends it.
             var settled = true
-            val positions = snapshotFlow { state.position }.drop(1)
+            val positions = snapshotFlow { state.position }
             launch {
                 positions.collect { p ->
-                    if (settled) { settled = false; if (state.moveReason == CameraMoveReason.GESTURE) _events.tryEmit(MapEvent.DragStart) }
                     val prev = _camera.value; val cam = p.toCam()
                     _camera.value = cam
+                    if (cam == prev) return@collect
+                    if (settled) { settled = false; if (state.moveReason == CameraMoveReason.GESTURE) _events.tryEmit(MapEvent.DragStart) }
                     _events.tryEmit(MapEvent.Move)
                     if (cam.zoom != prev.zoom) _events.tryEmit(MapEvent.Zoom)
                 }
             }
-            launch { positions.debounce(IDLE_MS).collect { settled = true; _events.tryEmit(MapEvent.Idle) } }
+            launch { positions.debounce(IDLE_MS).collect { if (!settled) { settled = true; _events.tryEmit(MapEvent.Idle) } } }
         }
 
         Box(modifier.background(Poster.Stock).onSizeChanged { sizePx = it; pendingFit?.invoke(); pendingFit = null }) {

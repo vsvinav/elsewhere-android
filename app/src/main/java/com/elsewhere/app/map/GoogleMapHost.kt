@@ -2,6 +2,7 @@ package com.elsewhere.app.map
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,16 +39,19 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
  * Google Maps on the poster stock: the web's `MAP_STYLES` as a raw JSON style (or a cloud map id when one is set),
- * no default chrome. `onRejected` fires once when the SDK won't start or the key is refused.
+ * no default chrome. `onFailed` fires once when the SDK won't start or the map never loads; with `keyLive` false
+ * the SDK is still on an older key, so nothing is judged and [needsRestart] asks for a relaunch instead.
  */
 class GoogleMapHost(
-    private val scope: CoroutineScope, initial: Cam, private val mapId: String, private val onRejected: () -> Unit,
+    private val scope: CoroutineScope, initial: Cam, private val mapId: String,
+    private val keyLive: Boolean, private val onFailed: () -> Unit,
 ) : MapHost {
+    val needsRestart: Boolean get() = !keyLive
+
     private val state = CameraPositionState(initial.toGoogle())
     private val _camera = MutableStateFlow(initial)
     override val camera: StateFlow<Cam> = _camera.asStateFlow()
@@ -56,10 +60,10 @@ class GoogleMapHost(
 
     private var loaded by mutableStateOf(false)
     private var pendingFit: (() -> Unit)? = null
-    private var rejected = false
+    private var failed = false
 
     override fun moveTo(cam: Cam, animateMs: Int) {
-        if (animateMs <= 0 || !loaded) state.position = cam.toGoogle()
+        if (animateMs <= 0 || !loaded) { state.position = cam.toGoogle(); _camera.value = cam }
         else scope.launch { state.animate(CameraUpdateFactory.newCameraPosition(cam.toGoogle()), animateMs) }
     }
 
@@ -67,12 +71,12 @@ class GoogleMapHost(
     override fun fit(bounds: Bounds, paddingPx: Int) {
         val go = {
             val box = LatLngBounds(LatLng(bounds.swLat, bounds.swLng), LatLng(bounds.neLat, bounds.neLng))
-            runCatching { state.move(CameraUpdateFactory.newLatLngBounds(box, paddingPx)) }
+            runCatching { state.move(CameraUpdateFactory.newLatLngBounds(box, paddingPx)); _camera.value = state.position.toCam() }
         }
         if (loaded) go() else pendingFit = { go() }
     }
 
-    private fun reject() { if (!rejected) { rejected = true; onRejected() } }
+    private fun fail() { if (!failed) { failed = true; onFailed() } }
 
     @Composable
     override fun Content(modifier: Modifier, overlays: @Composable () -> Unit) {
@@ -80,29 +84,34 @@ class GoogleMapHost(
         var ready by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
-            // Rejected-key heuristic, all in one place. The SDK has no public auth-failure callback (it only logs
-            // "Authorization failure" and paints blank tiles), so: a non-SUCCESS initialise code means no Maps at all,
-            // and a map that still hasn't reported loaded REJECT_MS after the SDK came up is taken as a refused key.
-            // Offline devices can't load tiles either, so the timer only counts while there is a network.
+            // The "Google didn't come up" heuristic, all in one place. The SDK has no public auth-failure callback
+            // (a refused key only logs "Authorization failure" and paints blank tiles), and a non-SUCCESS initialise
+            // code (Play services missing or updating) is device state, not a key problem. So neither verdict is
+            // persisted here: either one fails this session only, and the caller persists `googleRejected` once
+            // sessions fail twice. That costs less code than telling the two apart and never blames a good key for
+            // one bad network. Offline or captive portals load no tiles either, so the timer needs validated internet.
+            // With `keyLive` false the SDK still holds an older key, so there is nothing fair to judge.
             val code = runCatching { MapsInitializer.initialize(context.applicationContext, MapsInitializer.Renderer.LATEST) {} }
                 .getOrDefault(ConnectionResult.SERVICE_MISSING)
-            if (code != ConnectionResult.SUCCESS) { reject(); return@LaunchedEffect }
+            KeyInstaller.markStarted()
+            if (code != ConnectionResult.SUCCESS) { if (keyLive) fail(); return@LaunchedEffect }
             ready = true
-            delay(REJECT_MS)
-            if (!loaded && online(context)) reject()
+            if (!keyLive) return@LaunchedEffect
+            delay(FAIL_MS)
+            if (!loaded && online(context)) fail()
         }
 
         LaunchedEffect(Unit) {
             launch {
-                snapshotFlow { state.position }.drop(1).collect { p ->
+                snapshotFlow { state.position }.collect { p ->
                     val prev = _camera.value; val cam = p.toCam()
                     _camera.value = cam
-                    _events.tryEmit(MapEvent.Move)
+                    if (cam != prev) _events.tryEmit(MapEvent.Move)
                     if (cam.zoom != prev.zoom) _events.tryEmit(MapEvent.Zoom)
                 }
             }
             launch {
-                snapshotFlow { state.isMoving }.drop(1).collect { moving ->
+                snapshotFlow { state.isMoving }.collect { moving ->
                     if (!moving) _events.tryEmit(MapEvent.Idle)
                     else if (state.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE) _events.tryEmit(MapEvent.DragStart)
                 }
@@ -130,10 +139,11 @@ class GoogleMapHost(
 
     private fun online(context: Context): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
-        return cm.activeNetwork != null
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return false) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
-    private companion object { const val REJECT_MS = 6_000L }
+    private companion object { const val FAIL_MS = 6_000L }
 }
 
 private fun Cam.toGoogle() = CameraPosition.Builder().target(LatLng(lat, lng)).zoom(zoom).bearing(bearing).build()

@@ -136,7 +136,8 @@ class OnboardViewModel @Inject constructor(private val store: RecordStore, priva
         viewModelScope.launch {
             val s = maps.settings.first()
             // A new key gets a fresh chance at Google; the rejection only ever applied to the old one.
-            maps.saveSettings(s.copy(mapsKey = key.trim(), mapId = mapId.trim(), googleRejected = s.googleRejected && key.trim() == s.mapsKey))
+            val same = key.trim() == s.mapsKey
+            maps.saveSettings(s.copy(mapsKey = key.trim(), mapId = mapId.trim(), googleRejected = s.googleRejected && same, googleFailures = if (same) s.googleFailures else 0))
             _state.update { it.copy(key = key.trim(), mapId = mapId.trim(), step = if (it.editing) Step.Done else Step.Name) }
         }
     }
