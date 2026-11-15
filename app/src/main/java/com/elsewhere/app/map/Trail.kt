@@ -127,12 +127,15 @@ class ReplayTrails(data: Record) {
         simp.putIfAbsent(key, out)
     }
 
-    /** The bucket for this zoom if ready, else the nearest ready one, else the raw trails; never thins on the caller. */
+    /**
+     * The bucket for this zoom if ready, else the nearest ready one, finer before coarser since a too-coarse trail
+     * visibly collapses, else the raw trails; never thins on the caller.
+     */
     fun simplified(lens: Lens, zoom: Double): Trails {
         val zb = max(MIN_ZB, min(MAX_ZB, zoom.roundToInt()))
         for (d in 0..(MAX_ZB - MIN_ZB)) {
-            simp[key(lens, zb - d)]?.let { return it }
             simp[key(lens, zb + d)]?.let { return it }
+            simp[key(lens, zb - d)]?.let { return it }
         }
         return of(lens)
     }

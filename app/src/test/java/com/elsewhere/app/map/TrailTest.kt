@@ -97,6 +97,11 @@ class TrailTest {
         assertNotSame(trails.all, z8); assertTrue(z8[0].path.size < 200)
         assertSame(z8, trails.simplified(Lens.ALL, 10.0))
         assertEquals(1, trails.computed)
+        // Two buckets ready either side: the finer one stands in, since a too-coarse trail visibly collapses.
+        trails.compute(Lens.ALL, 14)
+        assertSame(trails.simplified(Lens.ALL, 14.0), trails.simplified(Lens.ALL, 12.0))
+        assertSame(trails.simplified(Lens.ALL, 14.0), trails.simplified(Lens.ALL, 11.0))
+        assertSame(z8, trails.simplified(Lens.ALL, 5.0))
         // Prepared: every lens and bucket is ready, so no lookup ever thins again.
         trails.prepare()
         val n = trails.computed
