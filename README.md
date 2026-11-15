@@ -2,7 +2,7 @@
 <p align="center"><strong>Your Google Maps Timeline, printed as a world-tour poster — natively on Android.</strong><br>
 Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same privacy rules as <a href="https://github.com/vsvinav/elsewhere">the web app</a>.</p>
 
-> **Status:** under construction, usable today. Tour, Numbers, Facts, Stops, Dates and Map are built; Flights and Replay are in progress; share cards and on-device recording come after. A debug APK is attached to every CI run under *Actions → Android*.
+> **Status:** under construction, usable today. Tour, Numbers, Facts, Stops, Dates, Map and Flights are built; Replay is in progress; share cards and on-device recording come after. Install the latest APK from [Releases](https://github.com/vsvinav/elsewhere-android/releases).
 
 <p align="center">
 <img src="docs/screenshots/tour.png" width="180" alt="Tour: ADA'S ELSEWHERE headline, nights per city, dotted route map">
@@ -10,6 +10,7 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 <img src="docs/screenshots/facts.png" width="180" alt="Facts: a fun-facts card deck with shuffle">
 <img src="docs/screenshots/dates.png" width="180" alt="Dates: nights away, trip legs, a route breakdown">
 <img src="docs/screenshots/map.png" width="180" alt="Map: category chips, search, a selected stop card and Fit pins">
+<img src="docs/screenshots/flights.png" width="180" alt="Flights: an orthographic globe with great-circle routes">
 </p>
 
 <details><summary>More screens</summary>
@@ -19,6 +20,7 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 <img src="docs/screenshots/dates-nights.png" width="180" alt="Dates: nights by city">
 <img src="docs/screenshots/calendar.png" width="180" alt="Calendar sheet for picking a range">
 <img src="docs/screenshots/rangebar.png" width="180" alt="Range bar with presets">
+<img src="docs/screenshots/flights-ledger.png" width="180" alt="Flights: the route ledger">
 </p>
 <p align="center"><sub>Rendered by the app's own screenshot tests from a synthetic record, so no real trips are shown.</sub></p>
 </details>
@@ -31,8 +33,8 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Shell: ticket strip, range bar, calendar, onboarding | ✅ |
 | Tour · Numbers · Facts · Stops · Dates | ✅ |
 | Map (Google Maps, OpenStreetMap fallback, clusters, search) | ✅ |
-| Flights globe | 🔨 |
-| Replay | ⏳ |
+| Flights globe | ✅ |
+| Replay | 🔨 |
 | Place names and photos, share cards | ⏳ |
 | Recording new location on-device | ⏳ |
 
