@@ -128,6 +128,24 @@ class OnboardViewModelTest {
         assertEquals("Barton Hills Bungalow", vm.state.value.sleep[1].label)
     }
 
+    @Test fun `the readiness bar counts the cards as they are named`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val slow = object : PlaceNamer {
+            override val progress = MutableStateFlow<com.elsewhere.app.ingest.Progress?>(null)
+            override suspend fun name(ids: List<String>, all: Map<String, Place>, key: String): String? { gate.await(); return "Barton Hills Bungalow" }
+        }
+        val store = Fakes.Store(record()); val maps = Fakes.Maps()
+        maps.cur.value = Settings(mapsKey = "k", keyPlaces = true, keyTiles = true)
+        store.hasImport.value = true
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), slow, geo)
+        vm.start(Step.Name); run()
+        val todo = (vm.state.value.sleep + vm.state.value.weekday).filter { !it.named }.distinctBy { it.placeId }.size
+        assertEquals("Naming places 0/$todo", vm.ready.value?.label)
+        gate.complete(Unit); run()
+        assertEquals("Naming places $todo/$todo", vm.ready.value?.label)
+        assertEquals(100, vm.ready.value?.pct)
+    }
+
     @Test fun `when Places has no name for a card, it falls back to the Nominatim street`() = runTest(dispatcher) {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
         maps.cur.value = Settings(mapsKey = "k", keyPlaces = true, keyTiles = true)
