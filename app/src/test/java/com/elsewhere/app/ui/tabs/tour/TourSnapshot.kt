@@ -67,8 +67,13 @@ private object DenseRecord {
 
     private fun fly(a: Stop, b: Stop, km: Double) = Fx.act(0, 8 * Fx.H, "FLYING", km * 1000, a.lng, a.lat, b.lng, b.lat)
 
+    // A road trip south and east: San Francisco, Los Angeles, Phoenix, Houston, Miami, as a thousand fixes.
+    private val roadTrip = listOf(37.77 to -122.42, 34.05 to -118.24, 33.45 to -112.07, 29.76 to -95.37, 25.76 to -80.19).zipWithNext().flatMapIndexed { i, (a, b) ->
+        (0 until 250).map { j -> val t = j / 250.0; Pt(a.first + (b.first - a.first) * t + (rnd.nextDouble() - 0.5) * 0.3, a.second + (b.second - a.second) * t, (400 + i * 250 + j) * 60L) }
+    }.let { Path(0, it.size * 60L, it) }
+
     private val record = Fx.record(
-        strokes = metro.mapIndexed { i, s -> walk(s.lat, s.lng, 120, i * Fx.D) } + stops.drop(40).map { walk(it.lat, it.lng, 40, 0) },
+        strokes = metro.mapIndexed { i, s -> walk(s.lat, s.lng, 120, i * Fx.D) } + stops.drop(40).map { walk(it.lat, it.lng, 40, 0) } + roadTrip,
         activities = stops.drop(40).flatMap { far -> listOf(fly(metro[0], far, 9000.0), fly(far, metro[0], 9000.0)) },
     )
     val trail = com.elsewhere.app.ui.world.trailLayout(record, stops, land)
