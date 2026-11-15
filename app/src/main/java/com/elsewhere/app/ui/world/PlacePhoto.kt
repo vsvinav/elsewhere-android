@@ -5,7 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +25,14 @@ import coil.decode.DataSource
 import com.elsewhere.app.analytics.Cat
 import com.elsewhere.app.analytics.categoryOf
 import com.elsewhere.app.data.Place
+
+/** The photo URLs a shareable card is showing, so its Save menu can fetch them before printing. */
+class CardPhotos { val urls: MutableSet<String> = linkedSetOf() }
+
+val LocalCardPhotos = staticCompositionLocalOf<CardPhotos?> { null }
+
+/** Photos already fetched for the card being printed, by URL; one synchronous draw cannot wait for the network. */
+val LocalPrintedPhotos = staticCompositionLocalOf<Map<String, ImageBitmap>> { emptyMap() }
 
 /** Kinds of place a geotagged Commons photo tends to actually show; web `PlacePhoto.tsx` FREE_FIRST. */
 val FREE_FIRST = setOf(Cat.CULTURE, Cat.TRANSIT, Cat.STAY)
@@ -38,7 +50,12 @@ fun PlacePhoto(place: Place?, modifier: Modifier = Modifier, blank: Boolean = fa
     var wiki by remember(place?.lat, place?.lng, free) { mutableStateOf<String?>(null) }
     if (free) LaunchedEffect(place!!.lat, place.lng) { wiki = runCatching { sources.commons!!(place.lat, place.lng) }.getOrNull() }
     val url = google ?: wiki
-    if (url != null) {
+    val card = LocalCardPhotos.current
+    if (url != null && card != null) SideEffect { card.urls += url }
+    val printed = url?.let { LocalPrintedPhotos.current[it] }
+    if (printed != null) {
+        Image(printed, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier.fillMaxWidth().aspectRatio(4f / 3f).background(Poster.Stock2))
+    } else if (url != null) {
         AsyncImage(
             model = url, contentDescription = null, contentScale = ContentScale.Crop,
             // Only a fetch that went out to Google is billed; a disk or memory hit costs nothing.

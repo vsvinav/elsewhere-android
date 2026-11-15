@@ -2,6 +2,7 @@ package com.elsewhere.app.ui.world
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.graphics.drawable.BitmapDrawable
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,6 +20,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -30,6 +34,9 @@ import com.elsewhere.app.share.LocalPrinting
 import com.elsewhere.app.share.ShareFormat
 import com.elsewhere.app.share.ShareSheet
 import com.elsewhere.app.share.cardFileName
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -41,12 +48,14 @@ class Share(val name: String, val text: (() -> String)? = null)
 
 /**
  * "SAVE ▾" in the corner of a card, opening Free / Story / Post (and Text when the card has one).
- * `card` is the card as it should print, without this menu; it is composed off-screen and shared as a PNG.
+ * `card` is the card as it should print, without this menu; it is composed off-screen and
+ * shared as a PNG. `photos` lists the pictures the card shows, fetched up front since the print is one draw.
  */
 @Composable
-fun SaveMenu(share: Share, card: @Composable () -> Unit, modifier: Modifier = Modifier, color: Color = LocalMuted.current) {
+fun SaveMenu(share: Share, photos: CardPhotos, card: @Composable () -> Unit, modifier: Modifier = Modifier, color: Color = LocalMuted.current) {
     if (LocalPrinting.current) return
     val context = LocalContext.current
+    val sources = LocalPhotoSources.current
     val scope = rememberCoroutineScope()
     val printed by rememberUpdatedState(card)
     var open by remember { mutableStateOf(false) }
@@ -57,7 +66,10 @@ fun SaveMenu(share: Share, card: @Composable () -> Unit, modifier: Modifier = Mo
         open = false; busy = true
         scope.launch {
             try {
-                val bitmap = CardRenderer.render(activity, format, printed)
+                val pictures = photos.urls.toList().associateWith { url -> fetchPhoto(activity, url) }.filterValues { it != null }.mapValues { it.value!! }
+                val bitmap = CardRenderer.render(activity, format) {
+                    CompositionLocalProvider(LocalPhotoSources provides sources, LocalPrintedPhotos provides pictures) { printed() }
+                }
                 val uri = withContext(Dispatchers.IO) { ShareSheet.writeCard(activity, bitmap, cardFileName(share.name, format)) }
                 ShareSheet.shareImage(activity, uri)
             } finally { busy = false }
@@ -80,6 +92,12 @@ fun SaveMenu(share: Share, card: @Composable () -> Unit, modifier: Modifier = Mo
             }
         }
     }
+}
+
+/** A software bitmap (the sheet is drawn off-screen, where hardware bitmaps cannot be read) or null when the fetch fails. */
+private suspend fun fetchPhoto(context: Context, url: String): ImageBitmap? {
+    val result = context.imageLoader.execute(ImageRequest.Builder(context).data(url).allowHardware(false).build())
+    return ((result as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap?.asImageBitmap()
 }
 
 private tailrec fun Context.findActivity(): ComponentActivity? = when (this) {
