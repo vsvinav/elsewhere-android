@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -14,6 +15,7 @@ import com.elsewhere.app.Fx
 import com.elsewhere.app.data.Home
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ui.world.ElsewhereTheme
+import com.elsewhere.app.ui.world.LocalMotion
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -65,5 +67,22 @@ class OnboardingFlowTest {
         card("THE FLAT").performClick()
         card("THE FLAT").assertIsSelected()
         card("AUSTIN").assertIsNotSelected()
+    }
+
+    @Test fun `a card still being named prints its city with an ellipsis, only while asking`() {
+        var asking by mutableStateOf(true)
+        rule.setContent {
+            ElsewhereTheme {
+                CompositionLocalProvider(LocalMotion provides false) {
+                    QuestionsScreen(OnboardState(step = Step.Home, sleep = listOf(boston, austin.copy(named = false)), asking = asking), Actions(), onCancel = null)
+                }
+            }
+        }
+        rule.onNode(hasText("AUSTIN…")).assertExists()
+        rule.onNode(hasText("THE FLAT…")).assertDoesNotExist() // already a proper name
+        asking = false
+        rule.waitForIdle()
+        rule.onNode(hasText("AUSTIN…")).assertDoesNotExist()
+        rule.onNode(hasText("AUSTIN")).assertExists()
     }
 }
