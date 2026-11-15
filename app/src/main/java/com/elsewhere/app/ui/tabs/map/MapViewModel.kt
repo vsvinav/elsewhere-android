@@ -49,4 +49,5 @@ class MapViewModel @Inject constructor(private val range: RangeStore, maps: Maps
     fun search(q: String) = opts.update { it.copy(query = q) }
     fun select(id: String?) = opts.update { it.copy(selected = id) }
     fun sizeBy(s: SizeBy) = opts.update { it.copy(sizeBy = s) }
+    fun heat(on: Boolean) = opts.update { it.copy(heat = on) }
 }

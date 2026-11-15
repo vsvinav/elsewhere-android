@@ -97,4 +97,17 @@ class PinLayersTest {
         assertEquals(4, s.cities); assertEquals(3, s.countries)
         assertEquals(layers.shown(PinOpts(hidden = setOf(Cat.EAT))).size, s.stops)
     }
+
+    @Test fun `heat replaces the pins and clusters but keeps the homes, and off again restores them exactly`() {
+        val off = layers.scene(5.1, PinOpts())
+        val on = layers.scene(5.1, PinOpts(heat = true))
+        assertTrue(on.pins.isEmpty() && on.clusters.isEmpty())
+        assertEquals(off.homes, on.homes)
+        assertEquals(off.labels, on.labels)
+        assertEquals(off.k, on.k)
+        assertNotNull(layers.scene(12.0, PinOpts(heat = true, selected = "market")).selected)
+        assertEquals(off, layers.scene(5.1, PinOpts()))
+        // The filter still decides what warms the map.
+        assertEquals(layers.shown(PinOpts(hidden = setOf(Cat.EAT))), layers.shown(PinOpts(hidden = setOf(Cat.EAT), heat = true)))
+    }
 }

@@ -33,4 +33,15 @@ class MapSnapshot {
             }
         }
     }
+
+    @Test fun heat() = paparazzi.snapshot {
+        val layers = PinLayers(SampleRecord.record)
+        ElsewhereTheme {
+            CompositionLocalProvider(LocalMotion provides false) {
+                MapScreen(layers, PinOpts(heat = true), MapActions(), Modifier.height(640.dp)) { m ->
+                    Box(m.fillMaxSize().background(Poster.Stock))
+                }
+            }
+        }
+    }
 }

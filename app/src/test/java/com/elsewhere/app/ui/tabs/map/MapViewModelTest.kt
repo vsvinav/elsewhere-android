@@ -9,6 +9,7 @@ import com.elsewhere.app.data.Viewport
 import com.elsewhere.app.ingest.Kind
 import com.elsewhere.app.ingest.MemoryCostMeter
 import com.elsewhere.app.map.Basemap
+import com.elsewhere.app.map.SizeBy
 import com.elsewhere.app.ui.shell.RangeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,5 +91,15 @@ class MapViewModelTest {
         maps.cur.value = Settings(mapsKey = "AIzb", keyTiles = true); run()
         assertTrue((vm.basemap.value as Basemap.Google).styleJson.contains("tok-AIzb"))
         assertEquals(2, tiles.sessions)
+    }
+
+    @Test fun `heat is one more option, and turning it off leaves the rest untouched`() = runTest(dispatcher) {
+        val vm = vm()
+        vm.sizeBy(SizeBy.HOURS); vm.search("x")
+        val before = vm.opts.value
+        vm.heat(true)
+        assertEquals(before.copy(heat = true), vm.opts.value)
+        vm.heat(false)
+        assertEquals(before, vm.opts.value)
     }
 }
