@@ -5,7 +5,6 @@ import com.elsewhere.app.data.Record
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
-import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.hypot
 
@@ -27,7 +26,7 @@ fun flights(data: Record, airports: List<Airport>): Flights {
     val hops = LinkedHashMap<String, Hop>(); val ports = LinkedHashMap<String, Port>()
     fun hubOf(lng: Double, lat: Double) = airports.firstOrNull { a -> hypot((a.lng - lng) * cos((lat * Math.PI) / 180), a.lat - lat) < 0.3 }
     // One dot per airport: a known hub keys by code, so legs that start on different runways still merge.
-    fun key(p: LatLng) = hubOf(p.lng, p.lat)?.code ?: String.format(Locale.US, "%.1f,%.1f", p.lng, p.lat)
+    fun key(p: LatLng) = hubOf(p.lng, p.lat)?.code ?: "${toFixed(p.lng, 1)},${toFixed(p.lat, 1)}"
     // The city most visited within ~100 km of the runway: the airport's town is rarely where you slept.
     fun nearCity(lng: Double, lat: Double): String {
         hubOf(lng, lat)?.let { return it.city }

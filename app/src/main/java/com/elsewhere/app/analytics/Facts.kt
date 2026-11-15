@@ -43,7 +43,7 @@ private val LONG_DATE = DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.US)
 
 private fun n0(x: Double): String = String.format(Locale.US, "%,d", jsRound(x).toLong())
 private fun n0(x: Int): String = n0(x.toDouble())
-private fun f1(x: Double): String = String.format(Locale.US, "%.1f", x)
+private fun f1(x: Double): String = toFixed(x, 1)
 private fun long(d: String): String = LocalDate.parse(d).format(LONG_DATE)
 private fun longTs(ts: Long): String = long(dayKey(ts))
 private fun localHour(ts: Long, tz: Int): Int = Instant.ofEpochSecond(ts + tz * 60L).atOffset(ZoneOffset.UTC).hour

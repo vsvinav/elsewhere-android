@@ -12,6 +12,12 @@ class FormatTest {
         assertEquals("3 km", fmtKm(2.5))
     }
 
+    @Test fun `toFixed rounds the exact binary value like JS`() {
+        assertEquals("0.1", toFixed(0.15, 1))
+        assertEquals("1.3", toFixed(1.25, 1))
+        assertEquals("1.1", toFixed(1.15, 1))
+    }
+
     @Test fun `fmtDate and fmtTime match en-US output, shifted by tz minutes`() {
         val t = iso("2025-01-01T09:05:00Z")
         assertEquals("Wed, Jan 1, 2025", fmtDate(t))

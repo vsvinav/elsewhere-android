@@ -54,7 +54,7 @@ class PositionTest {
             paths = listOf(Path(0, 100, listOf(Pt(0.0, 0.0, 0), Pt(1.0, 1.0, 50), Pt(2.0, 0.0, 100)))),
         )
         val w = whereaboutsAt(d, 25)!!
-        assertEquals(0.5, w.lng, 1e-2); assertEquals(0.5, w.lat, 1e-2)
+        assertEquals(0.5, w.lng, 5e-3); assertEquals(0.5, w.lat, 5e-3)
         assertEquals(45.0, w.heading, 0.5)
     }
 }
