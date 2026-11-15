@@ -37,14 +37,16 @@ class FactsFlipTest {
     private val door = Door.Range(0L, 86_399L, "22 nights in your own bed")
     private val doorFact = Fact("beds", Kind.HABIT, "22 nights in your own bed", "Detail.", card = true, quip = "Home is where the bed is", door = door)
 
-    @Test fun theHeadlineOnTheBackOfTheCardOpensTheFactsDoor() {
+    @Test fun theHeadlineOnTheBackOfTheCardTurnsItBackOverInsteadOfOpeningADoor() {
         val opened = ArrayList<Door>()
         rule.setContent { ElsewhereTheme { CompositionLocalProvider(LocalOpenDoor provides { opened.add(it) }) { FlipCard(doorFact) } } }
-        rule.onNodeWithContentDescription("Open on the map: 22 nights in your own bed").assertDoesNotExist()
         rule.onNodeWithContentDescription("Fact. Tap to turn over").performClick()
         rule.mainClock.advanceTimeBy(1000)
-        rule.onNodeWithContentDescription("Open on the map: 22 nights in your own bed").performClick()
-        assertEquals(listOf<Door>(door), opened)
+        rule.onNodeWithContentDescription("Open on the map: 22 nights in your own bed").assertDoesNotExist()
+        rule.onNodeWithText("22 nights in your own bed").performClick()
+        rule.mainClock.advanceTimeBy(1000)
+        rule.onNodeWithContentDescription("Fact. Tap to turn over").assertExists()
+        assertEquals(emptyList<Door>(), opened)
     }
 
     @Test fun theHeadlineOnThePassOpensTheFactsDoor() {

@@ -61,6 +61,8 @@ private fun whole(c: Ctx) = Door.Range(c.range.first, c.range.last, "")
 private fun localDay(ts: Long, tz: Int): Door.Range { val off = tz * 60L; val d = Math.floorDiv(ts + off, DAY) * DAY - off; return Door.Range(d, d + DAY - 1, "") }
 private fun days(from: String, to: String) = Door.Range(dayStart(from), dayStart(to) + DAY - 1, "")
 private fun pins(ids: Collection<String>) = Door.Places(ids.toList(), "")
+/** Every place the record names in a city, whatever its role or whether the window visited it. O(P). */
+private fun placesInCity(d: Record, city: String): List<String> = d.places.entries.filter { it.value.city == city }.map { it.key }
 private fun localHour(ts: Long, tz: Int): Int = Instant.ofEpochSecond(ts + tz * 60L).atOffset(ZoneOffset.UTC).hour
 private fun localDow(ts: Long, tz: Int): Int = Instant.ofEpochSecond(ts + tz * 60L).atOffset(ZoneOffset.UTC).dayOfWeek.value - 1
 private fun pct(a: Double, b: Double): Int = jsRound((100 * a) / max(1.0, b)).toInt()
@@ -248,16 +250,15 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
         val slept = HashSet<String>()
         for (v in sleeps(d)) { val city = d.places[v.placeId]?.city; if (t(city)) slept.add(city!!) }
         val passed = LinkedHashMap<String, Int>()
-        val ids = HashMap<String, LinkedHashSet<String>>()
         for (v in d.visits) {
             val p = d.places[v.placeId]; val city = p?.city
-            if (v.lvl == 0 && t(city) && p!!.role == null && city!! !in slept) { passed[city] = (passed[city] ?: 0) + 1; ids.getOrPut(city) { LinkedHashSet() }.add(v.placeId) }
+            if (v.lvl == 0 && t(city) && p!!.role == null && city!! !in slept) passed[city] = (passed[city] ?: 0) + 1
         }
         val top = passed.entries.maxByOrNull { it.value }
         if (top == null || top.value < 5) null else Fact("passed", Kind.HABIT,
             headline = "${top.key}: ${top.value} visits, never a night",
             detail = "The city you keep passing through without ever sleeping there.",
-            door = pins(ids[top.key].orEmpty()))
+            door = pins(placesInCity(d, top.key)))
     },
     // New Year's Eve
     { c ->
@@ -422,16 +423,15 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
     { c ->
         val d = c.d
         val h = LinkedHashMap<String, Double>()
-        val ids = HashMap<String, LinkedHashSet<String>>()
         for (v in d.visits) {
             val p = d.places[v.placeId]; val city = p?.city
-            if (v.lvl == 0 && t(city) && p!!.role == null && !isHome(p)) { h[city!!] = (h[city] ?: 0.0) + (v.end - v.start) / 3600.0; ids.getOrPut(city) { LinkedHashSet() }.add(v.placeId) }
+            if (v.lvl == 0 && t(city) && p!!.role == null && !isHome(p)) h[city!!] = (h[city] ?: 0.0) + (v.end - v.start) / 3600.0
         }
         val homeCity = d.places.values.firstOrNull { isHome(it) }?.city
         val top = h.entries.filter { it.key != homeCity }.maxByOrNull { it.value }
         if (top == null || top.value < 48) null else Fact("second-city", Kind.HABIT, card = true,
             headline = "${top.key}: ${hrs(top.value)} hours", detail = "The city you spend most time in that isn't home.",
-            door = pins(ids[top.key].orEmpty()),
+            door = pins(placesInCity(d, top.key)),
             quip = "${hrs(top.value)} hours in ${top.key}. At this point it's a situationship.")
     },
     // Shop hours

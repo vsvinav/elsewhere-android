@@ -173,7 +173,7 @@ internal fun FlipCard(f: Fact, modifier: Modifier = Modifier) {
             if (back) {
                 // The back is read through a mirror; flip it once more so the type runs the right way.
                 Column(Modifier.graphicsLayer { rotationY = 180f }) {
-                    Text(f.headline, Modifier.door(f.door), color = Poster.Ink, style = PosterType.Display.copy(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 0.95.em))
+                    Text(f.headline, color = Poster.Ink, style = PosterType.Display.copy(fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 0.95.em))
                     Spacer(Modifier.height(14.dp))
                     Text(f.detail, color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium, lineHeight = 1.4.em))
                 }

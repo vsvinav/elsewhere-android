@@ -133,6 +133,15 @@ class FactsTest {
         assertEquals(listOf("hotel", "hotel2", "lyon"), density.placeIds.sorted())
     }
 
+    @Test fun `a city fact opens on every place the record names there, even ones with a role or none visited`() {
+        val passes = (1..5).map { i -> visit(JAN + i * D + 10 * H, JAN + i * D + 11 * H, "cam$i", lat = 42.37, lng = -71.11) }
+        val cam = (1..5).associate { "cam$it" to pl(null, "Cambridge", "US", 42.37, -71.11) }
+        val extra = mapOf("cam-office" to pl(Role.WORK, "Cambridge", "US", 42.37, -71.11), "cam-quiet" to pl(null, "Cambridge", "US", 42.37, -71.11), "paris-desk" to pl(Role.WORK, "Paris", "FR", 48.85, 2.35))
+        val f = facts(data.copy(visits = data.visits + passes, places = data.places + cam + extra), Units.KM)
+        assertEquals((cam.keys + "cam-office" + "cam-quiet").sorted(), (door(f, "passed") as Door.Places).placeIds.sorted())
+        assertEquals(listOf("hotel", "hotel2", "paris-desk"), (door(f, "second-city") as Door.Places).placeIds.sorted())
+    }
+
     @Test fun `a loyal restaurant opens on it`() {
         val f = facts(data.copy(places = data.places + ("r" to place(null, "Boston", "US", 7, JAN, JAN, "Nook", 42.36, -71.06, 9.0, primaryType = "restaurant"))), Units.KM)
         assertEquals(Door.Place("r", label = "Nook, 7 times"), door(f, "regular"))
