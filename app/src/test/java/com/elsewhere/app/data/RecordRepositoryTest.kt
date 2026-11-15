@@ -163,6 +163,20 @@ class RecordRepositoryTest {
         assertEquals(2, repo.deviceVisits.value)
     }
 
+    @Test fun `refresh rebuilds from whatever Room holds now, and the bar reads Working out trips`() = runTest {
+        repo.import({ open() }, "mini_timeline.json")
+        repo.saveProfile(profile(boston))
+        val before = repo.record.first { it != null }!!
+        // A row that landed behind the repository's back, as the recorder's worker might leave it.
+        db.visits().insertAll(listOf(deviceVisit(1_800_000_000L)))
+        ready.clear()
+
+        repo.refresh()
+        val after = repo.record.first { it != null && it !== before }!!
+        assertEquals(before.visits.size + 1, after.visits.size)
+        assertEquals(Ready("Working out trips", 100), ready.ready.value)
+    }
+
     @Test fun `reset clears everything`() = runTest {
         repo.import({ open() }, "mini_timeline.json")
         repo.saveProfile(profile(boston))

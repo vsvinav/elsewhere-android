@@ -7,22 +7,32 @@ import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.ReadyState
 import com.elsewhere.app.data.Ready
+import com.elsewhere.app.data.RecordSource
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.data.shellReady
 import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.ingest.Progress
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
+
+private const val REFRESH_TIMEOUT_MS = 15_000L
 
 /** What the masthead menu reads and does: the name on the record, units, usage, start over. */
 @HiltViewModel
-class ShellViewModel @Inject constructor(private val repo: RecordStore, settings: MapsSettings, private val lookups: PlaceLookups, readyState: ReadyState = ReadyState()) : ViewModel() {
+class ShellViewModel @Inject constructor(
+    private val repo: RecordStore, private val source: RecordSource, settings: MapsSettings, private val lookups: PlaceLookups, readyState: ReadyState = ReadyState(),
+) : ViewModel() {
+    private val _refreshing = MutableStateFlow(false)
+    /** True from a pull until the rebuilt record has landed, or the wait has given up. */
+    val refreshing: StateFlow<Boolean> = _refreshing
     val naming: StateFlow<Progress?> = lookups.progress
     /** The bar waits for the names too: derive finishes long before slow Places lookups do, and the user needs to see something is still happening. */
     val ready: StateFlow<Ready?> = combine(readyState.ready, lookups.progress, ::shellReady)
@@ -33,6 +43,18 @@ class ShellViewModel @Inject constructor(private val repo: RecordStore, settings
     fun toggleUnits() {
         val p = profile.value ?: return
         viewModelScope.launch { repo.saveProfile(p.copy(units = if (p.units == Units.KM) Units.MI else Units.KM)) }
+    }
+
+    /** Pull to refresh: rebuild from Room (export plus device rows) and ask again for any names that failed. */
+    fun refresh() {
+        if (!_refreshing.compareAndSet(expect = false, update = true)) return
+        viewModelScope.launch {
+            try {
+                // A guard so the indicator never spins for ever, whatever the rebuild does.
+                withTimeoutOrNull(REFRESH_TIMEOUT_MS) { source.refresh() }
+                lookups.retry()
+            } finally { _refreshing.value = false }
+        }
     }
 
     fun reset() { viewModelScope.launch { repo.reset(); lookups.forget() } }

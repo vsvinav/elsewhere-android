@@ -154,6 +154,13 @@ class PlaceLookups(
         emit(); pump()
     }
 
+    /** A refresh: ids that were dropped after failing, and a pool a refused key stopped, may be asked for once more. */
+    fun retry() {
+        synchronized(lock) { retried.clear(); stopped = false }
+        state.fail(null)
+        emit(); pump()
+    }
+
     /** Start over: forget what was looked up, so a fresh record asks again. */
     fun forget() { synchronized(lock) { cache.clear(); dirty.clear(); loaded = null; retried.clear() } }
 

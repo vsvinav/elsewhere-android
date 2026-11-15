@@ -247,4 +247,32 @@ class PlaceLookupsTest {
         l.need(listOf("b"), places); settle()
         assertEquals(listOf("a", "b"), src.asked)
     }
+
+    @Test fun `retry lets ids that failed, or a stopped pool, be asked for again`() = runTest(dispatcher) {
+        val l = lookups(backoffMs = 2000); settle()
+        // Twice unlucky: dropped, and asked again it gets no second go. A refresh gives it one.
+        src.fails("a", PlacesError("Places API 503", 503), PlacesError("Places API 503", 503), PlacesError("Places API 503", 503))
+        l.need(listOf("a"), places); settle()
+        assertEquals(listOf("a", "a"), src.asked)
+        l.need(listOf("a"), places); settle()
+        assertEquals(listOf("a", "a", "a"), src.asked)
+        assertNull(store.rows["a"])
+        l.retry()
+        src.fails("a", PlacesError("Places API 503", 503))
+        l.need(listOf("a"), places); settle()
+        assertEquals(listOf("a", "a", "a", "a", "a"), src.asked)
+        assertEquals("A", store.rows["a"]!!.name)
+
+        // A refused key stopped the pool; a refresh asks once more, and the refusal returns if the key is still bad.
+        src.fails("b", PlacesError("PERMISSION_DENIED", 403), PlacesError("PERMISSION_DENIED", 403))
+        l.need(listOf("b"), places); settle()
+        assertEquals("PERMISSION_DENIED", state.error.value)
+        l.need(listOf("b"), places); settle()
+        assertEquals(1, src.asked.count { it == "b" })
+        l.retry()
+        assertNull(state.error.value)
+        l.need(listOf("b"), places); settle()
+        assertEquals(2, src.asked.count { it == "b" })
+        assertEquals("PERMISSION_DENIED", state.error.value)
+    }
 }

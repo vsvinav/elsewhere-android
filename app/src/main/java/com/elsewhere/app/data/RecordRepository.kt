@@ -74,6 +74,8 @@ class RecordRepository @Inject constructor(
     val deviceVisits: StateFlow<Int> get() = deviceCount
     private val deviceCount = MutableStateFlow(0)
     private val placesVersion = MutableStateFlow(0)
+    /** How many times `record` has been built; `refresh()` waits on it, since an unchanged rebuild is equal and the StateFlow would not re-emit. */
+    private val builds = MutableStateFlow(0)
 
     private val profileRead = MutableStateFlow(false)
     private val importRead = MutableStateFlow(false)
@@ -109,6 +111,7 @@ class RecordRepository @Inject constructor(
             else if (prev != null && prev.version == c.version && prev.profile === c.profile) build(p, c.key)
             else timed { build(p, c.key) }
         }
+        .onEach { builds.update { it + 1 } }
         .flowOn(Dispatchers.Default)
         .stateIn(scope, SharingStarted.Eagerly, null)
 
@@ -232,6 +235,13 @@ class RecordRepository @Inject constructor(
     override suspend fun put(rows: Map<String, Enrichment>) {
         db.placeEnrichment().insertAll(rows.map { (id, e) -> PlaceEnrichmentEntity(id, e.name, e.address, Json.encodeToString(strings, e.types), e.primaryType, e.photo) })
         placesVersion.update { it + 1 }
+    }
+
+    /** A pull to refresh: the same bump a new import or device batch makes, so `record` re-derives under "Working out trips". */
+    override suspend fun refresh() {
+        val n = builds.value
+        importVersion.update { it + 1 }
+        builds.first { it != n }
     }
 
     override suspend fun reset() {
