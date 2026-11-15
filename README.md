@@ -22,6 +22,7 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 <img src="docs/screenshots/calendar.png" width="180" alt="Calendar sheet for picking a range">
 <img src="docs/screenshots/rangebar.png" width="180" alt="Range bar with presets">
 <img src="docs/screenshots/flights-ledger.png" width="180" alt="Flights: the route ledger">
+<img src="docs/screenshots/flights-from.png" width="180" alt="Flights: departures from one airport">
 <img src="docs/screenshots/key-refused.png" width="180" alt="Onboarding: a refused Google key, with Google's message, a hint and the limited-maps acknowledgement">
 <img src="docs/screenshots/home-naming.png" width="180" alt="Onboarding: home candidates being named, with the naming stamp">
 </p>
@@ -36,7 +37,7 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Shell: ticket strip, range bar, calendar, onboarding | ✅ |
 | Tour · Numbers · Facts · Stops · Dates | ✅ |
 | Map (Google map tiles, OpenStreetMap fallback, clusters, search) | ✅ |
-| Flights globe | ✅ |
+| Flights globe · From-airport bill | ✅ |
 | Replay | ✅ |
 | Key verification · place names and photos | ✅ |
 | Share cards | ⏳ |
