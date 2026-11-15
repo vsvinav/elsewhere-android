@@ -13,6 +13,7 @@ import com.elsewhere.app.data.RecordSource
 import com.elsewhere.app.data.Settings
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -59,6 +60,8 @@ class EnrichWorker @AssistedInject constructor(
             Result.success()
         } catch (e: PlacesError) {
             state.fail(e.message); Result.failure()
+        } catch (e: CancellationException) {
+            throw e // WorkManager stopped us; it decides what happens next, not a retry here
         } catch (e: Exception) {
             state.report(null); if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
