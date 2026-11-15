@@ -2,10 +2,10 @@ package com.elsewhere.app.map
 
 import com.elsewhere.app.analytics.Leg
 import com.elsewhere.app.analytics.Lens
-import com.elsewhere.app.analytics.bearing
 import com.elsewhere.app.analytics.legsOf
 import com.elsewhere.app.data.LatLng
 import com.elsewhere.app.data.Record
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -91,28 +91,53 @@ class Trails(private val list: List<Trail>) : List<Trail> by list {
 }
 
 /** Where the drawn trail's head is: the marker is placed from the same thinned points the canvas draws, so it never leads or trails the line. */
-data class TrailHead(val lat: Double, val lng: Double, val heading: Double)
+data class TrailHead(val lat: Double, val lng: Double)
 
-/** The record's trails, thinned per zoom and filtered per lens, cached so a frame costs lookups, not geometry. */
+private const val MIN_ZB = 2
+private const val MAX_ZB = 16
+
+/**
+ * The record's trails, thinned per zoom and filtered per lens. Thinning runs through [prepare] on a worker, never
+ * on the thread that draws: a frame only looks a bucket up, and borrows the nearest ready one until its own lands.
+ */
 class ReplayTrails(data: Record) {
     val all = Trails(legsOf(data).map { l: Leg -> Trail(l.path, l.ts, l.lens, l.guessed) })
-    private val byLens = HashMap<Lens, Trails>()
-    private val simp = HashMap<String, Trails>()
+    private val byLens = ConcurrentHashMap<Lens, Trails>()
+    private val simp = ConcurrentHashMap<Int, Trails>()
+    /** Buckets thinned so far; a test's way of seeing that a lookup did no geometry. */
+    val computed: Int get() = simp.size
 
     fun of(lens: Lens): Trails = byLens.getOrPut(lens) { if (lens == Lens.ALL) all else Trails(all.filter { it.lens == lens }) }
 
-    /** Trails thinned to ~1.5 px at a whole-number zoom: GPS jitter is never drawn, and the canvas gets a fraction of the points when zoomed out. */
-    fun simplified(lens: Lens, zoom: Double): Trails {
-        val zb = max(2, min(16, zoom.roundToInt()))
-        return simp.getOrPut("${lens.key}:$zb") {
-            val tol = degPerPx(zb) * 1.5
-            Trails(of(lens).map { t ->
-                if (t.path.size <= 2) return@map t
-                val idx = simplifyIdx(t.path, tol)
-                if (idx.size == t.path.size) t else Trail(idx.map { t.path[it] }, DoubleArray(idx.size) { t.ts[idx[it]] }, t.lens, t.guessed)
-            })
-        }
+    /** Thins every lens at every zoom bucket, the whole-record lens first since that is what the replay opens on; stops once `go` says no. */
+    fun prepare(go: () -> Boolean = { true }) {
+        for (lens in listOf(Lens.ALL) + Lens.entries.filter { it != Lens.ALL }) for (zb in MIN_ZB..MAX_ZB) { if (!go()) return; compute(lens, zb) }
     }
+
+    /** Trails thinned to ~1.5 px at a whole-number zoom: GPS jitter is never drawn, and the canvas gets a fraction of the points when zoomed out. */
+    fun compute(lens: Lens, zb: Int) {
+        val key = key(lens, zb)
+        if (simp.containsKey(key)) return
+        val tol = degPerPx(zb) * 1.5
+        val out = Trails(of(lens).map { t ->
+            if (t.path.size <= 2) return@map t
+            val idx = simplifyIdx(t.path, tol)
+            if (idx.size == t.path.size) t else Trail(idx.map { t.path[it] }, DoubleArray(idx.size) { t.ts[idx[it]] }, t.lens, t.guessed)
+        })
+        simp.putIfAbsent(key, out)
+    }
+
+    /** The bucket for this zoom if ready, else the nearest ready one, else the raw trails; never thins on the caller. */
+    fun simplified(lens: Lens, zoom: Double): Trails {
+        val zb = max(MIN_ZB, min(MAX_ZB, zoom.roundToInt()))
+        for (d in 0..(MAX_ZB - MIN_ZB)) {
+            simp[key(lens, zb - d)]?.let { return it }
+            simp[key(lens, zb + d)]?.let { return it }
+        }
+        return of(lens)
+    }
+
+    private fun key(lens: Lens, zb: Int) = lens.ordinal * 32 + zb
 }
 
 /**
@@ -136,9 +161,11 @@ fun trailHead(trails: List<Trail>, t: Double): TrailHead? {
     val tr = trails.getOrNull(lo) ?: return null
     if (tr.t0 > t || tr.t1 < t) return null
     val ts = tr.ts
-    var i = 1
-    while (i < ts.size - 1 && ts[i] < t) i++
+    // First index whose time reaches t, kept inside the leg so the segment before it exists.
+    var a = 1; var b = ts.size - 1
+    while (a < b) { val m = (a + b) ushr 1; if (ts[m] < t) a = m + 1 else b = m }
+    val i = a
     val p0 = tr.path[i - 1]; val p1 = tr.path[i]
     val k = if (ts[i] > ts[i - 1]) (t - ts[i - 1]) / (ts[i] - ts[i - 1]) else 1.0
-    return TrailHead(p0.lat + (p1.lat - p0.lat) * k, p0.lng + (p1.lng - p0.lng) * k, bearing(p0, p1))
+    return TrailHead(p0.lat + (p1.lat - p0.lat) * k, p0.lng + (p1.lng - p0.lng) * k)
 }

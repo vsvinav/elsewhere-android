@@ -4,13 +4,16 @@ import com.elsewhere.app.Fx
 import com.elsewhere.app.Fx.H
 import com.elsewhere.app.Fx.act
 import com.elsewhere.app.Fx.visit
+import com.elsewhere.app.analytics.Lens
 import com.elsewhere.app.data.LatLng
 import com.elsewhere.app.data.Path
 import com.elsewhere.app.data.Pt
 import com.elsewhere.app.data.Role
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -43,7 +46,7 @@ class TrailTest {
         assertEquals(1, activeTrails(trails, 0.0, H / 2.0).size)
         assertEquals(2, activeTrails(trails, H / 2.0, 2.5 * H).size)
         val head = trailHead(trails, H / 2.0)!!
-        assertEquals(0.5, head.lng, 1e-9); assertEquals(90.0, head.heading, 1e-6)
+        assertEquals(0.5, head.lng, 1e-9); assertEquals(0.0, head.lat, 1e-9)
         assertNull(trailHead(trails, 1.5 * H))
     }
 
@@ -74,6 +77,42 @@ class TrailTest {
         val jitter = List(50) { i -> LatLng((rnd.nextDouble() - 0.5) * 1e-5, i / 10.0) }
         assertEquals(listOf(0, 49), simplifyIdx(jitter, 1e-3).toList())
         assertTrue(degPerPx(14) < degPerPx(6) / 200)
+    }
+
+    @Test fun `a frame never thins on its own thread - it takes the nearest ready bucket until prepare has run`() {
+        val rnd = java.util.Random(3)
+        val pts = List(200) { i -> Pt(i / 100.0 + (rnd.nextDouble() - 0.5) * 1e-4, i / 100.0, i * 10L) }
+        val data = Fx.record(
+            activities = listOf(act(0, 2000, "WALKING", 3000.0, 0.0, 0.0, 2.0, 2.0)),
+            paths = listOf(Path(0, 2000, pts)),
+        )
+        val trails = ReplayTrails(data)
+        // Nothing ready: the raw trails stand in, and the lookup computes nothing.
+        assertSame(trails.all, trails.simplified(Lens.ALL, 10.0))
+        assertEquals(0, trails.computed)
+        // One bucket ready: a zoom two levels off borrows it rather than thinning its own.
+        trails.compute(Lens.ALL, 8)
+        assertEquals(1, trails.computed)
+        val z8 = trails.simplified(Lens.ALL, 8.0)
+        assertNotSame(trails.all, z8); assertTrue(z8[0].path.size < 200)
+        assertSame(z8, trails.simplified(Lens.ALL, 10.0))
+        assertEquals(1, trails.computed)
+        // Prepared: every lens and bucket is ready, so no lookup ever thins again.
+        trails.prepare()
+        val n = trails.computed
+        assertEquals(Lens.entries.size * 15, n)
+        for (lens in Lens.entries) for (z in 0..18) trails.simplified(lens, z.toDouble())
+        assertEquals(n, trails.computed)
+        assertTrue(trails.simplified(Lens.ALL, 16.0)[0].path.size > trails.simplified(Lens.ALL, 2.0)[0].path.size)
+    }
+
+    @Test fun `the trail head is found by binary search inside a long leg`() {
+        val pts = List(1000) { i -> Pt(0.0, i / 1000.0, i.toLong()) }
+        val data = Fx.record(activities = listOf(act(0, 1000, "WALKING", 1000.0, 0.0, 0.0, 1.0, 0.0)), paths = listOf(Path(0, 1000, pts)))
+        val trails = ReplayTrails(data).all
+        assertEquals(0.5005, trailHead(trails, 500.5)!!.lng, 1e-9)
+        assertEquals(0.0, trailHead(trails, 0.0)!!.lng, 1e-9)
+        assertEquals(1.0, trailHead(trails, 1000.0)!!.lng, 1e-9)
     }
 
     @Test fun `arrivals print once per visit, skip home, and peel off after the TTL`() {
