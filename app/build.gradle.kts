@@ -8,6 +8,19 @@ plugins {
     alias(libs.plugins.paparazzi)
 }
 
+// The version comes from the release tag (CI passes -Pelsewhere.version=0.9.0); a local build is 0.0.0.
+val appVersion: String = (findProperty("elsewhere.version") as String?)?.removePrefix("v")?.takeIf { it.isNotBlank() } ?: "0.0.0"
+
+/** "1.2.3" → 10203, so every release installs over the one before. */
+fun versionCodeOf(v: String): Int {
+    val (a, b, c) = v.split(".").map { it.toInt() } + listOf(0, 0, 0)
+    return (a * 10_000 + b * 100 + c).coerceAtLeast(1)
+}
+
+// One keystore for every published APK, so an upgrade installs in place and keeps the phone's recorded data.
+// CI writes it to ELSEWHERE_KEYSTORE; without it the build signs with the default debug key.
+val keystorePath: String? = System.getenv("ELSEWHERE_KEYSTORE")?.takeIf { File(it).isFile }
+
 android {
     namespace = "com.elsewhere.app"
     compileSdk = 35
@@ -15,11 +28,22 @@ android {
         applicationId = "com.elsewhere.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionName = appVersion
+        versionCode = versionCodeOf(appVersion)
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    buildTypes { release { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") } }
+    signingConfigs {
+        if (keystorePath != null) create("elsewhere") {
+            storeFile = file(keystorePath)
+            storePassword = System.getenv("ELSEWHERE_KEYSTORE_PASSWORD")
+            keyAlias = "elsewhere"
+            keyPassword = System.getenv("ELSEWHERE_KEYSTORE_PASSWORD")
+        }
+    }
+    buildTypes {
+        debug { if (keystorePath != null) signingConfig = signingConfigs.getByName("elsewhere") }
+        release { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }

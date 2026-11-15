@@ -72,6 +72,8 @@ Every bill and pass has a **Save** menu: share it as a PNG as-is, letterboxed as
 2. On the phone, allow installs from your browser/files app and open the APK.
 3. Export your Timeline (below), open Elsewhere, pick the file.
 
+Every release from v0.9.0 on is signed with the same key, so a newer APK installs over the old one and keeps everything you imported or recorded. Upgrading from v0.8.0 or earlier needs one uninstall first (those builds were signed per run).
+
 ### Export your Timeline
 
 - **Android** — Settings → Location → Location Services → Timeline → *Export Timeline data*.
@@ -121,7 +123,7 @@ Google is winding down Timeline exports, so Elsewhere can keep the record itself
 
 ## Your data
 
-Your export never leaves the phone. It is parsed on-device and kept in a local database. Network calls: map tiles, a few free OpenStreetMap address lookups for your home picks, and — only with your key — Google Places names and photos for your hundred busiest stops.
+Your export never leaves the phone. It is parsed on-device and kept in a local database that survives upgrades and, through Android's app backup, a phone change. Network calls: map tiles, a few free OpenStreetMap address lookups for your home picks, and — only with your key — Google Places names and photos for your hundred busiest stops.
 
 ## Layout
 
