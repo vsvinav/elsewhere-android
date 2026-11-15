@@ -9,6 +9,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.elsewhere.app.analytics.Night
 import com.elsewhere.app.analytics.NightKind
+import com.elsewhere.app.share.bedText
 import com.elsewhere.app.ui.world.figures.Beds
 
 // Port of web/src/world/Nights.tsx: every night in the range as one cell.
@@ -34,7 +35,7 @@ val NIGHT_LEGEND = listOf("Home" to Poster.Ink, "Somewhere new" to Poster.Red, "
 
 @Composable
 fun NightsBill(ui: NightsUi, modifier: Modifier = Modifier, first: Boolean = false) {
-    Bill(Tone.STOCK, modifier, first = first) {
+    Bill(Tone.STOCK, modifier, first = first, share = Share(ui.title) { bedText(ui.nights, ui.title) }) {
         Word("Nights")
         Spacer(Modifier.height(16.dp))
         Lede(ui.lede)

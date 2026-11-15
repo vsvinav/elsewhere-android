@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -21,13 +22,16 @@ enum class Tone(val fill: Color, val text: Color, val muted: Color, val rule: Co
     RED(Poster.Red, Poster.Stock, Poster.Stock.copy(alpha = 0.8f), Poster.Ink),
 }
 
-/** One full-bleed poster chapter: a rule on top, then the printed matter. */
+/** One full-bleed poster chapter: a rule on top, then the printed matter. With `share`, a Save menu sits in the bottom corner. */
 @Composable
-fun Bill(tone: Tone = Tone.STOCK, modifier: Modifier = Modifier, first: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.fillMaxWidth().background(tone.fill)) {
-        if (!first) Box(Modifier.fillMaxWidth().height(Rule).background(tone.rule))
-        CompositionLocalProvider(LocalContentColor provides tone.text, LocalMuted provides tone.muted) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 48.dp), content = content)
+fun Bill(tone: Tone = Tone.STOCK, modifier: Modifier = Modifier, first: Boolean = false, share: Share? = null, content: @Composable ColumnScope.() -> Unit) {
+    Box(modifier.fillMaxWidth().background(tone.fill)) {
+        Column {
+            if (!first) Box(Modifier.fillMaxWidth().height(Rule).background(tone.rule))
+            CompositionLocalProvider(LocalContentColor provides tone.text, LocalMuted provides tone.muted) {
+                Column(Modifier.padding(horizontal = 20.dp, vertical = 48.dp), content = content)
+            }
         }
+        if (share != null) SaveMenu(share, card = { Bill(tone, first = first, content = content) }, Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 2.dp), color = tone.muted)
     }
 }

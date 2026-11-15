@@ -37,6 +37,7 @@ import com.elsewhere.app.ui.world.CapsText
 import com.elsewhere.app.ui.world.Field
 import com.elsewhere.app.ui.world.Legend
 import com.elsewhere.app.ui.world.Pass
+import com.elsewhere.app.ui.world.Share
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.WEEKDAYS
@@ -119,7 +120,7 @@ private fun Columns(stacks: List<List<Pair<Float, Color>>>, description: String,
 @Composable
 private fun MonthsPass(ui: NumbersUi) {
     val s = ui.stats; val u = ui.units
-    Pass(stub = {
+    Pass(share = Share("distance by month"), stub = {
         Field("Best month", ui.best?.let { countUp(u.cv(it.total)) }, big = true)
         Field("Which", ui.best?.let { month(it.key) })
         Field("Average per month", countUp(u.cv(ui.avg)), big = true)
@@ -145,7 +146,7 @@ private fun MonthsPass(ui: NumbersUi) {
 @Composable
 private fun RhythmPass(ui: NumbersUi) {
     val s = ui.stats
-    Pass(stub = {
+    Pass(share = Share("rhythm"), stub = {
         Field("Peak hour", ui.peak?.let { "${WEEKDAYS[it.d]} ${it.h.toString().padStart(2, '0')}:00" })
         Field("Busiest day out", if ((ui.byDay.getOrNull(ui.topDay) ?: 0.0) > 0) WEEKDAYS[ui.topDay] else null)
         Field("Hours away", countUp(ui.hoursAway), big = true)
@@ -183,7 +184,7 @@ private fun RhythmPass(ui: NumbersUi) {
 private fun DaysPass(ui: NumbersUi) {
     val u = ui.units
     fun pct(t: DayType) = ui.pct(t)
-    Pass(stub = {
+    Pass(share = Share("kinds of days"), stub = {
         for (t in DayType.entries) Field(t.key.replaceFirstChar { it.uppercase() }, "${pct(t)}%", big = true)
     }) {
         Field("Kinds of days", "Away = over ${n0(u.cv(100.0))} ${u.u} from home · Work = 2 h+ at work · Out = 3 h+ elsewhere")
@@ -206,7 +207,7 @@ private fun DaysPass(ui: NumbersUi) {
 @Composable
 private fun CommutePass(ui: NumbersUi) {
     val c = ui.commute
-    Pass(stub = {
+    Pass(share = Share("commute"), stub = {
         Field("Legs on record", countUp(c.legs.size.toDouble()), big = true)
         Field("To work · median", if (c.toWork.n > 0) "${c.toWork.medianMin.roundToInt()} min" else null)
         Field("To home · median", if (c.toHome.n > 0) "${c.toHome.medianMin.roundToInt()} min" else null)
@@ -246,7 +247,7 @@ private fun Spark(values: List<Int>, maxV: Int, color: Color) {
 @Composable
 private fun ExplorePass(ui: NumbersUi) {
     val e = ui.explore
-    Pass(stub = {
+    Pass(share = Share("exploration"), stub = {
         Field("New places", countUp(ui.newTotal.toDouble()), big = true)
         Field("Per month", countUp(ui.newTotal / max(1, e.size).toDouble()), big = true)
         Field("Lapsed", countUp(ui.lapsedTotal.toDouble()), big = true)
@@ -264,7 +265,7 @@ private fun ExplorePass(ui: NumbersUi) {
 @Composable
 private fun CitiesPass(ui: NumbersUi) {
     val cities = ui.stats.cities
-    Pass {
+    Pass(share = Share("cities")) {
         Field("Cities", "${cities.size} cities in ${ui.countries} countries, by time spent")
         Spacer(Modifier.height(22.dp))
         Box(Modifier.fillMaxWidth().height(6.dp).background(Poster.Ink))

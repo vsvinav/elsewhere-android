@@ -44,6 +44,8 @@ import com.elsewhere.app.ui.world.NightsBill
 import com.elsewhere.app.ui.world.PList
 import com.elsewhere.app.ui.world.PRow
 import com.elsewhere.app.ui.world.Pass
+import com.elsewhere.app.ui.world.Share
+import com.elsewhere.app.share.bedText
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.countUp
@@ -86,7 +88,7 @@ fun DatesScreen(ui: DatesUi, modifier: Modifier = Modifier, scroll: Boolean = tr
 @Composable
 internal fun TripsHeader(ui: DatesUi) {
     val u = ui.units
-    Pass(stub = {
+    Pass(share = Share("trips"), stub = {
         Field("Trips", countUp(ui.trips.size.toDouble()), big = true)
         Field("Nights away", countUp(ui.nightsAway.toDouble()), big = true)
         Field("Flights", countUp(ui.flights.toDouble()), big = true)
@@ -120,7 +122,9 @@ private fun Route(cities: List<String>, size: androidx.compose.ui.unit.TextUnit)
 internal fun TripPass(t: TripUi, units: Units, open: Boolean, detail: TripDetail?, onSeen: (String) -> Unit = {}, onToggle: () -> Unit) {
     val trip = t.trip
     val dest = trip.anchorCities.take(3)
-    Pass(stub = {
+    // The strip is only worked out for the open trip, so only an open trip offers its text.
+    val text = detail?.let { d -> { bedText(d.beds, "${dest.joinToString(" → ").ifEmpty { "TRIP" }} · ${date(trip.start)}".uppercase()) } }
+    Pass(share = Share("trip ${date(trip.start)}", text), stub = {
         Field("Nights", countUp(trip.nights.toDouble()), big = true)
         Field("Flights", "${t.flights}", big = true)
         Field("Farthest", "${n0(units.cv(trip.maxDistFromHomeKm))} ${units.u.uppercase()}", big = true)

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -25,18 +26,22 @@ val Rule = 6.dp
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun Pass(modifier: Modifier = Modifier, stub: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.background(Poster.Stock).border(2.dp, Poster.Ink)) {
-        Box(Modifier.fillMaxWidth().height(Rule).background(Poster.Ink))
-        Column(Modifier.padding(20.dp), content = content)
-        if (stub != null) {
-            CompositionLocalProvider(LocalContentColor provides Poster.Stock, LocalMuted provides Poster.Stock3) {
-                FlowRow(
-                    Modifier.fillMaxWidth().background(Poster.Ink).padding(20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(28.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
-                    content = { stub() },
-                )
+fun Pass(modifier: Modifier = Modifier, stub: (@Composable () -> Unit)? = null, share: Share? = null, content: @Composable ColumnScope.() -> Unit) {
+    Box(modifier.background(Poster.Stock).border(2.dp, Poster.Ink)) {
+        Column {
+            Box(Modifier.fillMaxWidth().height(Rule).background(Poster.Ink))
+            Column(Modifier.padding(20.dp), content = content)
+            if (stub != null) {
+                CompositionLocalProvider(LocalContentColor provides Poster.Stock, LocalMuted provides Poster.Stock3) {
+                    FlowRow(
+                        Modifier.fillMaxWidth().background(Poster.Ink).padding(20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(28.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
+                        content = { stub() },
+                    )
+                }
             }
         }
+        // The web's `.pass .save`: bottom right, printed in stock-3 when it lands on the ink stub.
+        if (share != null) SaveMenu(share, card = { Pass(stub = stub, content = content) }, Modifier.align(Alignment.BottomEnd).padding(end = 4.dp, bottom = 2.dp), color = if (stub != null) Poster.Stock3 else Poster.Ink3)
     }
 }
