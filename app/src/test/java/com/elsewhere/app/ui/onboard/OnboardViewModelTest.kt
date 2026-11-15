@@ -1,6 +1,7 @@
 package com.elsewhere.app.ui.onboard
 
 import com.elsewhere.app.Fakes
+import com.elsewhere.app.data.Settings
 import com.elsewhere.app.Fx
 import com.elsewhere.app.data.Home
 import com.elsewhere.app.data.ImportReport
@@ -69,6 +70,15 @@ class OnboardViewModelTest {
         vm.saveKey(" AIza-key ", ""); run()
         assertEquals("AIza-key", maps.cur.value.mapsKey)
         assertEquals(Step.Name, vm.state.value.step)
+    }
+
+    @Test fun `a new key clears Google's refusal, the same key keeps it`() = runTest(dispatcher) {
+        val (vm, _, maps) = imported()
+        maps.cur.value = Settings(mapsKey = "old", googleRejected = true)
+        vm.saveKey("old", "map-1"); run()
+        assertEquals(true, maps.cur.value.googleRejected)
+        vm.saveKey("new", ""); run()
+        assertEquals(false, maps.cur.value.googleRejected)
     }
 
     @Test fun `picking a home and printing saves one open-ended home from the record start`() = runTest(dispatcher) {

@@ -1,0 +1,68 @@
+package com.elsewhere.app.map
+
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlin.math.PI
+import kotlin.math.atan
+import kotlin.math.exp
+import kotlin.math.ln
+import kotlin.math.log2
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.tan
+
+/** Where the camera sits. `zoom` is in Google's 256px-tile convention on every provider; mirrors web/src/map/cam.ts. */
+data class Cam(val lat: Double, val lng: Double, val zoom: Float, val bearing: Float = 0f)
+
+/** A box on the globe, south-west to north-east; our own type so neither SDK's LatLngBounds leaks past the hosts. */
+data class Bounds(val swLat: Double, val swLng: Double, val neLat: Double, val neLng: Double)
+
+/** What the follow-cam and deck listen for: `Move` fires through every frame of a pan or zoom, `Idle` once it settles. */
+sealed interface MapEvent {
+    data object Move : MapEvent
+    data object Zoom : MapEvent
+    data object DragStart : MapEvent
+    data object Idle : MapEvent
+}
+
+/** The few camera calls the map screens need, so they run on Google or MapLibre alike. */
+interface MapHost {
+    val camera: StateFlow<Cam>
+    val events: SharedFlow<MapEvent>
+    fun moveTo(cam: Cam, animateMs: Int = 0)
+    fun fit(bounds: Bounds, paddingPx: Int)
+    @Composable fun Content(modifier: Modifier, overlays: @Composable () -> Unit)
+}
+
+// MapLibre's zoom 0 is a 512px world; Google's is 256px, so the same view is one level apart.
+fun googleToLibreZoom(zoom: Float): Float = zoom - 1f
+fun libreToGoogleZoom(zoom: Float): Float = zoom + 1f
+
+private const val TILE = 256.0
+private const val MAX_LAT = 85.05112878
+
+private fun mercY(lat: Double): Double {
+    val l = lat.coerceIn(-MAX_LAT, MAX_LAT) * PI / 180
+    return ln(tan(PI / 4 + l / 2))
+}
+
+private fun unmercY(y: Double): Double = (2 * atan(exp(y)) - PI / 2) * 180 / PI
+
+/**
+ * The camera that frames `b` inside a viewport of `widthPx`×`heightPx` with `paddingPx` kept clear on each side.
+ * Mercator: a degree of longitude is a fixed pixel width; latitude is projected before taking the middle. Google zoom.
+ */
+fun camForBounds(b: Bounds, widthPx: Int, heightPx: Int, paddingPx: Int, maxZoom: Float = 21f): Cam {
+    val w = max(1.0, widthPx - 2.0 * paddingPx); val h = max(1.0, heightPx - 2.0 * paddingPx)
+    var dLng = b.neLng - b.swLng
+    if (dLng < 0) dLng += 360.0
+    val y0 = mercY(b.swLat); val y1 = mercY(b.neLat)
+    val fracX = max(1e-12, dLng / 360.0)
+    val fracY = max(1e-12, (y1 - y0) / (2 * PI))
+    val zoom = min(maxZoom.toDouble(), min(log2(w / (TILE * fracX)), log2(h / (TILE * fracY))))
+    var lng = b.swLng + dLng / 2
+    if (lng > 180) lng -= 360.0
+    return Cam(lat = unmercY((y0 + y1) / 2), lng = lng, zoom = zoom.toFloat())
+}
