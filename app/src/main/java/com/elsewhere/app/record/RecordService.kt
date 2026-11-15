@@ -1,5 +1,6 @@
 package com.elsewhere.app.record
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -15,6 +16,8 @@ import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.elsewhere.app.MainActivity
 import com.elsewhere.app.R
+import com.elsewhere.app.data.Recording
+import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.ingest.record.Fix
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityTransition
@@ -43,10 +46,13 @@ import javax.inject.Inject
 class RecordService : Service() {
     @Inject lateinit var recorder: Recorder
     @Inject lateinit var hints: ActivityHints
+    @Inject lateinit var gate: PermissionGate
+    @Inject lateinit var settings: SettingsStore
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var fused: FusedLocationProviderClient
     private var still = false
+    private var paused = false
     private var lastFixTs: Long? = null
 
     private val callback = object : LocationCallback() {
@@ -68,14 +74,27 @@ class RecordService : Service() {
         super.onCreate()
         fused = LocationServices.getFusedLocationProviderClient(this)
         channel()
+        getSystemService(NotificationManager::class.java).cancel(NUDGE_ID)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
+        if (!gate.granted(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            // A location foreground service without location permission is a crash on API 34; stand down instead.
+            scope.launch { settings.saveRecording(Recording()) }
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        paused = intent?.action == ACTION_PAUSE
         if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         else startForeground(NOTIFICATION_ID, notification())
-        startListening()
+        if (paused) stopListening() else startListening()
         return START_STICKY
+    }
+
+    private fun stopListening() {
+        fused.removeLocationUpdates(callback)
+        runCatching { ActivityRecognition.getClient(this).removeActivityTransitionUpdates(ActivityTransitionReceiver.pendingIntent(this)) }
     }
 
     @Suppress("MissingPermission")
@@ -113,8 +132,7 @@ class RecordService : Service() {
     }
 
     override fun onDestroy() {
-        fused.removeLocationUpdates(callback)
-        runCatching { ActivityRecognition.getClient(this).removeActivityTransitionUpdates(ActivityTransitionReceiver.pendingIntent(this)) }
+        stopListening()
         scope.cancel()
         super.onDestroy()
     }
@@ -134,8 +152,8 @@ class RecordService : Service() {
         val stop = PendingIntent.getService(this, 1, Intent(this, RecordService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_record_pin)
-            .setContentTitle(notificationText(lastFixTs, System.currentTimeMillis() / 1000))
-            .setContentText("Stays on this phone. Nothing is uploaded.")
+            .setContentTitle(if (paused) "Elsewhere is paused" else notificationText(lastFixTs, System.currentTimeMillis() / 1000))
+            .setContentText(if (paused) "Recording resumes by itself. Nothing is uploaded." else "Stays on this phone. Nothing is uploaded.")
             .setContentIntent(open)
             .addAction(0, "Stop", stop)
             .setOngoing(true).setSilent(true).setPriority(NotificationCompat.PRIORITY_LOW)
@@ -147,8 +165,33 @@ class RecordService : Service() {
         const val CHANNEL = "recording"
         const val NOTIFICATION_ID = 41
         const val ACTION_STOP = "com.elsewhere.app.record.STOP"
+        const val ACTION_PAUSE = "com.elsewhere.app.record.PAUSE"
+        const val NUDGE_ID = 42
 
-        fun start(ctx: Context) = ctx.startForegroundService(Intent(ctx, RecordService::class.java))
-        fun stop(ctx: Context) = ctx.startService(Intent(ctx, RecordService::class.java).setAction(ACTION_STOP))
+        private fun intent(ctx: Context) = Intent(ctx, RecordService::class.java)
+
+        /**
+         * From the background (a worker, a receiver) Android 12+ may refuse to start a foreground service.
+         * Then the one legal path left is the user's tap: leave a notification whose tap starts it.
+         */
+        fun start(ctx: Context) {
+            val ok = runCatching { ctx.startForegroundService(intent(ctx)) }.isSuccess
+            if (!ok) nudge(ctx)
+        }
+
+        fun stop(ctx: Context) { runCatching { ctx.startService(intent(ctx).setAction(ACTION_STOP)) } }
+        fun pause(ctx: Context) { runCatching { ctx.startForegroundService(intent(ctx).setAction(ACTION_PAUSE)) } }
+
+        private fun nudge(ctx: Context) {
+            val nm = ctx.getSystemService(NotificationManager::class.java)
+            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Recording", NotificationManager.IMPORTANCE_LOW))
+            val resume = PendingIntent.getForegroundService(ctx, 2, intent(ctx), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            nm.notify(NUDGE_ID, NotificationCompat.Builder(ctx, CHANNEL)
+                .setSmallIcon(R.drawable.ic_record_pin)
+                .setContentTitle("Recording paused — tap to resume")
+                .setContentText("Android would not let Elsewhere restart on its own.")
+                .setContentIntent(resume).setAutoCancel(true).setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .build())
+        }
     }
 }

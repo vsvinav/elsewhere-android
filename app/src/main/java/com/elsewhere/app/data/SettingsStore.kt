@@ -88,7 +88,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
 
     /** The segmenter's open stay and leg, as JSON, so a killed process picks up where it was. */
     suspend fun segmenterState(): String? = store.data.first()[K.segmenter]
-    suspend fun saveSegmenterState(json: String) { store.edit { it[K.segmenter] = json } }
+    suspend fun saveSegmenterState(json: String?) { store.edit { if (json == null) it.remove(K.segmenter) else it[K.segmenter] = json } }
 
     suspend fun saveProfile(profile: Profile?) {
         store.edit { if (profile == null) it.remove(K.profile) else it[K.profile] = json.encodeToString(Profile.serializer(), profile) }

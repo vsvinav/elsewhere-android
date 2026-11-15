@@ -68,6 +68,14 @@ class Recorder(
         db.rawFixes().pruneBefore(now - KEEP_RAW_S)
     }
 
+    /** Stopping: a confirmed open stay is written, the half leg dropped, and the state forgotten. */
+    suspend fun close() = lock.withLock {
+        val s = segmenter()
+        commit(s.close())
+        segmenter = null
+        settings.saveSegmenterState(null)
+    }
+
     suspend fun stats(): RecordStats = RecordStats(db.rawFixes().countAll(), db.visits().countDevice(), db.rawFixes().latest()?.ts)
 
     private suspend fun commit(out: List<Emission>) {

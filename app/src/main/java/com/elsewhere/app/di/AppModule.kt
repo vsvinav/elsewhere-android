@@ -18,7 +18,9 @@ import com.elsewhere.app.data.db.MIGRATIONS
 import com.elsewhere.app.record.AndroidPermissionGate
 import com.elsewhere.app.record.PermissionGate
 import com.elsewhere.app.record.RecordControl
+import com.elsewhere.app.record.AndroidServiceLink
 import com.elsewhere.app.record.RecordController
+import com.elsewhere.app.record.ServiceLink
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -67,6 +69,7 @@ object AppModule {
     @Provides fun landSource(loader: LandLoader): LandSource = loader
     @Provides fun permissionGate(gate: AndroidPermissionGate): PermissionGate = gate
     @Provides fun recordControl(c: RecordController): RecordControl = c
+    @Provides fun serviceLink(l: AndroidServiceLink): ServiceLink = l
 
     @Provides fun visits(db: ElsewhereDb) = db.visits()
     @Provides fun activities(db: ElsewhereDb) = db.activities()
