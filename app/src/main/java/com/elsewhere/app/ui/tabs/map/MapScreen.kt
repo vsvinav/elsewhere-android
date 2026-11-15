@@ -111,8 +111,8 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
     val fit = { l: PinLayers, o: PinOpts -> l.fitBounds(o)?.let { host.fit(it, with(density) { FIT_PAD.roundToPx() }) } != null }
 
     // Framed once, when the screen first has pins, and again only on "Fit pins": a range change under the
-    // user swaps the pins but leaves the camera where they put it.
-    var fitted by remember(host) { mutableStateOf(false) }
+    // user swaps the pins but leaves the camera where they put it, as does a host swap carrying the camera over.
+    var fitted by remember { mutableStateOf(false) }
     // An empty window has nothing to frame yet; the latch waits for the first fit that actually happens.
     LaunchedEffect(host, layers) { val l = layers; if (!fitted && l != null && fit(l, vm.opts.value)) fitted = true }
 
