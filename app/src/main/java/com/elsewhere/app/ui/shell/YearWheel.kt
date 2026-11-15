@@ -1,6 +1,5 @@
 package com.elsewhere.app.ui.shell
 
-import android.provider.Settings
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutLinearInEasing
@@ -53,7 +52,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -69,7 +67,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.elsewhere.app.ui.world.LocalMotion
+import com.elsewhere.app.ui.world.motionOn
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import java.time.LocalDate
@@ -218,14 +216,6 @@ fun YearWheel(bounds: LongRange, selected: LongRange, onRange: (LongRange) -> Un
 }
 
 private const val WHEEL_IDLE_MS = 300L
-
-/** Whether the flap and the snap play: off for snapshots and when the device has animations turned off. */
-@Composable
-private fun motionOn(): Boolean {
-    val context = LocalContext.current
-    val scale = remember(context) { runCatching { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) }.getOrDefault(1f) }
-    return LocalMotion.current && scale != 0f
-}
 
 /** The wheel's printed face, with the row pushed `shiftPx` off centre: what a mid-drag frame looks like. */
 @Composable

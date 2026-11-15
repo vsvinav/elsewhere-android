@@ -6,11 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.data.Recording
 import com.elsewhere.app.record.PermissionGate
 import com.elsewhere.app.record.RecordControl
+import com.elsewhere.app.record.RecordState
 import com.elsewhere.app.record.RecordStats
-import com.elsewhere.app.record.lastFixText
-import com.elsewhere.app.ui.world.date
-import com.elsewhere.app.ui.world.n0
-import com.elsewhere.app.ui.world.plural
+import com.elsewhere.app.record.Ticket
+import com.elsewhere.app.record.recordState
+import com.elsewhere.app.record.ticket
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -43,10 +43,11 @@ data class RecordUi(
         recording.pausedUntil > now -> Phase.PAUSED
         else -> Phase.RECORDING
     }
-    val statusLine: String get() {
-        val s = stats ?: return "Recording since ${date(recording.since)}"
-        return "Recording since ${date(recording.since)} · ${n0(s.fixes)} ${plural(s.fixes, "fix", "fixes")} · ${n0(s.stays)} ${plural(s.stays, "stay")} · ${lastFixText(s.lastFixTs, now)}"
-    }
+    val state: RecordState get() = recordState(recording, fine = rows.firstOrNull { it.perm == Perm.FINE }?.state == PermState.GRANTED, now = now)
+    /** The hero's copy, from the state and the counters. */
+    val ticket: Ticket get() = ticket(state, stats, now)
+    /** Whether anything Android could still grant is missing; the Details row opens itself for it. */
+    val missing: Boolean get() = rows.any { it.state != PermState.GRANTED }
 }
 
 /** Which permission rows to show and what each can do, from what the gate reports and what the user has refused. */
