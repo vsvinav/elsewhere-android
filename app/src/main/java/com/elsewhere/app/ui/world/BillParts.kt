@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.elsewhere.app.ui.nav.Door
+import com.elsewhere.app.ui.nav.DoorText
+import com.elsewhere.app.ui.nav.Span
 import com.elsewhere.app.ui.nav.door
 
 // The recurring printed matter of a bill (web .bill h2.word / .lede / .num / .foot / .legend).
@@ -38,9 +40,17 @@ fun Word(text: String, modifier: Modifier = Modifier, size: TextUnit = 64.sp, co
     Text(text.uppercase(), modifier, color = color, style = PosterType.Display.copy(fontSize = size, letterSpacing = (-0.01).em))
 }
 
+private val LedeStyle get() = PosterType.Lede.copy(fontWeight = FontWeight.Medium, fontSize = 18.sp, lineHeight = 1.35.em)
+
 @Composable
 fun Lede(text: String, modifier: Modifier = Modifier, color: Color = LocalContentColor.current) {
-    Text(text, modifier, color = color, style = PosterType.Lede.copy(fontWeight = FontWeight.Medium, fontSize = 18.sp, lineHeight = 1.35.em))
+    Text(text, modifier, color = color, style = LedeStyle)
+}
+
+/** A lede whose figures are doors. */
+@Composable
+fun Lede(spans: List<Span>, modifier: Modifier = Modifier, color: Color = LocalContentColor.current, pressed: Int? = null) {
+    DoorText(spans, modifier, style = LedeStyle, color = color, pressed = pressed)
 }
 
 /** A big number with its unit set small beside it: "22 away". */
