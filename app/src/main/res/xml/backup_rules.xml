@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Everything goes along except the full-size photos; the database and thumbnails are enough to bring the cards back. -->
+<full-backup-content>
+    <exclude domain="file" path="photos/originals/" />
+</full-backup-content>

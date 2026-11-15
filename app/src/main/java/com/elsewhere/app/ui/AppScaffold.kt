@@ -52,6 +52,7 @@ import com.elsewhere.app.ui.tabs.stops.StopsTab
 import com.elsewhere.app.ui.tabs.tour.TourTab
 import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.NamingStamp
+import com.elsewhere.app.ui.photos.SnapHost
 import com.elsewhere.app.ui.world.Pass
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.ReadyBar
@@ -64,10 +65,10 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}, onMapsKey
     Tab.TOUR -> TourTab(onGo = go, onRecord = onRecord)
     Tab.NUMBERS -> NumbersTab()
     Tab.FACTS -> FactsTab(onOpen = onOpen, onKeyStep = onMapsKey)
-    Tab.STOPS -> StopsTab()
+    Tab.STOPS -> SnapHost { StopsTab() }
     Tab.DATES -> DatesTab()
     Tab.FLIGHTS -> FlightsTab()
-    Tab.MAP -> MapTab()
+    Tab.MAP -> SnapHost { MapTab() }
     Tab.REPLAY -> ReplayTab()
 }
 

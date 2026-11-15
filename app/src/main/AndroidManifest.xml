@@ -11,8 +11,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application android:name=".ElsewhereApp" android:label="Elsewhere" android:icon="@mipmap/ic_launcher"
-        android:allowBackup="true" android:supportsRtl="true" android:theme="@style/Theme.Elsewhere">
+        android:allowBackup="true" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules" android:supportsRtl="true" android:theme="@style/Theme.Elsewhere">
         <meta-data android:name="com.google.android.geo.API_KEY" android:value="${mapsSdkKey}" />
         <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
