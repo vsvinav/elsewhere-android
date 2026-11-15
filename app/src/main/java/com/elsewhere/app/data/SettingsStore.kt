@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.elsewhere.app.ask.LlmConfig
 import com.elsewhere.app.ask.LlmProvider
 import com.elsewhere.app.ingest.AddressBook
@@ -63,6 +64,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         val llmKey = stringPreferencesKey("llmKey")
         val llmModel = stringPreferencesKey("llmModel")
         val llmBaseUrl = stringPreferencesKey("llmBaseUrl")
+        val passportSeen = stringSetPreferencesKey("passportSeen")
     }
     private fun keyOf(kind: Kind) = when (kind) { Kind.DETAILS -> K.detailsCalls; Kind.PHOTOS -> K.photoCalls; Kind.MAPS -> K.mapLoads }
 
@@ -108,6 +110,10 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
     /** The segmenter's open stay and leg, as JSON, so a killed process picks up where it was. */
     suspend fun segmenterState(): String? = store.data.first()[K.segmenter]
     suspend fun saveSegmenterState(json: String?) { store.edit { if (json == null) it.remove(K.segmenter) else it[K.segmenter] = json } }
+
+    /** Stamp ids the passport has already shown as earned; null until the booklet has been opened once. */
+    val passportSeen: Flow<Set<String>?> = store.data.map { it[K.passportSeen] }
+    suspend fun savePassportSeen(ids: Set<String>) { store.edit { it[K.passportSeen] = ids } }
 
     suspend fun saveProfile(profile: Profile?) {
         store.edit { if (profile == null) it.remove(K.profile) else it[K.profile] = json.encodeToString(Profile.serializer(), profile) }
