@@ -13,6 +13,7 @@ import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.ReadyState
+import com.elsewhere.app.data.shellReady
 import com.elsewhere.app.data.Ready
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
@@ -28,6 +29,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.runningFold
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -121,7 +126,13 @@ class OnboardViewModel @Inject constructor(
     private val store: RecordStore, private val maps: MapsSettings, private val verifier: KeyVerifier,
     private val namer: PlaceNamer, private val geocoder: Geocoder, readyState: ReadyState = ReadyState(),
 ) : ViewModel(), OnboardActions, KeyActions {
-    val ready: StateFlow<Ready?> = readyState.ready
+    /** How far the current naming run is, so the readiness bar keeps going while the cards get their names. */
+    private val cards = MutableStateFlow<Progress?>(null)
+    val ready: StateFlow<Ready?> = shellReady(readyState.ready.value, null).let { initial ->
+        combine(readyState.ready, cards, ::Pair)
+            .runningFold(initial) { prev, (r, n) -> shellReady(r, n, prev) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, initial)
+    }
     private val _state = MutableStateFlow(OnboardState())
     val state: StateFlow<OnboardState> = _state
     /** The record the cards were ranked from, kept so a new key can name them again. */
@@ -188,8 +199,11 @@ class OnboardViewModel @Inject constructor(
             val todo = (_state.value.sleep + _state.value.weekday).filter { !it.named }.distinctBy { it.placeId }
             if (todo.isEmpty()) return@launch
             _state.update { it.copy(asking = true) }
+            cards.value = Progress(0, todo.size)
             // Only the run still on record lowers the flag, so an older job's unwind cannot clear a newer run's.
-            try { nameCandidates(todo, rec, key, key.isNotBlank() && keyPlaces) } finally { if (naming === coroutineContext[Job]) _state.update { it.copy(asking = false) } }
+            try { nameCandidates(todo, rec, key, key.isNotBlank() && keyPlaces) } finally {
+                if (naming === coroutineContext[Job]) { _state.update { it.copy(asking = false) }; cards.value = null }
+            }
         }
     }
 
@@ -198,7 +212,7 @@ class OnboardViewModel @Inject constructor(
      * works, else a street and neighbourhood from Nominatim. Each lands as it arrives.
      */
     private suspend fun nameCandidates(todo: List<Candidate>, rec: Record, key: String, paid: Boolean) {
-        for (c in todo) name(c, rec, key, paid)
+        for ((i, c) in todo.withIndex()) { name(c, rec, key, paid); cards.value = Progress(i + 1, todo.size) }
     }
 
     private suspend fun name(c: Candidate, rec: Record, key: String, paid: Boolean) {
