@@ -29,7 +29,10 @@ import com.elsewhere.app.ui.shell.RangeViewModel
 import com.elsewhere.app.ui.shell.ShellViewModel
 import com.elsewhere.app.ui.shell.TicketStrip
 import com.elsewhere.app.ui.shell.dayOf
+import com.elsewhere.app.ui.tabs.dates.DatesTab
+import com.elsewhere.app.ui.tabs.facts.FactsTab
 import com.elsewhere.app.ui.tabs.numbers.NumbersTab
+import com.elsewhere.app.ui.tabs.stops.StopsTab
 import com.elsewhere.app.ui.tabs.tour.TourTab
 import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.Pass
@@ -37,11 +40,14 @@ import com.elsewhere.app.ui.world.Poster
 
 private enum class Picking { FROM, TO }
 
-/** The section each ticket opens on. Tabs not yet ported print a placeholder. */
+/** The section each ticket opens on. Flights, Map and Replay still print a placeholder. */
 @Composable
 fun TabContent(tab: Tab, go: (Tab) -> Unit) = when (tab) {
     Tab.TOUR -> TourTab(onGo = go)
     Tab.NUMBERS -> NumbersTab()
+    Tab.FACTS -> FactsTab()
+    Tab.STOPS -> StopsTab()
+    Tab.DATES -> DatesTab()
     else -> Placeholder(tab)
 }
 
