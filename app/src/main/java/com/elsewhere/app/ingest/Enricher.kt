@@ -42,12 +42,12 @@ fun wanted(places: Map<String, Place>, cached: Set<String>, limit: Int = ENRICH_
         .sortedWith(compareByDescending<Map.Entry<String, Place>> { it.value.nVisits }.thenByDescending { it.value.totalHours })
         .take(limit).map { it.key }
 
-@Singleton
 /** Names a merged candidate (the web's `clusterName`): a Places lookup when a key works, nothing otherwise. */
 interface PlaceNamer {
     suspend fun name(ids: List<String>, all: Map<String, Place>, key: String): String?
 }
 
+@Singleton
 class Enricher(
     private val places: DetailsSource,
     private val store: EnrichmentStore,
