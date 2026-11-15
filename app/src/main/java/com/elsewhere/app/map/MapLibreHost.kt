@@ -96,6 +96,8 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
     private val watch = MoveWatch()
 
     override fun moveTo(cam: Cam, animateMs: Int) {
+        // A jump to where the map already sits still cancels its transitions and asks for a render; skip it.
+        if (animateMs <= 0 && cam.near(_camera.value)) return
         watch.wrote(cam)
         if (animateMs <= 0) { state.position = cam.toLibre(); _camera.value = cam }
         // animateTo waits for the map to exist and cancels any move still running, so it always lands.
@@ -148,7 +150,8 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
                 modifier = Modifier.fillMaxSize(),
                 styleUri = styleUri,
                 pitchRange = 0f..0f,
-                gestureSettings = GestureSettings(isTiltGesturesEnabled = false),
+                // North-up like the web's poster map, which also keeps the overlay's pure projection exact.
+                gestureSettings = GestureSettings(isTiltGesturesEnabled = false, isRotateGesturesEnabled = false),
                 ornamentSettings = OrnamentSettings(
                     isLogoEnabled = true, logoAlignment = Alignment.BottomStart,
                     isAttributionEnabled = true, attributionAlignment = Alignment.BottomEnd,

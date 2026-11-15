@@ -10,6 +10,8 @@ import com.elsewhere.app.data.Viewport
 import com.elsewhere.app.ingest.CostMeter
 import com.elsewhere.app.map.Basemap
 import com.elsewhere.app.map.Basemaps
+import com.elsewhere.app.map.ChromeGate
+import com.elsewhere.app.map.chromeGated
 import com.elsewhere.app.map.PlayState
 import com.elsewhere.app.map.ReplayTrails
 import com.elsewhere.app.map.tickPlayback
@@ -17,6 +19,7 @@ import com.elsewhere.app.ui.shell.RangeStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -35,17 +39,27 @@ import javax.inject.Inject
 @HiltViewModel
 class PlaybackViewModel @Inject constructor(range: RangeStore, maps: MapsSettings, tiles: TileService, meter: CostMeter) : ViewModel() {
     private val basemaps = Basemaps(viewModelScope, maps, tiles, meter)
+    private var prepare: Job? = null
     val basemap: StateFlow<Basemap> get() = basemaps.basemap
     val copyright: StateFlow<String?> get() = basemaps.copyright
     val tilesError: StateFlow<String?> get() = basemaps.tilesError
     fun idle(vp: Viewport) = basemaps.idle(vp)
     val data: StateFlow<Record?> = range.filtered
 
-    /** Legs thinned per zoom, one cache per record; a range change swaps it. */
-    val trails: StateFlow<ReplayTrails?> = range.filtered.mapLatest { it?.let(::ReplayTrails) }
-        .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    /**
+     * Legs thinned per zoom, one cache per record; a range change swaps it. The trails show at once from the raw legs
+     * while every zoom bucket is thinned behind them on a worker, so no frame ever thins on the main thread.
+     */
+    val trails: StateFlow<ReplayTrails?> = range.filtered.mapLatest { rec ->
+        rec?.let(::ReplayTrails)?.also { t -> prepare?.cancel(); prepare = viewModelScope.launch(Dispatchers.Default) { t.prepare { isActive } } }
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val state = MutableStateFlow(PlayState(playhead = Double.NaN, playing = false))
+
+    private val gate = ChromeGate()
+    /** The state as the chrome sees it: the clock at most four times a second, everything else at once. */
+    val chrome: StateFlow<PlayState> = state.chromeGated(gate) { System.nanoTime() / 1_000_000 }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), state.value)
     private var shownOnce = false
 
     init {

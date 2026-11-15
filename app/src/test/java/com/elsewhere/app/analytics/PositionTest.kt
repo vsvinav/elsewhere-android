@@ -25,6 +25,15 @@ class PositionTest {
         assertEquals(LatLng(1.0, 1.0), positionAt(data, 3))
     }
 
+    @Test fun `visitAt finds the top-level stay the playhead is in, never a nested one or a gap`() {
+        assertEquals(1.0, visitAt(data, 3)!!.lat, 1e-9)
+        assertEquals(1.0, visitAt(data, 10)!!.lat, 1e-9)
+        assertNull(visitAt(data, 20))
+        assertEquals(3.0, visitAt(data, 30)!!.lat, 1e-9)
+        assertNull(visitAt(data, 41))
+        assertNull(visitAt(Fx.record(), 5))
+    }
+
     @Test fun `inside an activity interpolates`() {
         assertEquals(LatLng(2.0, 2.0), positionAt(data, 20))
     }

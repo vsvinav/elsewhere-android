@@ -61,7 +61,8 @@ class MoveWatch {
     }
 }
 
-private fun Cam.near(o: Cam) = abs(lat - o.lat) < 1e-7 && abs(lng - o.lng) < 1e-7 && abs(zoom - o.zoom) < 1e-3 && abs(bearing - o.bearing) < 1e-3
+/** Within the SDKs' own rounding of a position: the same view, so writing it again would only cost a render. */
+internal fun Cam.near(o: Cam) = abs(lat - o.lat) < 1e-7 && abs(lng - o.lng) < 1e-7 && abs(zoom - o.zoom) < 1e-3 && abs(bearing - o.bearing) < 1e-3
 
 /** A tap on the bare map, in degrees; overlays decide what it hit. */
 data class Tap(val lat: Double, val lng: Double)
@@ -71,22 +72,22 @@ fun googleToLibreZoom(zoom: Float): Float = zoom - 1f
 fun libreToGoogleZoom(zoom: Float): Float = zoom + 1f
 
 private const val TILE = 256.0
-private const val MAX_LAT = 85.05112878
+internal const val MAX_LAT = 85.05112878
 
-private fun mercY(lat: Double): Double {
+internal fun mercRad(lat: Double): Double {
     val l = lat.coerceIn(-MAX_LAT, MAX_LAT) * PI / 180
     return ln(tan(PI / 4 + l / 2))
 }
 
-private fun unmercY(y: Double): Double = (2 * atan(exp(y)) - PI / 2) * 180 / PI
+private fun unmercRad(y: Double): Double = (2 * atan(exp(y)) - PI / 2) * 180 / PI
 
 /** The box a camera shows in a viewport of `widthPx`×`heightPx`; the inverse of [camForBounds]. Longitudes may run past ±180 near the date line. */
 fun viewBounds(cam: Cam, widthPx: Int, heightPx: Int): Bounds {
     val world = TILE * 2.0.pow(cam.zoom.toDouble())
     val dLng = widthPx / world * 360.0
     val dy = heightPx / world * 2 * PI
-    val cy = mercY(cam.lat)
-    return Bounds(unmercY(cy - dy / 2), cam.lng - dLng / 2, unmercY(cy + dy / 2), cam.lng + dLng / 2)
+    val cy = mercRad(cam.lat)
+    return Bounds(unmercRad(cy - dy / 2), cam.lng - dLng / 2, unmercRad(cy + dy / 2), cam.lng + dLng / 2)
 }
 
 /** Whether a normalised box `o` touches this one, allowing this box's longitudes to run past the date line. */
@@ -105,11 +106,11 @@ fun camForBounds(b: Bounds, widthPx: Int, heightPx: Int, paddingPx: Int, maxZoom
     val w = max(1.0, widthPx - 2.0 * paddingPx); val h = max(1.0, heightPx - 2.0 * paddingPx)
     var dLng = b.neLng - b.swLng
     if (dLng < 0) dLng += 360.0
-    val y0 = mercY(b.swLat); val y1 = mercY(b.neLat)
+    val y0 = mercRad(b.swLat); val y1 = mercRad(b.neLat)
     val fracX = max(1e-12, dLng / 360.0)
     val fracY = max(1e-12, (y1 - y0) / (2 * PI))
     val zoom = min(maxZoom.toDouble(), min(log2(w / (TILE * fracX)), log2(h / (TILE * fracY))))
     var lng = b.swLng + dLng / 2
     if (lng > 180) lng -= 360.0
-    return Cam(lat = unmercY((y0 + y1) / 2), lng = lng, zoom = zoom.toFloat())
+    return Cam(lat = unmercRad((y0 + y1) / 2), lng = lng, zoom = zoom.toFloat())
 }
