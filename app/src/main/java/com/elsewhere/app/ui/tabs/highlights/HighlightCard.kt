@@ -86,7 +86,7 @@ internal fun stopsIn(data: Record, range: LongRange): List<Stop> {
 
 /** One day's card: headline, three facts, a scoped map, and the "Ask for more" sheet. */
 @Composable
-internal fun Card(data: Record, h: Highlight, onOpen: OpenDoor, modifier: Modifier = Modifier, lede: String? = null, onKeyStep: (() -> Unit)? = null, picker: @Composable () -> Unit = {}) {
+internal fun Card(data: Record, h: Highlight, today: String, onOpen: OpenDoor, modifier: Modifier = Modifier, lede: String? = null, onKeyStep: (() -> Unit)? = null, picker: @Composable () -> Unit = {}) {
     var asking by rememberSaveable(h.date) { mutableStateOf(false) }
     val land = LocalLand.current
     val layout = remember(data, h.range, land) { dayLayout(data, h.range, land) }
@@ -116,7 +116,7 @@ internal fun Card(data: Record, h: Highlight, onOpen: OpenDoor, modifier: Modifi
         TrailMap(layout, Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = open).semantics { contentDescription = "Open this day on the map" }, height = 260f)
         Spacer(Modifier.height(16.dp))
         InkButton("Ask for more", { asking = true })
-        AskMoreSheet(data, h, asking, onClose = { asking = false }, onOpen = onOpen)
+        AskMoreSheet(data, h, today, asking, onClose = { asking = false }, onOpen = onOpen)
     }
 }
 
@@ -153,12 +153,12 @@ fun HighlightCard(data: Record, onOpen: OpenDoor, modifier: Modifier = Modifier,
     when (state) {
         HighlightState.None -> Unit
         is HighlightState.Short -> Card(
-            data, state.highlight, onOpen, modifier, onKeyStep = onKeyStep, picker = picker,
+            data, state.highlight, now, onOpen, modifier, onKeyStep = onKeyStep, picker = picker,
             lede = "Your record starts ${dayMonth(state.starts)}. Highlights begin on ${dayMonth(state.starts)} next year — meanwhile, here's your farthest day so far.",
         )
         is HighlightState.Quiet -> {
             val near = state.nearest
-            if (showNearest && near != null) Card(data, near, onOpen, modifier, onKeyStep = onKeyStep, picker = picker, lede = "Nothing from a ${dayMonth(date)} yet — the nearest day with a story:")
+            if (showNearest && near != null) Card(data, near, now, onOpen, modifier, onKeyStep = onKeyStep, picker = picker, lede = "Nothing from a ${dayMonth(date)} yet — the nearest day with a story:")
             else Pass(modifier, stub = { Field("On this day", dmy(date)); picker() }) {
                 Text("Nothing from a ${dayMonth(date)} yet.", style = PosterType.Lede.copy(fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 1.15.em))
                 Spacer(Modifier.height(12.dp))
@@ -166,6 +166,6 @@ fun HighlightCard(data: Record, onOpen: OpenDoor, modifier: Modifier = Modifier,
                 else Note("Pick another day to see what the record has to say.")
             }
         }
-        is HighlightState.Found -> Card(data, state.highlight, onOpen, modifier, onKeyStep = onKeyStep, picker = picker)
+        is HighlightState.Found -> Card(data, state.highlight, now, onOpen, modifier, onKeyStep = onKeyStep, picker = picker)
     }
 }

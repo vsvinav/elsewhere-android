@@ -57,7 +57,7 @@ private enum class Picking { FROM, TO }
 fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}) = when (tab) {
     Tab.TOUR -> TourTab(onGo = go, onRecord = onRecord)
     Tab.NUMBERS -> NumbersTab()
-    Tab.FACTS -> FactsTab()
+    Tab.FACTS -> FactsTab(onGo = go)
     Tab.STOPS -> StopsTab()
     Tab.DATES -> DatesTab()
     Tab.FLIGHTS -> FlightsTab()

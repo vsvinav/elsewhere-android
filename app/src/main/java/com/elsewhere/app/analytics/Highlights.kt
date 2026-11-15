@@ -87,7 +87,8 @@ sealed interface Answer : Door {
 
 data class LegInfo(val mode: String, val from: String, val to: String, val hours: Int, val range: LongRange)
 data class SetlistCity(val city: String, val nights: Int, val first: Boolean, override val range: LongRange, override val placeIds: List<String>, override val playhead: Long? = null) : Door
-data class YearCol(val year: Int, val city: String?, val km: Double, val now: Boolean)
+/** `km` is null when no home is set, so there is nothing to measure from. */
+data class YearCol(val year: Int, val city: String?, val km: Double?, val now: Boolean)
 data class DidStop(val placeId: String, val name: String, val type: String?, val hours: Double, val start: Long, override val range: LongRange, override val placeIds: List<String>, override val playhead: Long?) : Door
 data class FollowUp(val id: FollowUpId, val question: String, val answer: Answer)
 
@@ -148,7 +149,7 @@ internal class HighlightIndex(val data: Record) {
     val firstInCity = HashMap<String, String>()
     /** Top-level visits per city in start order. */
     val byCity = HashMap<String, ArrayList<Visit>>()
-    /** Sorted distinct local day numbers with a visit in each city. */
+    /** Sorted distinct local day numbers covered by a visit in each city. */
     val cityDays = HashMap<String, IntArray>()
     val centroid = HashMap<String, LatLng>()
     var farthest: Daily? = null
@@ -168,12 +169,13 @@ internal class HighlightIndex(val data: Record) {
             val a = dayNum(v.start, v.tz); val b = dayNum(v.end, v.tz)
             for (d in a..b) byDay.getOrPut(d) { ArrayList() }.add(v)
             // The 03:00 instants inside the stay, each claimed by the first visit that covers it.
-            var d = dayNum(v.start - NIGHT_HOUR * 3600L, v.tz) + 1
+            var d = Math.floorDiv(v.start + v.tz * 60L - NIGHT_HOUR * 3600L + DAY - 1, DAY).toInt()
             while (d * DAY - v.tz * 60L + NIGHT_HOUR * 3600L <= v.end) { nightPid.putIfAbsent(d, v.placeId); d++ }
             val city = data.places[v.placeId]?.city ?: continue
             byCity.getOrPut(city) { ArrayList() }.add(v)
+            // Visits come in start order, so a day at or before the last pushed one is already covered.
             val cd = dayLists.getOrPut(city) { ArrayList() }
-            if (cd.isEmpty() || cd.last() != a) cd.add(a)
+            for (d2 in maxOf(a, (cd.lastOrNull() ?: Int.MIN_VALUE) + 1)..b) cd.add(d2)
             if (!atHome(v) && city !in firstInCity) firstInCity[city] = dateOf(a)
             val s = sums.getOrPut(city) { DoubleArray(3) }
             s[0] += v.lat; s[1] += v.lng; s[2]++
@@ -248,7 +250,8 @@ private fun verbFor(data: Record, ix: HighlightIndex, date: String, lead: Visit,
     val acts = data.activities
     var i = lastStarted(acts, start)
     if (i < 0 || acts[i].end < start) i++
-    if (i < acts.size && acts[i].start < end && lensOf(acts[i].mode) == Lens.FLY) return Verb.LANDED_IN
+    // The day's first leg is a flight that got you to the first stop: it ended before the stop, or at it.
+    if (i < acts.size && acts[i].start < end && lensOf(acts[i].mode) == Lens.FLY && (acts[i].end <= lead.start || distanceKm(LatLng(acts[i].eLat, acts[i].eLng), lead) < 150)) return Verb.LANDED_IN
     val city = data.places[lead.placeId]?.city
     if (ix.nights[numOf(date)]?.city != city) return Verb.ARRIVED_IN
     return Verb.WERE_IN
@@ -314,7 +317,7 @@ fun highlightFor(data: Record, date: String): Highlight? {
             if (score <= 0) continue
             if (bestDate == null || score > bestScore || (score == bestScore && (y < bestY || (y == bestY && abs(off) < abs(bestOff))))) { bestDate = d; bestY = y; bestOff = off; bestScore = score }
         }
-        return bestDate?.let { highlightOn(data, it, yearOf(date) - bestY, scope) }
+        return bestDate?.let { highlightOn(data, it, yearOf(date) - yearOf(it), scope) }
     }
     return pick(intArrayOf(0), Scope.DAY) ?: pick(intArrayOf(-3, -2, -1, 1, 2, 3), Scope.WEEK)
 }
@@ -333,7 +336,9 @@ fun highlightState(data: Record, date: String): HighlightState {
     val positive = data.daily.filter { hasVisits(ix, it.date) && scoreDay(data, ix, it.date) > 0 }
     if (r1 - r0 < 365 * DAY && pastYears(data, date).all { y -> midnightUTC(sameDayIn(date, y)) + 3 * DAY < r0 }) {
         val top = positive.sortedWith(compareByDescending<Daily> { scoreDay(data, ix, it.date) }.thenBy { it.date }).firstOrNull() ?: return HighlightState.None
-        return HighlightState.Short(localDay(r0, 0), highlightOn(data, top.date, yearOf(date) - yearOf(top.date)))
+        // The record starts on the first visit's own local day, not the UTC day of the range.
+        val first = data.visits.getOrNull(lastStarted(data.visits, r0 - 1) + 1)
+        return HighlightState.Short(if (first != null) localDay(first.start, first.tz) else localDay(r0, 0), highlightOn(data, top.date, yearOf(date) - yearOf(top.date)))
     }
     highlightFor(data, date)?.let { return HighlightState.Found(it) }
     var near: Daily? = null; var gap = Int.MAX_VALUE
@@ -433,8 +438,8 @@ fun routeRange(data: Record, h: Highlight): Answer.Route? {
     return Answer.Route(legs, km, kmByMode, "$legs ${plural(legs, "leg")}", "${n0(km)} km · ${fmtSpan(localDay(range.first, h.tz), localDay(range.last, h.tz))}", range, h.placeIds, range.first)
 }
 
-/** Where you were on this month/day in every year of the record. O(years). */
-fun compareYears(data: Record, h: Highlight): Answer.Compare? {
+/** Where you were on this month/day in every year of the record; `now` marks today's year. O(years). */
+fun compareYears(data: Record, h: Highlight, today: String = localToday()): Answer.Compare? {
     val ix = indexOf(data)
     val years = ArrayList<YearCol>(); val ids = LinkedHashSet<String>()
     for (y in yearOfTs(data.meta.range.first)..yearOfTs(data.meta.range.last)) {
@@ -442,13 +447,14 @@ fun compareYears(data: Record, h: Highlight): Answer.Compare? {
         val d = ix.daily[date] ?: continue
         val visits = ix.byDay[numOf(date)]
         val city = if (!visits.isNullOrEmpty()) cityOf(data, leadVisit(ix, visits)).first else d.cities.firstOrNull()
-        years.add(YearCol(y, city, d.maxDistFromHomeKm, y == yearOf(h.date)))
+        years.add(YearCol(y, city, if (ix.hasHome) d.maxDistFromHomeKm else null, y == yearOf(today)))
         visits?.forEach { ids.add(it.placeId) }
     }
     if (years.size < 2) return null
-    val far = years.reduce { a, b -> if (b.km > a.km) b else a }
+    val far = years.reduce { a, b -> if ((b.km ?: 0.0) > (a.km ?: 0.0)) b else a }
+    val detail = if (ix.hasHome) "farthest ${far.year}: ${far.city ?: "unknown"}, ${n0(far.km ?: 0.0)} km" else years.joinToString(" · ") { it.city ?: "—" }
     return Answer.Compare(
-        years, "${years.size} years", "farthest ${far.year}: ${far.city ?: "unknown"}, ${n0(far.km)} km",
+        years, "${years.size} years", detail,
         midnightUTC(sameDayIn(h.date, years.first().year))..(midnightUTC(sameDayIn(h.date, years.last().year)) + DAY), ids.toList(),
     )
 }
@@ -514,25 +520,25 @@ fun thisTimeLastYear(data: Record, h: Highlight): Answer.HighlightAnswer? {
     return Answer.HighlightAnswer(hl, "${hl.verb.text} ${hl.city}", dmy(date), hl.range, hl.placeIds, hl.playhead)
 }
 
-private val QUESTIONS: List<Pair<FollowUpId, (Record, Highlight) -> Answer?>> = listOf(
-    FollowUpId.STAY to ::stayLength,
-    FollowUpId.DISTANCE to ::distanceFromHome,
-    FollowUpId.TRIP to ::tripSetlist,
-    FollowUpId.ROUTE to ::routeRange,
+private val QUESTIONS: List<Pair<FollowUpId, (Record, Highlight, String) -> Answer?>> = listOf(
+    FollowUpId.STAY to { d, h, _ -> stayLength(d, h) },
+    FollowUpId.DISTANCE to { d, h, _ -> distanceFromHome(d, h) },
+    FollowUpId.TRIP to { d, h, _ -> tripSetlist(d, h) },
+    FollowUpId.ROUTE to { d, h, _ -> routeRange(d, h) },
     FollowUpId.COMPARE to ::compareYears,
-    FollowUpId.DID to ::whatDidIDo,
-    FollowUpId.BACK to ::haveIBeenBack,
-    FollowUpId.FARTHEST to ::farthestEver,
-    FollowUpId.LAST_YEAR to ::thisTimeLastYear,
+    FollowUpId.DID to { d, h, _ -> whatDidIDo(d, h) },
+    FollowUpId.BACK to { d, h, _ -> haveIBeenBack(d, h) },
+    FollowUpId.FARTHEST to { d, h, _ -> farthestEver(d, h) },
+    FollowUpId.LAST_YEAR to { d, h, _ -> thisTimeLastYear(d, h) },
 )
 
 /** Only the questions that have an answer for this highlight, answers pre-computed. Empty past MAX_DEPTH. */
-fun followUps(data: Record, h: Highlight, depth: Int = 0, exclude: Set<FollowUpId> = emptySet()): List<FollowUp> {
+fun followUps(data: Record, h: Highlight, depth: Int = 0, exclude: Set<FollowUpId> = emptySet(), today: String = localToday()): List<FollowUp> {
     if (depth >= MAX_DEPTH) return emptyList()
     val out = ArrayList<FollowUp>()
     for ((id, fn) in QUESTIONS) {
         if (id in exclude) continue
-        val answer = fn(data, h) ?: continue
+        val answer = fn(data, h, today) ?: continue
         out.add(FollowUp(id, id.question, answer))
     }
     return out

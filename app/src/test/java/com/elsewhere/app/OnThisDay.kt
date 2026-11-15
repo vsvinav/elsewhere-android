@@ -17,11 +17,12 @@ import java.time.ZoneOffset
 
 /**
  * Twin of web/src/test/onThisDay.ts: four years of a made-up record for the "on this day" tests.
- * Boston home, a Sydney week, a Paris day trip on 15 Nov 2022, a Kyoto + Osaka week in Nov 2023,
+ * Boston home, a Sydney week, a Paris day trip on 15 Nov 2022, a Kyoto + Osaka week in Nov 2023 (hotel 11–17, temple on the 15th, dinner out on the 16th),
  * an ordinary work day on 15 Nov 2024 and a return to Kyoto in May 2025. Each `data()` call builds a fresh copy.
  */
 object OnThisDay {
-    fun at(y: Int, m: Int, d: Int, h: Int = 0, min: Int = 0): Long = LocalDateTime.of(y, m, d, h, min).toEpochSecond(ZoneOffset.UTC)
+    /** UTC seconds; like `Date.UTC` in the web fixture, a day of 0 or a minute of 60 rolls over. */
+    fun at(y: Int, m: Int, d: Int, h: Int = 0, min: Int = 0): Long = LocalDateTime.of(y, m, 1, 0, 0).plusDays(d - 1L).plusHours(h.toLong()).plusMinutes(min.toLong()).toEpochSecond(ZoneOffset.UTC)
     val BOS = LatLng(42.36, -71.06); val KYO = LatLng(35.01, 135.77); val OSA = LatLng(34.69, 135.5)
     val PAR = LatLng(48.86, 2.35); val SYD = LatLng(-33.87, 151.21); val NYC = LatLng(40.71, -74.01)
 
@@ -36,7 +37,7 @@ object OnThisDay {
     ) = Daily(date, emptyMap(), 1, 1, nNewPlaces, maxDistFromHomeKm, hoursHome, hoursWork, hoursOther, hoursTransit, cities)
     fun trip(start: Long, end: Long, nights: Int, cities: List<String>, km: Double) = Trip(start, end, nights, km, mapOf("FLYING" to km * 2), cities, null)
 
-    private fun homeNight(y: Int, m: Int, d: Int) = v(at(y, m, d - 1, 20), at(y, m, d, 8), "home", BOS, "INFERRED_HOME")
+    fun homeNight(y: Int, m: Int, d: Int) = v(at(y, m, d - 1, 20), at(y, m, d, 8), "home", BOS, "INFERRED_HOME")
 
     fun data(): Record {
         id = 0
@@ -52,6 +53,7 @@ object OnThisDay {
             // Kyoto week, Nov 2023.
             v(at(2023, 11, 11, 23), at(2023, 11, 17, 9), "kyoto-hotel", KYO),
             v(at(2023, 11, 15, 10), at(2023, 11, 15, 13), "kinkakuji", KYO),
+            v(at(2023, 11, 16, 19), at(2023, 11, 16, 21), "kyoto-restaurant", KYO),
             v(at(2023, 11, 17, 12), at(2023, 11, 18, 9), "osaka-hotel", OSA),
             // An ordinary work day in 2024.
             homeNight(2024, 11, 15),
@@ -76,6 +78,7 @@ object OnThisDay {
                 "louvre" to place(PAR, "Paris", "FR", "Louvre", null, "museum"), "paris-hotel" to place(PAR, "Paris", "FR", "Paris Hotel", null, "lodging"),
                 "nyc-hotel" to place(NYC, "New York", "US", "NYC Hotel"),
                 "kyoto-hotel" to place(KYO, "Kyoto", "JP", "Kyoto Hotel", null, "lodging"), "kinkakuji" to place(KYO, "Kyoto", "JP", "Kinkaku-ji", null, "temple"),
+                "kyoto-restaurant" to place(KYO, "Kyoto", "JP", "Izakaya", null, "restaurant"),
                 "osaka-hotel" to place(OSA, "Osaka", "JP", "Osaka Hotel", null, "lodging"),
             ),
             listOf(

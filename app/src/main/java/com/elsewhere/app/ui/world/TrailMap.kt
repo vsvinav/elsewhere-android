@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.elsewhere.app.analytics.Stop
 import com.elsewhere.app.data.Activity
 import com.elsewhere.app.data.FeatureCollection
+import com.elsewhere.app.data.Pt
 import com.elsewhere.app.data.Record
 import kotlin.math.PI
 import kotlin.math.abs
@@ -74,30 +75,16 @@ private fun quantile(sorted: DoubleArray, p: Double): Double = sorted[floor(p * 
  * the cosine of the median latitude. Strokes are thinned afterwards, by distance on the sheet, so
  * every one still starts and ends where it did however long the record.
  */
-fun trailLayout(data: Record, stops: List<Stop>, land: FeatureCollection?, height: Float = TRAIL_H): TrailLayout {
+fun trailLayout(data: Record, stops: List<Stop>, land: FeatureCollection?, height: Float = TRAIL_H, fit: TrailProj? = null): TrailLayout {
     val raw = data.strokes.map { it.pts }.filter { it.size > 1 }
     // One arc per pair of airports: a return leg over the same arc would fill in the other's dashes.
     val fl = oneArcPerRoute(data.activities.filter { it.mode == "FLYING" && it.m > 80_000 })
     // A span with no strokes or flights (one day in one city) is framed on its stops alone, with a little air.
     val anchors = if (raw.isEmpty() && fl.isEmpty()) stops else emptyList()
     val n = raw.sumOf { it.size } + fl.size * 2 + anchors.size * 2
-    if (n == 0) return TrailLayout()
-    val lngs = DoubleArray(n); val lats = DoubleArray(n)
-    var i = 0
-    for (l in raw) for (p in l) { lngs[i] = p.lng; lats[i] = p.lat; i++ }
-    for (a in fl) { lngs[i] = a.sLng; lats[i] = a.sLat; i++; lngs[i] = a.eLng; lats[i] = a.eLat; i++ }
-    for (st in anchors) { lngs[i] = st.lng - 0.4; lats[i] = st.lat - 0.4; i++; lngs[i] = st.lng + 0.4; lats[i] = st.lat + 0.4; i++ }
-    val sortedLats = lats.sortedArray()
-    val k = cos(quantile(sortedLats, 0.5) * PI / 180)
-    val xs = DoubleArray(n) { lngs[it] * k }.sortedArray()
-    // The cities slept in are always framed, however little of the record was logged there.
-    val x0 = min(quantile(xs, 0.01), stops.minOfOrNull { it.lng * k } ?: Double.MAX_VALUE)
-    val x1 = max(quantile(xs, 0.99), stops.maxOfOrNull { it.lng * k } ?: -Double.MAX_VALUE)
-    val y0 = min(quantile(sortedLats, 0.01), stops.minOfOrNull { it.lat } ?: Double.MAX_VALUE)
-    val y1 = max(quantile(sortedLats, 0.99), stops.maxOfOrNull { it.lat } ?: -Double.MAX_VALUE)
-    val s = min((TRAIL_W - 2 * PAD) / max(1e-6, x1 - x0), (height - 2 * PAD) / max(1e-6, y1 - y0))
-    val ox = (TRAIL_W - (x1 - x0) * s) / 2; val oy = (height - (y1 - y0) * s) / 2
-    val proj = TrailProj(k, x0, y1, s, ox, oy)
+    if (n == 0 && fit == null) return TrailLayout()
+    // A route replay passes the fit of the whole trip, so the part drawn so far keeps the frame.
+    val proj = fit ?: fitOf(n, raw, fl, anchors, stops, height)
     fun px(lng: Double) = proj.px(lng)
     fun py(lat: Double) = proj.py(lat)
 
@@ -129,6 +116,25 @@ fun trailLayout(data: Record, stops: List<Stop>, land: FeatureCollection?, heigh
     }
     val landRings = land?.rings?.flatMap(::splitAntimeridian)?.map { r -> FloatArray(r.size).also { out -> var j = 0; while (j + 1 < r.size) { out[j] = px(r[j]); out[j + 1] = py(r[j + 1]); j += 2 } } } ?: emptyList()
     return TrailLayout(lines, flights, placed, landRings, proj)
+}
+
+private fun fitOf(n: Int, raw: List<List<Pt>>, fl: List<Activity>, anchors: List<Stop>, stops: List<Stop>, height: Float): TrailProj {
+    val lngs = DoubleArray(n); val lats = DoubleArray(n)
+    var i = 0
+    for (l in raw) for (p in l) { lngs[i] = p.lng; lats[i] = p.lat; i++ }
+    for (a in fl) { lngs[i] = a.sLng; lats[i] = a.sLat; i++; lngs[i] = a.eLng; lats[i] = a.eLat; i++ }
+    for (st in anchors) { lngs[i] = st.lng - 0.4; lats[i] = st.lat - 0.4; i++; lngs[i] = st.lng + 0.4; lats[i] = st.lat + 0.4; i++ }
+    val sortedLats = lats.sortedArray()
+    val k = cos(quantile(sortedLats, 0.5) * PI / 180)
+    val xs = DoubleArray(n) { lngs[it] * k }.sortedArray()
+    // The cities slept in are always framed, however little of the record was logged there.
+    val x0 = min(quantile(xs, 0.01), stops.minOfOrNull { it.lng * k } ?: Double.MAX_VALUE)
+    val x1 = max(quantile(xs, 0.99), stops.maxOfOrNull { it.lng * k } ?: -Double.MAX_VALUE)
+    val y0 = min(quantile(sortedLats, 0.01), stops.minOfOrNull { it.lat } ?: Double.MAX_VALUE)
+    val y1 = max(quantile(sortedLats, 0.99), stops.maxOfOrNull { it.lat } ?: -Double.MAX_VALUE)
+    val s = min((TRAIL_W - 2 * PAD) / max(1e-6, x1 - x0), (height - 2 * PAD) / max(1e-6, y1 - y0))
+    val ox = (TRAIL_W - (x1 - x0) * s) / 2; val oy = (height - (y1 - y0) * s) / 2
+    return TrailProj(k, x0, y1, s, ox, oy)
 }
 
 private const val MAX_PINS = 7

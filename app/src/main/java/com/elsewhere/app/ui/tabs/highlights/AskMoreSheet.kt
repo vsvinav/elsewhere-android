@@ -29,8 +29,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -44,6 +48,7 @@ import com.elsewhere.app.analytics.MAX_DEPTH
 import com.elsewhere.app.analytics.Scope
 import com.elsewhere.app.analytics.dmy
 import com.elsewhere.app.analytics.followUps
+import com.elsewhere.app.analytics.localDay
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.ui.world.CapsText
 import com.elsewhere.app.ui.world.InkButton
@@ -103,24 +108,19 @@ internal fun AnswerPass(data: Record, step: Step, onOpen: OpenDoor) {
                 Detail("${c.nights} ${if (c.nights == 1) "night" else "nights"}")
                 if (c.first) CapsText("first time", color = Poster.Red, size = 11.sp)
             } }
-            is Answer.Route -> {
-                val land = LocalLand.current
-                val layout = remember(data, a.range, land) { dayLayout(data, a.range, land) }
-                Spacer(Modifier.height(12.dp)); TrailMap(layout, Modifier.fillMaxWidth(), height = 220f)
-                Spacer(Modifier.height(12.dp)); InkButton("Play this route", { onOpen(a.range, a.range.first, a.placeIds) })
-            }
+            is Answer.Route -> { Spacer(Modifier.height(12.dp)); RouteFigure(data, a, step.h.tz) }
             is Answer.Compare -> {
-                val max = maxOf(1.0, a.years.maxOf { it.km })
+                val max = maxOf(1.0, a.years.maxOf { it.km ?: 0.0 })
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth().height(140.dp).semantics { contentDescription = "Years" }, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                     for (y in a.years) Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.Bottom) {
                         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.BottomCenter) {
-                            Box(Modifier.fillMaxWidth().fillMaxHeight(maxOf(0.04f, (y.km / max).toFloat())).background(if (y.now) Poster.Red else Poster.Ink))
+                            if (y.km != null) Box(Modifier.fillMaxWidth().fillMaxHeight(maxOf(0.04f, (y.km / max).toFloat())).background(if (y.now) Poster.Red else Poster.Ink))
                         }
                         Spacer(Modifier.height(6.dp))
                         Text("${y.year}", style = PosterType.Label.copy(fontWeight = FontWeight.Bold))
                         Text(y.city ?: "—", style = PosterType.Label, maxLines = 1)
-                        Text("${n0(y.km)} km", color = Poster.Ink2, style = PosterType.Label)
+                        if (y.km != null) Text("${n0(y.km)} km", color = Poster.Ink2, style = PosterType.Label)
                         if (y.now) CapsText("now", color = Poster.Red, size = 10.sp)
                     }
                 }
@@ -132,26 +132,44 @@ internal fun AnswerPass(data: Record, step: Step, onOpen: OpenDoor) {
             } }
             else -> Unit
         }
-        if (a !is Answer.Route) {
-            Spacer(Modifier.height(14.dp))
-            val label = when {
-                a is Answer.Farthest && !a.isFarthest -> "Open ${a.city ?: dmy(a.date)}"
-                a is Answer.Back && a.last != null -> "Open the last visit"
-                else -> "Open on the map"
-            }
-            InkButton(label, door(a), quiet = true)
+        Spacer(Modifier.height(14.dp))
+        val label = when {
+            a is Answer.Farthest && !a.isFarthest -> "Open ${a.city ?: dmy(a.date)}"
+            a is Answer.Back && a.last != null -> "Open the last visit"
+            else -> "Open on the map"
         }
+        InkButton(label, door(a), quiet = true)
+    }
+}
+
+/** The route on its own map with a ten-second replay of the trip; the door to the real map stays. */
+@Composable
+internal fun RouteFigure(data: Record, a: Answer.Route, tz: Int, replay: ReplayState = rememberReplay(a.range)) {
+    val land = LocalLand.current
+    val stops = remember(data, a.range) { stopsIn(data, a.range) }
+    val g = remember(data, a.range) { routeGeometry(data, a.range) }
+    val fit = remember(g, stops, land) { routeFit(data, g, stops, land, 220f) }
+    val playhead = replay.playhead
+    val layout = remember(g, fit, playhead) { if (playhead == null) fit else routeLayout(data, routeAt(g, playhead), stops, land, fit, 220f) }
+    TrailMap(layout, Modifier.fillMaxWidth().semantics { contentDescription = "Route map" }, height = 220f)
+    Spacer(Modifier.height(12.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        InkButton(
+            when { replay.playing -> "Replaying…"; playhead == null -> "Play this route"; else -> "Play again" },
+            replay::play, Modifier.semantics { selected = replay.playing; stateDescription = if (replay.playing) "Replaying" else "Stopped" },
+        )
+        if (playhead != null) CapsText(dmy(localDay(playhead, tz)), Modifier.semantics { liveRegion = LiveRegionMode.Polite; contentDescription = "Playhead" }, size = 11.sp)
     }
 }
 
 /** The sheet's contents, stateful over the thread; snapshot-tested without the sheet. */
 @Composable
-internal fun AskMoreContent(data: Record, highlight: Highlight, onClose: () -> Unit, onOpen: OpenDoor, modifier: Modifier = Modifier, initial: List<Step> = emptyList()) {
+internal fun AskMoreContent(data: Record, highlight: Highlight, today: String, onClose: () -> Unit, onOpen: OpenDoor, modifier: Modifier = Modifier, initial: List<Step> = emptyList()) {
     var chain by remember(highlight) { mutableStateOf(initial) }
     val cur = chain.lastOrNull()?.h ?: highlight
     // Questions already asked since the thread last moved to another day.
     val asked = remember(chain) { val out = LinkedHashSet<FollowUpId>(); for (s in chain) { if (s.asHighlight != null) out.clear() else out.add(s.fu.id) }; out as Set<FollowUpId> }
-    val menu = remember(data, cur, chain.size, asked) { followUps(data, cur, chain.size, asked) }
+    val menu = remember(data, cur, chain.size, asked, today) { followUps(data, cur, chain.size, asked, today) }
     val crumbs = listOf(highlight.city) + chain.map { s -> s.asHighlight?.city ?: CRUMB.getValue(s.fu.id) }
     // Back pops one answer off the thread; on the highlight itself it closes the sheet.
     BackHandler { if (chain.isNotEmpty()) chain = chain.dropLast(1) else onClose() }
@@ -187,10 +205,10 @@ internal fun AskMoreContent(data: Record, highlight: Highlight, onClose: () -> U
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AskMoreSheet(data: Record, highlight: Highlight, open: Boolean, onClose: () -> Unit, onOpen: OpenDoor) {
+fun AskMoreSheet(data: Record, highlight: Highlight, today: String, open: Boolean, onClose: () -> Unit, onOpen: OpenDoor) {
     if (!open) return
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onClose, sheetState = state, containerColor = Poster.Stock, contentColor = Poster.Ink, shape = RectangleShape, dragHandle = null) {
-        AskMoreContent(data, highlight, onClose, onOpen)
+        AskMoreContent(data, highlight, today, onClose, onOpen)
     }
 }

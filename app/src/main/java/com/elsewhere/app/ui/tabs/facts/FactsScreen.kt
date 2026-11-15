@@ -70,6 +70,7 @@ import com.elsewhere.app.analytics.HighlightState
 import com.elsewhere.app.analytics.highlightState
 import com.elsewhere.app.analytics.localToday
 import com.elsewhere.app.highlights.PendingHighlight
+import com.elsewhere.app.ui.Tab
 import com.elsewhere.app.ui.shell.RangeViewModel
 import com.elsewhere.app.ui.tabs.highlights.HighlightCard
 import com.elsewhere.app.ui.tabs.highlights.OpenDoor
@@ -81,11 +82,11 @@ import kotlinx.coroutines.launch
 private fun wide(f: Figure?) = f is Figure.Scale || f is Figure.Beds
 
 @Composable
-fun FactsTab(vm: FactsViewModel = hiltViewModel(), range: RangeViewModel = hiltViewModel()) {
+fun FactsTab(onGo: (Tab) -> Unit = {}, vm: FactsViewModel = hiltViewModel(), range: RangeViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     // A notification tap names the day its card was printed for; taken once, so the next visit is today's again.
     val pending = remember { PendingHighlight.date.value.also { PendingHighlight.date.value = null } }
-    ui?.let { FactsScreen(if (pending != null) it.copy(today = pending) else it, onOpen = { r, _, _ -> range.setRange(r) }) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
+    ui?.let { FactsScreen(if (pending != null) it.copy(today = pending) else it, onOpen = { r, _, _ -> range.setRange(r); onGo(Tab.MAP) }) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
 }
 
 @Composable

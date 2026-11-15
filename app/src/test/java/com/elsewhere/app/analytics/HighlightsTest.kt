@@ -3,14 +3,18 @@ package com.elsewhere.app.analytics
 import com.elsewhere.app.OnThisDay
 import com.elsewhere.app.OnThisDay.BOS
 import com.elsewhere.app.OnThisDay.KYO
+import com.elsewhere.app.OnThisDay.PAR
+import com.elsewhere.app.OnThisDay.a
 import com.elsewhere.app.OnThisDay.at
 import com.elsewhere.app.OnThisDay.day
+import com.elsewhere.app.OnThisDay.homeNight
 import com.elsewhere.app.OnThisDay.noHome
 import com.elsewhere.app.OnThisDay.place
 import com.elsewhere.app.OnThisDay.trip
 import com.elsewhere.app.OnThisDay.v
 import com.elsewhere.app.data.Activity
 import com.elsewhere.app.data.Daily
+import com.elsewhere.app.data.LatLng
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.data.Trip
 import com.elsewhere.app.data.Visit
@@ -67,12 +71,27 @@ class HighlightsTest {
             assertEquals(Scope.WEEK, h.scope)
             assertTrue(h.date in listOf("2023-11-17", "2023-11-18"))
         }
+        @Test fun `counts years from the picked date when widening crosses New Year`() {
+            val d = data.copy(
+                visits = (data.visits + v(at(2022, 12, 29, 20), at(2022, 12, 31, 9), "kyoto-hotel", KYO)).sortedBy { it.start },
+                daily = data.daily + day("2022-12-30", maxDistFromHomeKm = 10_800.0, cities = listOf("Kyoto"), hoursOther = 24.0),
+            )
+            val h = highlightFor(d, "2025-01-02")!!
+            assertEquals("2022-12-30", h.date); assertEquals(Scope.WEEK, h.scope); assertEquals(3, h.yearsAgo)
+        }
         @Test fun `returns null on a quiet day`() {
             assertNull(highlightFor(data, "2025-07-20"))
         }
         @Test fun `only looks at past years, never the current one`() {
             assertNull(highlightFor(data, "2025-05-03"))
             assertEquals("2025-05-03", highlightFor(data, "2026-05-03")!!.date)
+        }
+    }
+
+    @Nested inner class Index {
+        @Test fun `a stay that begins exactly at 03 00 local claims that night`() {
+            val d = data.copy(visits = (data.visits + v(at(2024, 8, 20, 3), at(2024, 8, 20, 12), "kyoto-hotel", KYO)).sortedBy { it.start })
+            assertEquals("kyoto-hotel", indexOf(d).nightPid[(at(2024, 8, 20) / 86400).toInt()])
         }
     }
 
@@ -84,6 +103,17 @@ class HighlightsTest {
         @Test fun `landed in when the first leg of the day is a flight`() {
             val h = highlightOn(data, "2022-11-15", 3)
             assertEquals(Verb.LANDED_IN, h.verb); assertEquals("Paris", h.city)
+        }
+        @Test fun `not landed in when the flight leaves after the day's first stop`() {
+            val pvd = LatLng(41.82, -71.41)
+            val d = data.copy(
+                visits = (data.visits + v(at(2024, 6, 1, 9), at(2024, 6, 1, 17), "pvd-office", pvd) + v(at(2024, 6, 1, 21), at(2024, 6, 2, 9), "paris-hotel", PAR) + homeNight(2024, 6, 1)).sortedBy { it.start },
+                activities = (data.activities + a(at(2024, 6, 1, 18), at(2024, 6, 1, 20, 30), "FLYING", 5_500_000.0, pvd, PAR)).sortedBy { it.start },
+                places = data.places + ("pvd-office" to place(pvd, "Providence", "US", "Office")),
+            )
+            val h = highlightOn(d, "2024-06-01", 1)
+            assertEquals("Providence", h.city)
+            assertEquals(Verb.ARRIVED_IN, h.verb)
         }
         @Test fun `arrived in when the first visit is a new city after sleeping elsewhere`() {
             // Woke in Kyoto, took the train: the day belongs to Kyoto (first visit) and reads "woke up in".
@@ -144,9 +174,18 @@ class HighlightsTest {
             assertEquals("2025-05-03", q.nearest?.date); assertEquals("Kyoto", q.nearest?.city)
         }
         @Test fun `record shorter than a year shows the top-scoring day instead`() {
-            val d = data.copy(meta = data.meta.copy(range = at(2023, 3, 3)..at(2023, 5, 1)))
+            val d = data.copy(meta = data.meta.copy(range = at(2023, 11, 11, 8)..at(2024, 5, 1)))
+            val s = highlightState(d, "2024-04-10") as HighlightState.Short
+            assertEquals("2023-11-11", s.starts); assertEquals("2022-11-15", s.highlight.date)
+        }
+        @Test fun `short record dates its start by the first visit's local day`() {
+            // Record opens 23:30 UTC on 2 March, which is already 3 March in Tokyo.
+            val d = data.copy(
+                visits = (data.visits + v(at(2023, 3, 2, 23, 30), at(2023, 3, 3, 9), "kyoto-hotel", KYO).copy(tz = 540)).sortedBy { it.start },
+                meta = data.meta.copy(range = at(2023, 3, 2, 23, 30)..at(2023, 5, 1)),
+            )
             val s = highlightState(d, "2023-04-10") as HighlightState.Short
-            assertEquals("2023-03-03", s.starts); assertEquals("2022-11-15", s.highlight.date)
+            assertEquals("2023-03-03", s.starts)
         }
         @Test fun `an empty record has nothing to say`() {
             assertEquals(HighlightState.None, highlightState(data.copy(visits = emptyList()), "2025-11-15"))
@@ -193,12 +232,22 @@ class HighlightsTest {
             assertEquals(3, r.legs)
             assertEquals(21_645.0, r.km, 0.01)
         }
-        @Test fun `compareYears gives one column per year with the city and distance`() {
-            val c = compareYears(data, kyoto)!!
+        @Test fun `compareYears gives one column per year with the city and distance, marking today's year`() {
+            val c = compareYears(data, kyoto, "2024-11-14")!!
             assertEquals(
-                listOf(YearCol(2022, "Boston", 5.0, false), YearCol(2023, "Kyoto", 10_800.0, true), YearCol(2024, "Boston", 5.0, false)),
+                listOf(YearCol(2022, "Boston", 5.0, false), YearCol(2023, "Kyoto", 10_800.0, false), YearCol(2024, "Boston", 5.0, true)),
                 c.years,
             )
+            assertEquals("farthest 2023: Kyoto, 10,800 km", c.detail)
+            assertTrue(compareYears(data, kyoto, "2025-11-14")!!.years.none { it.now })
+        }
+        @Test fun `compareYears drops the distances when no home is set`() {
+            val d = data.noHome()
+            val c = compareYears(d, highlightOn(d, "2023-11-14", 2), "2024-11-14")!!
+            assertEquals(listOf("Boston" to null, "Kyoto" to null, "Boston" to null), c.years.map { it.city to it.km })
+            assertEquals("Boston · Kyoto · Boston", c.detail)
+        }
+        @Test fun `compareYears needs two years`() {
             val d = data.copy(daily = data.daily.filter { it.date == "2023-02-28" })
             assertNull(compareYears(d, highlightOn(d, "2023-02-28", 2)))
         }
@@ -211,6 +260,9 @@ class HighlightsTest {
             // 15 Nov (temple) is still the same stay; May 2025 is the one return.
             val b = haveIBeenBack(data, kyoto)!!
             assertEquals(listOf(1, "2025-05-04", "Once", "last 4 May 2025"), listOf(b.times, b.last, b.title, b.detail))
+            // The hotel covers 11–17 Nov: a restaurant on the 16th, two days after the 13th, is still this stay.
+            val b13 = haveIBeenBack(data, highlightOn(data, "2023-11-13", 2))!!
+            assertEquals(1 to "Once", b13.times to b13.title)
             val p = haveIBeenBack(data, paris)!!
             assertEquals(listOf(0, null, "Never", "2 years and counting"), listOf(p.times, p.last, p.title, p.detail))
         }
