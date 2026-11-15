@@ -21,12 +21,12 @@ class PlacesError(message: String, val code: Int) : IOException(message) {
     val retryable: Boolean get() = code == 429 || code >= 500
 }
 
-@Singleton
 /** One paid Place Details call; the real one talks to Google, tests script answers. */
 interface DetailsSource {
     suspend fun details(id: String, key: String): Enrichment
 }
 
+@Singleton
 class GooglePlaces(client: OkHttpClient, private val base: String) : DetailsSource {
     @Inject constructor(client: OkHttpClient) : this(client, "https://places.googleapis.com")
 
