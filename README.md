@@ -25,6 +25,8 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 <img src="docs/screenshots/flights-from.png" width="180" alt="Flights: departures from one airport">
 <img src="docs/screenshots/key-refused.png" width="180" alt="Onboarding: a refused Google key, with Google's message, a hint and the limited-maps acknowledgement">
 <img src="docs/screenshots/home-naming.png" width="180" alt="Onboarding: home candidates being named, with the naming stamp">
+<img src="docs/screenshots/ready-bar.png" width="180" alt="Readiness bar: a thin red line along the top edge filling as the record is built, labelled Finding stops">
+<img src="docs/screenshots/key-gate.png" width="180" alt="Startup key gate: a returning user's stored key refused by Google, with the message, a hint and the limited-maps acknowledgement">
 </p>
 <p align="center"><sub>Rendered by the app's own screenshot tests from a synthetic record, so no real trips are shown.</sub></p>
 </details>
@@ -40,6 +42,7 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Flights globe · From-airport bill | ✅ |
 | Replay | ✅ |
 | Key verification · place names and photos | ✅ |
+| Lazy place lookups · readiness bar · startup key gate | ✅ |
 | Share cards | ⏳ |
 | Recording new location on-device | ⏳ |
 
