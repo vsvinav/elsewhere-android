@@ -39,6 +39,14 @@ class TrailLayoutTest {
         assertEquals(2, l.flights.size)
     }
 
+    @Test fun `legs that straddle a tenth-degree boundary at the same airport still print one arc`() {
+        // Runways 0.01° apart either side of x.x5 would round to different cells; nearness, not a grid, merges them.
+        val out = Fx.act(0, 1, "FLYING", 9_000_000.0, sLng = -122.449, sLat = 37.849, eLng = 139.749, eLat = 35.649)
+        val back = Fx.act(2, 3, "FLYING", 9_000_000.0, sLng = 139.751, sLat = 35.651, eLng = -122.451, eLat = 37.851)
+        val l = trailLayout(Fx.record(activities = listOf(out, back)), emptyList(), null)
+        assertEquals(1, l.flights.size)
+    }
+
     @Test fun `road dots sit a pitch apart along the line and reach its end`() {
         // A 70-unit line at half scale is 35 px: dots at 0, 7, …, 35 → six of them, the last on the end.
         val line = floatArrayOf(0f, 0f, 40f, 0f, 70f, 0f)

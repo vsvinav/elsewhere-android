@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.elsewhere.app.analytics.Stop
+import com.elsewhere.app.data.Activity
 import com.elsewhere.app.data.FeatureCollection
 import com.elsewhere.app.data.Record
 import kotlin.math.PI
@@ -75,8 +77,7 @@ private fun quantile(sorted: DoubleArray, p: Double): Double = sorted[floor(p * 
 fun trailLayout(data: Record, stops: List<Stop>, land: FeatureCollection?, height: Float = TRAIL_H): TrailLayout {
     val raw = data.strokes.map { it.pts }.filter { it.size > 1 }
     // One arc per pair of airports: a return leg over the same arc would fill in the other's dashes.
-    val fl = data.activities.filter { it.mode == "FLYING" && it.m > 80_000 }
-        .distinctBy { a -> listOf(airportKey(a.sLng, a.sLat), airportKey(a.eLng, a.eLat)).sorted().joinToString("|") }
+    val fl = oneArcPerRoute(data.activities.filter { it.mode == "FLYING" && it.m > 80_000 })
     val n = raw.sumOf { it.size } + fl.size * 2
     if (n == 0) return TrailLayout()
     val lngs = DoubleArray(n); val lats = DoubleArray(n)
@@ -135,33 +136,57 @@ private const val MAX_PINS = 7
  * stops short of the town it reached. The web gets this from an SVG dash of "0 7" with round caps.
  */
 fun roadDots(lines: List<FloatArray>, u: Float, pitch: Float): FloatArray {
-    val out = ArrayList<Float>()
+    val out = FloatBuf()
     for (l in lines) {
         if (l.size < 4) continue
         var carry = 0f
         var j = 2
         var lastX = l[0] * u; var lastY = l[1] * u
-        out.add(lastX); out.add(lastY)
+        out.add(lastX, lastY)
         while (j + 1 < l.size) {
             val ax = l[j - 2] * u; val ay = l[j - 1] * u; val bx = l[j] * u; val by = l[j + 1] * u
             val len = hypot(bx - ax, by - ay)
             var d = pitch - carry
             while (d <= len) {
                 lastX = ax + (bx - ax) * d / len; lastY = ay + (by - ay) * d / len
-                out.add(lastX); out.add(lastY)
+                out.add(lastX, lastY)
                 d += pitch
             }
             carry = len - (d - pitch)
             j += 2
         }
         val ex = l[l.size - 2] * u; val ey = l[l.size - 1] * u
-        if (hypot(ex - lastX, ey - lastY) >= pitch / 2) { out.add(ex); out.add(ey) }
+        if (hypot(ex - lastX, ey - lastY) >= pitch / 2) out.add(ex, ey)
     }
-    return out.toFloatArray()
+    return out.toArray()
 }
 
-/** Two ends within a tenth of a degree are the same airport, the tolerance the Flights page uses. */
-private fun airportKey(lng: Double, lat: Double) = "${Math.round(lng * 10)},${Math.round(lat * 10)}"
+/** A growing primitive float buffer: thousands of dots a frame are not worth a boxed Float each. */
+private class FloatBuf {
+    private var a = FloatArray(1024); private var n = 0
+    fun add(x: Float, y: Float) {
+        if (n + 2 > a.size) a = a.copyOf(a.size * 2)
+        a[n++] = x; a[n++] = y
+    }
+    fun toArray(): FloatArray = a.copyOf(n)
+}
+
+/** Within 0.3° of each other, as the Flights page tells a hub's runways apart; nearness, not a grid, so no cell edge splits an airport. */
+private fun sameAirport(aLng: Double, aLat: Double, bLng: Double, bLat: Double) =
+    hypot((aLng - bLng) * cos(aLat * PI / 180), aLat - bLat) < 0.3
+
+/** The first leg flown over each pair of airports, either way round. */
+internal fun oneArcPerRoute(flights: List<Activity>): List<Activity> {
+    val kept = ArrayList<Activity>()
+    for (a in flights) {
+        val dup = kept.any { k ->
+            (sameAirport(a.sLng, a.sLat, k.sLng, k.sLat) && sameAirport(a.eLng, a.eLat, k.eLng, k.eLat)) ||
+                (sameAirport(a.sLng, a.sLat, k.eLng, k.eLat) && sameAirport(a.eLng, a.eLat, k.sLng, k.sLat))
+        }
+        if (!dup) kept.add(a)
+    }
+    return kept
+}
 
 /**
  * A ring that steps across the antimeridian (Russia, Fiji in the atlas) would print as a line the
@@ -241,9 +266,12 @@ fun TrailMap(layout: TrailLayout, modifier: Modifier = Modifier, height: Float =
     // The web sets names in sheet units; on a phone the sheet is a third the size, so names keep a readable sp size instead.
     val labelStyle = TextStyle(fontFamily = DisplayFamily, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, letterSpacing = 0.04.em, lineHeight = 1.em)
     val texts = remember(layout, measurer, labelStyle) { layout.pins.map { p -> measurer.measure(p.city.uppercase(), labelStyle) } }
+    // The dots depend only on the layout and the width it is drawn at, so they are placed once per width, not per frame.
+    val dotCache = remember(layout) { HashMap<Float, FloatArray>() }
     // The sheet is clipped: the land and the arcs run well past the frame, as the SVG's viewBox cuts them on the web.
+    // Its own layer keeps the display list between scroll frames.
     Canvas(
-        modifier.fillMaxWidth().aspectRatio(TRAIL_W / height).clipToBounds().background(SheetFill).border(2.dp, Poster.Ink)
+        modifier.fillMaxWidth().aspectRatio(TRAIL_W / height).graphicsLayer().clipToBounds().background(SheetFill).border(2.dp, Poster.Ink)
             .semantics { contentDescription = "Map of the record" },
     ) {
         val u = size.width / TRAIL_W
@@ -254,7 +282,7 @@ fun TrailMap(layout: TrailLayout, modifier: Modifier = Modifier, height: Float =
             drawPath(paths.second, Poster.Ink, style = Stroke(FLIGHT_W / u, cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(FLIGHT_DASH[0] / u, FLIGHT_DASH[1] / u))))
         }
         // The roads are runs of separate dots, placed in pixels; a dashed stroke this fine does not survive every renderer.
-        val dots = roadDots(layout.lines, u, ROAD_GAP)
+        val dots = dotCache.getOrPut(size.width) { roadDots(layout.lines, u, ROAD_GAP) }
         var k = 0
         while (k + 1 < dots.size) { drawCircle(Poster.Red, ROAD_W / 2, Offset(dots[k], dots[k + 1])); k += 2 }
         for (p in layout.pins) {
