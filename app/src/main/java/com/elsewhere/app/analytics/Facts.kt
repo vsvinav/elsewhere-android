@@ -58,7 +58,7 @@ private fun dayStart(d: String): Long = LocalDate.parse(d).toEpochDay() * DAY
  * a figure. Each is labelled with the fact's headline once the fact is made, so the labels here are blank.
  */
 private fun whole(c: Ctx) = Door.Range(c.range.first, c.range.last, "")
-private fun localDay(ts: Long, tz: Int): Door.Range { val off = tz * 60L; val d = Math.floorDiv(ts + off, DAY) * DAY - off; return Door.Range(d, d + DAY - 1, "") }
+private fun dayAround(ts: Long, tz: Int): Door.Range { val off = tz * 60L; val d = Math.floorDiv(ts + off, DAY) * DAY - off; return Door.Range(d, d + DAY - 1, "") }
 private fun days(from: String, to: String) = Door.Range(dayStart(from), dayStart(to) + DAY - 1, "")
 private fun pins(ids: Collection<String>) = Door.Places(ids.toList(), "")
 /** Every place the record names in a city, whatever its role or whether the window visited it. O(P). */
@@ -193,7 +193,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val label = "${pad2(eh)}:${pad2(em)}"
             Fact("earliest", Kind.RECORD, headline = "Out the door at $label",
                 detail = "${longTs(ets)}, your earliest start. The clock points at it; the faint bars are the hours you usually leave home.",
-                figure = Figure.Dial(hours.toList(), eh + em / 60.0, null, label), door = localDay(ets, etz))
+                figure = Figure.Dial(hours.toList(), eh + em / 60.0, null, label), door = dayAround(ets, etz))
         }
     },
     // Night owl

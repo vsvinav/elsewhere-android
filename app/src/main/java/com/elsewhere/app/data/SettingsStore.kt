@@ -56,6 +56,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         val pausedUntil = longPreferencesKey("pausedUntil")
         val segmenter = stringPreferencesKey("segmenterState")
         val addresses = stringPreferencesKey("addresses")
+        val highlightsAt = intPreferencesKey("highlightsAt")
     }
     private fun keyOf(kind: Kind) = when (kind) { Kind.DETAILS -> K.detailsCalls; Kind.PHOTOS -> K.photoCalls; Kind.MAPS -> K.mapLoads }
 
@@ -81,6 +82,10 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
     val recording: Flow<Recording> = store.data.map { p ->
         Recording(p[K.recording] ?: false, p[K.recordingSince] ?: 0L, p[K.pausedUntil] ?: 0L)
     }
+
+    /** Minute of the day the "On this day" notification prints, or null when it is off (the default). */
+    val highlightsAt: Flow<Int?> = store.data.map { it[K.highlightsAt] }
+    suspend fun saveHighlightsAt(minute: Int?) { store.edit { if (minute == null) it.remove(K.highlightsAt) else it[K.highlightsAt] = minute } }
 
     suspend fun saveRecording(r: Recording) {
         store.edit { it[K.recording] = r.enabled; it[K.recordingSince] = r.since; it[K.pausedUntil] = r.pausedUntil }

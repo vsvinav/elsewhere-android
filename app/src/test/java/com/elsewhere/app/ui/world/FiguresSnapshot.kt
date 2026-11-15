@@ -44,7 +44,7 @@ class FiguresSnapshot {
 
     @Test fun dial() = sheet {
         val hours = listOf(1, 0, 0, 0, 0, 2, 6, 14, 22, 12, 8, 9, 11, 7, 6, 8, 12, 17, 13, 8, 5, 3, 2, 1)
-        Dial(hours, 7.5, 22 to 28, "7:30 AM", Modifier.width(220.dp))
+        Dial(hours, 7.5, 22 to 28, "07:30", Modifier.width(220.dp))
     }
 
     @Test fun beds() = sheet {

@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.elsewhere.app.highlights.HighlightsViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -80,7 +81,9 @@ fun RecordRoute(onClose: () -> Unit, vm: RecordViewModel = hiltViewModel()) {
         vm.onResult(p, results[p.permission] == true)
     }
     val settingsIntent = { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-    RecordScreen(ui, RecordActions(
+    val highlights = hiltViewModel<HighlightsViewModel>()
+    val highlightsAt by highlights.at.collectAsStateWithLifecycle()
+    RecordScreen(ui, highlightsAt = highlightsAt, onHighlightsAt = highlights::set, actions = RecordActions(
         onAllow = { p ->
             asked = p
             // Fine and coarse go together: Android 12 lets the user pick, and coarse alone is useless to us.
@@ -98,7 +101,7 @@ fun RecordRoute(onClose: () -> Unit, vm: RecordViewModel = hiltViewModel()) {
 
 /** `scroll = false` lays the whole sheet out at full height, for snapshots. */
 @Composable
-fun RecordScreen(ui: RecordUi, actions: RecordActions, modifier: Modifier = Modifier, scroll: Boolean = true) {
+fun RecordScreen(ui: RecordUi, actions: RecordActions, modifier: Modifier = Modifier, scroll: Boolean = true, highlightsAt: Int? = null, onHighlightsAt: (Int?) -> Unit = {}) {
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()) else Modifier)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(40.dp).background(Poster.Ink), contentAlignment = Alignment.Center) { DisplayText("E", 26.sp, color = Poster.Stock) }
@@ -112,6 +115,7 @@ fun RecordScreen(ui: RecordUi, actions: RecordActions, modifier: Modifier = Modi
         }
         PermissionsBill(ui, actions)
         if (!ui.batteryOk && ui.phase != Phase.DISCLOSURE) BatteryBill(actions)
+        HighlightsBill(highlightsAt, onHighlightsAt)
     }
 }
 

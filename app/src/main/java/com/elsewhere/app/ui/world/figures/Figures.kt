@@ -77,9 +77,6 @@ fun Fig(f: Figure, modifier: Modifier = Modifier) = when (f) {
     is Figure.Beds -> Beds(f.nights, modifier)
 }
 
-private fun polar(cx: Float, cy: Float, r: Float, frac: Double): Offset =
-    Offset(cx + r * sin(2 * PI * frac).toFloat(), cy - r * cos(2 * PI * frac).toFloat())
-
 private fun n(x: Double): String = String.format(Locale.US, "%,d", Math.round(x))
 
 /** The SVG `.l` text: 9px body caps in ink-3. */
@@ -152,50 +149,58 @@ fun Scale(value: Double, ref: Double, refLabel: String, unit: String, valueLabel
 }
 
 /**
- * 24-hour clock, midnight at the top: hour ticks, a red arc for the night window, faint bars for how
- * often legs start each hour, and a hand pointing at the headline time.
+ * A 12-hour clock face, 12 at the top: hour ticks, a red arc for the night window, faint bars for how
+ * often legs start each hour (mornings on the inner ring, afternoons on the outer), and a hand pointing
+ * at the headline time.
  */
 @Composable
 fun Dial(hours: List<Int>, hand: Double, arc: Pair<Int, Int>?, label: String, modifier: Modifier = Modifier) {
     val view = Rect(-6f, -6f, 146f, 146f)
     val cx = 70f; val cy = 70f; val R = 56f
-    val mx = max(1, hours.maxOrNull() ?: 1)
+    val g = remember(hours, hand, arc) { dialGeometry(hours, hand, arc) }
+    fun at(r: Float, deg: Float) = Offset(cx + r * cos(deg * PI / 180).toFloat(), cy + r * sin(deg * PI / 180).toFloat())
     UnitBox(view, modifier) { u, sp ->
         Canvas(Modifier.fillMaxSize()) {
             inUnits(view) {
                 drawCircle(Poster.Ink, R, Offset(cx, cy), style = Stroke(2f))
-                if (arc != null) {
+                if (g.arc != null) {
                     val r = R - 4
-                    val from = 360f * arc.first / 24f - 90f
-                    val sweep = 360f * (arc.second - arc.first) / 24f
-                    drawArc(Poster.Red, from, sweep, false, Offset(cx - r, cy - r), Size(2 * r, 2 * r), alpha = 0.85f, style = Stroke(5f))
+                    if (g.arc.full) drawCircle(Poster.Red, r, Offset(cx, cy), alpha = 0.85f, style = Stroke(5f))
+                    else drawArc(Poster.Red, g.arc.from, g.arc.sweep, false, Offset(cx - r, cy - r), Size(2 * r, 2 * r), alpha = 0.85f, style = Stroke(5f))
                 }
-                for (h in 0 until 24) {
-                    val v = hours.getOrElse(h) { 0 }
-                    val big = h % 6 == 0
-                    if (v > 0) {
-                        val f = (h + 0.5) / 24
-                        drawLine(Poster.Ink, polar(cx, cy, 10f, f), polar(cx, cy, 10f + 22f * v / mx, f), strokeWidth = 3f, alpha = 0.18f)
-                    }
-                    drawLine(Poster.Ink, polar(cx, cy, R - (if (big) 10f else 6f), h / 24.0), polar(cx, cy, R - 1, h / 24.0), strokeWidth = if (big) 2.5f else 1.2f)
+                for (b in g.bars) {
+                    val base = if (b.ring == DialRing.AM) AM_RING else PM_RING
+                    drawLine(Poster.Ink, at(base, b.angle), at(base + RING_LEN * b.len, b.angle), strokeWidth = 3f, alpha = 0.18f)
                 }
-                drawLine(Poster.Red, Offset(cx, cy), polar(cx, cy, R - 14, hand / 24), strokeWidth = 3.5f, cap = StrokeCap.Round)
+                for (t in g.ticks) {
+                    drawLine(Poster.Ink, at(R - (if (t.big) 10f else 6f), t.angle), at(R - 1, t.angle), strokeWidth = if (t.big) 2.5f else 1.2f)
+                }
+                drawLine(Poster.Red, Offset(cx, cy), at(R - 14, g.hand.angle), strokeWidth = 3.5f, cap = StrokeCap.Round)
                 drawCircle(Poster.Red, 4f, Offset(cx, cy))
             }
         }
-        for (h in listOf(0, 6, 12, 18)) {
-            val p = polar(cx, cy, R + 10, h / 24.0)
+        for (l in g.labels) {
+            val p = at(R + 10, l.angle)
             Text(
-                h.toString().padStart(2, '0'), Modifier.centerAt(p.x - view.left, p.y - view.top, u),
+                l.text, Modifier.centerAt(p.x - view.left, p.y - view.top, u),
                 color = Poster.Ink3, style = SmallLabel.copy(fontSize = sp(9f)), maxLines = 1,
             )
         }
         Text(
-            label.uppercase(), Modifier.centerAt(cx - view.left, cy + 38 - view.top, u),
+            buildAnnotatedString {
+                append(label.uppercase())
+                withStyle(SpanStyle(fontFamily = SmallLabel.fontFamily, fontWeight = SmallLabel.fontWeight, fontSize = sp(9f), letterSpacing = SmallLabel.letterSpacing)) { append(" " + g.hand.meridiem) }
+            },
+            Modifier.centerAt(cx - view.left, cy + 38 - view.top, u),
             color = Poster.Ink, style = Numeral.copy(fontSize = sp(16f)), maxLines = 1,
         )
     }
 }
+
+/** Where the hourly bars start on the dial, in view units: mornings inside, afternoons outside, each ring at most RING_LEN long. */
+private const val AM_RING = 8f
+private const val PM_RING = 23f
+private const val RING_LEN = 12f
 
 /** Seven columns, Monday first; the weekend in red. */
 @Composable

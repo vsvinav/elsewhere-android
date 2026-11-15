@@ -52,6 +52,7 @@ class MapViewModel @Inject constructor(private val range: RangeStore, maps: Maps
     fun search(q: String) = opts.update { it.copy(query = q) }
     fun select(id: String?) { opts.update { it.copy(selected = id) }; doors.pinChanged(id) }
     fun sizeBy(s: SizeBy) = opts.update { it.copy(sizeBy = s) }
+    fun heat(on: Boolean) = opts.update { it.copy(heat = on) }
 
     /** The door the tab was opened through, if any, and what it asks the map to show. */
     val origin: StateFlow<Origin?> get() = doors.origin

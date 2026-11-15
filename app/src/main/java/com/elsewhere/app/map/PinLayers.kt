@@ -18,7 +18,11 @@ import kotlin.math.tan
 
 enum class SizeBy(val label: String) { VISITS("visits"), HOURS("hours") }
 
-data class PinOpts(val hidden: Set<Cat> = emptySet(), val selected: String? = null, val sizeBy: SizeBy = SizeBy.VISITS, val query: String = "")
+/** `heat` swaps the pins and clusters for a heatmap of the same shown stops; homes, labels and the open pin stay. */
+data class PinOpts(
+    val hidden: Set<Cat> = emptySet(), val selected: String? = null, val sizeBy: SizeBy = SizeBy.VISITS, val query: String = "",
+    val heat: Boolean = false,
+)
 
 /** A stop ready to pin: its place, the name on the label, its kind and that kind's ink as `#rrggbb`. */
 data class Dot(val id: String, val place: Place, val title: String, val cat: Cat, val ink: String) : Located {
@@ -135,7 +139,8 @@ class PinLayers(record: Record) {
         // Homes label first so they always win their box.
         val labelled = s.labels.getOrPut(zb) { labelDots(homes + singles, zb) }
         val clusters = s.clusters.getValue(zb)
-        val pins = singles.map { Pin(it, pinSize(k, it, o.sizeBy), home = false) }
+        // Under heat the stops are the bitmap, not markers; the scene keeps everything drawn over it.
+        val pins = if (o.heat) emptyList() else singles.map { Pin(it, pinSize(k, it, o.sizeBy), home = false) }
         val homePins = homes.map { Pin(it, 20 * k, home = true) }
         val sel = o.selected?.let { id -> all.firstOrNull { it.id == id } ?: homes.firstOrNull { it.id == id } }
         val selected = sel?.let {
@@ -144,7 +149,7 @@ class PinLayers(record: Record) {
             SelectedPin(Pin(it, size, home), backSize = if (home) 34 * k else size + 12, topSize = if (home) 27 * k else size + 8)
         }
         return PinScene(
-            k = k, clusters = clusters, pins = pins, homes = homePins,
+            k = k, clusters = if (o.heat) emptyList() else clusters, pins = pins, homes = homePins,
             labels = labelled.map { PinLabel(it, it.title.uppercase(), 9 * k, -13 * k) },
             countSize = maxOf(9f, 12 * k), selected = selected,
         )
