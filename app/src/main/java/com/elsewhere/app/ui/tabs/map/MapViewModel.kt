@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.analytics.Cat
 import com.elsewhere.app.data.MapsSettings
-import com.elsewhere.app.data.Settings
-import com.elsewhere.app.data.noteGoogleFailed
-import com.elsewhere.app.data.noteGoogleLoaded
+import com.elsewhere.app.data.TileService
+import com.elsewhere.app.data.Viewport
+import com.elsewhere.app.ingest.CostMeter
+import com.elsewhere.app.map.Basemap
+import com.elsewhere.app.map.Basemaps
 import com.elsewhere.app.map.PinLayers
 import com.elsewhere.app.map.PinOpts
 import com.elsewhere.app.map.SizeBy
@@ -21,17 +23,17 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * The Map tab's state: the pins of the record in the current window, what the chips and search leave of them,
- * and the map settings a host needs, plus the one write a host makes: counting sessions where Google failed to load.
- */
+/** The Map tab's state: the pins of the record in the current window, what the chips and search leave of them, and the base map. */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class MapViewModel @Inject constructor(range: RangeStore, private val maps: MapsSettings) : ViewModel() {
-    val settings: StateFlow<Settings?> = maps.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+class MapViewModel @Inject constructor(range: RangeStore, maps: MapsSettings, tiles: TileService, meter: CostMeter) : ViewModel() {
+    private val basemaps = Basemaps(viewModelScope, maps, tiles, meter)
+    val basemap: StateFlow<Basemap> get() = basemaps.basemap
+    val copyright: StateFlow<String?> get() = basemaps.copyright
+    val tilesError: StateFlow<String?> get() = basemaps.tilesError
+    fun idle(vp: Viewport) = basemaps.idle(vp)
 
     /** One pin cache per record; a range change swaps it, and the screen redraws without moving the camera. */
     val layers: StateFlow<PinLayers?> = range.filtered.mapLatest { it?.let(::PinLayers) }
@@ -45,7 +47,4 @@ class MapViewModel @Inject constructor(range: RangeStore, private val maps: Maps
     fun search(q: String) = opts.update { it.copy(query = q) }
     fun select(id: String?) = opts.update { it.copy(selected = id) }
     fun sizeBy(s: SizeBy) = opts.update { it.copy(sizeBy = s) }
-
-    fun googleFailed() { viewModelScope.launch { maps.noteGoogleFailed() } }
-    fun googleLoaded() { viewModelScope.launch { maps.noteGoogleLoaded() } }
 }

@@ -3,7 +3,19 @@ package com.elsewhere.app.data
 import kotlinx.serialization.Serializable
 
 enum class Units { KM, MI }
-enum class MapProvider { AUTO, GOOGLE, OSM }
+/** Which base map to draw: Google's tiles when the key allows, free OpenStreetMap-based tiles, or whichever fits. */
+enum class MapProvider {
+    AUTO, GOOGLE_TILES, FREE;
+
+    companion object {
+        /** Reads a stored name, including the ones this setting had before Google moved from its SDK to tiles. */
+        fun parse(name: String?): MapProvider = when (name) {
+            "GOOGLE", "GOOGLE_TILES" -> GOOGLE_TILES
+            "OSM", "FREE" -> FREE
+            else -> AUTO
+        }
+    }
+}
 enum class Role { HOME, WORK }
 
 /** Anything with a position, so distance helpers work across visits, places and homes. */

@@ -11,6 +11,9 @@ import com.elsewhere.app.data.db.PlaceEnrichmentEntity
 import com.elsewhere.app.data.db.VisitEntity
 import com.elsewhere.app.data.db.decodePts
 import com.elsewhere.app.data.db.encodePts
+import com.elsewhere.app.ingest.Enrichment
+import com.elsewhere.app.ingest.EnrichmentStore
+import com.elsewhere.app.ingest.GooglePlaces
 import com.elsewhere.app.ingest.PActivity
 import com.elsewhere.app.ingest.PMemory
 import com.elsewhere.app.ingest.PPath
@@ -25,7 +28,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -59,7 +64,7 @@ class RecordRepository @Inject constructor(
     private val settings: SettingsStore,
     private val cities: CitiesLoader,
     scope: CoroutineScope,
-) : RecordSource, RecordStore {
+) : RecordSource, RecordStore, EnrichmentStore {
     private val importVersion = MutableStateFlow(0)
     private val placesVersion = MutableStateFlow(0)
 
@@ -81,15 +86,18 @@ class RecordRepository @Inject constructor(
     /** Only the homes and works shape the record; a new name or unit must not rebuild it. */
     private val shape = profile.distinctUntilChangedBy { it?.homes to it?.works }
 
-    override val record: StateFlow<Record?> = combine(importVersion, shape, placesVersion) { _, p, _ -> p }
-        .mapLatest { p -> if (p == null || p.homes.isEmpty()) null else build(p) }
+    /** Photo URLs carry the key, so a key change re-prints the record. */
+    private val photoKey = settings.settings.map { it.mapsKey }.distinctUntilChanged()
+
+    override val record: StateFlow<Record?> = combine(importVersion, shape, placesVersion, photoKey) { _, p, _, k -> p to k }
+        .mapLatest { (p, k) -> if (p == null || p.homes.isEmpty()) null else build(p, k) }
         .flowOn(Dispatchers.Default)
         .stateIn(scope, SharingStarted.Eagerly, null)
 
     /** The record derived against a home at 0,0: enough for the onboarding suggestions, before any home is chosen. */
-    override suspend fun provisionalRecord(): Record? = withContext(Dispatchers.Default) { build(PROVISIONAL) }
+    override suspend fun provisionalRecord(): Record? = withContext(Dispatchers.Default) { build(PROVISIONAL, settings.settings.first().mapsKey) }
 
-    private suspend fun build(profile: Profile): Record? {
+    private suspend fun build(profile: Profile, key: String): Record? {
         val meta = db.importMeta().get() ?: return null
         val parsed = Parsed(
             visits = db.visits().all().map { PVisit(it.id, it.start, it.end, it.tz, it.placeId, it.lat, it.lng, it.type, it.p, it.lvl, it.city, it.cc, it.dist) },
@@ -107,7 +115,8 @@ class RecordRepository @Inject constructor(
             val p = places[e.placeId] ?: continue
             places[e.placeId] = p.copy(
                 name = e.name ?: p.name, address = e.address ?: p.address,
-                types = Json.decodeFromString(strings, e.types), primaryType = e.primaryType ?: p.primaryType, photo = e.photo ?: p.photo,
+                types = Json.decodeFromString(strings, e.types).ifEmpty { p.types }, primaryType = e.primaryType ?: p.primaryType,
+                photo = if (e.photo != null && key.isNotBlank()) GooglePlaces.photoUrl(e.photo, key) else p.photo,
             )
         }
         return record.copy(places = places)
@@ -164,7 +173,15 @@ class RecordRepository @Inject constructor(
 
     override suspend fun saveProfile(p: Profile) = settings.saveProfile(p)
 
-    suspend fun saveEnrichment(row: PlaceEnrichmentEntity) { db.placeEnrichment().upsert(row); bumpPlacesVersion() }
+    override suspend fun cached(): Map<String, Enrichment> = db.placeEnrichment().all().associate {
+        it.placeId to Enrichment(it.name, it.address, Json.decodeFromString(strings, it.types), it.primaryType, it.photo)
+    }
+
+    /** Enrichment rows land in Room and the record re-derives once per batch. */
+    override suspend fun put(rows: Map<String, Enrichment>) {
+        db.placeEnrichment().insertAll(rows.map { (id, e) -> PlaceEnrichmentEntity(id, e.name, e.address, Json.encodeToString(strings, e.types), e.primaryType, e.photo) })
+        placesVersion.update { it + 1 }
+    }
 
     override suspend fun reset() {
         db.withTransaction { clearRows() }
@@ -172,5 +189,4 @@ class RecordRepository @Inject constructor(
         importVersion.update { it + 1 }
     }
 
-    fun bumpPlacesVersion() = placesVersion.update { it + 1 }
 }

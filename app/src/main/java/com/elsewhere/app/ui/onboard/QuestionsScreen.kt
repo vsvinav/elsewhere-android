@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.InkButton
+import com.elsewhere.app.ui.world.NamingStamp
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.PosterTextField
@@ -52,6 +53,7 @@ fun QuestionsScreen(state: OnboardState, actions: OnboardActions, onCancel: (() 
                     }
                     if (state.sleep.isEmpty()) Text("No overnight stays found in this record.", color = Poster.Ink2, style = PosterType.Lede)
                 }
+                NamingStamp(state.naming, Modifier.align(Alignment.End))
                 if (state.homes.isNotEmpty()) {
                     Spacer(Modifier.height(30.dp))
                     Homes(state, actions, "Since when, and until when? Leave both blank if you lived here for the whole record.")

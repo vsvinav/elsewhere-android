@@ -4,6 +4,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelectable
+import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -17,6 +19,7 @@ import com.elsewhere.app.ui.shell.RangeStore
 import com.elsewhere.app.ui.shell.RangeViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import com.elsewhere.app.ingest.EnrichState
 import com.elsewhere.app.ui.shell.ShellViewModel
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import org.junit.Rule
@@ -41,10 +44,10 @@ class RootFlowTest {
     @Test fun `through the door, into the app, and back in through Change answers`() {
         val store = Fakes.Store(record); val maps = Fakes.Maps()
         // One onboarding view model for the whole activity, as Hilt scopes it.
-        val onboard = OnboardViewModel(store, maps)
+        val onboard = OnboardViewModel(store, maps, Fakes.Checker(), Fakes.Namer(), Fakes.Geo())
         rule.setContent {
             val root = remember { RootViewModel(store, Fakes.Land) }
-            val shell = remember { ShellViewModel(store, maps) }
+            val shell = remember { ShellViewModel(store, maps, EnrichState()) }
             val range = remember { RangeViewModel(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main))) }
             ElsewhereTheme {
                 Root(
@@ -59,6 +62,9 @@ class RootFlowTest {
         rule.waitForIdle()
 
         rule.onNodeWithText("SKIP").performClick()                       // key
+        rule.onNodeWithText("CONTINUE WITH LIMITED MAPS").assertIsNotEnabled()
+        rule.onNode(isToggleable()).performClick()                       // "I understand" on limited maps
+        rule.onNodeWithText("CONTINUE WITH LIMITED MAPS").performClick()
         rule.onNodeWithText("WHOSE RECORD IS THIS?").assertIsDisplayed()
         rule.onNodeWithText("NEXT").performClick()                       // name
         rule.onNode(isSelectable() and hasText("THE FLAT", substring = true)).performClick()

@@ -2,7 +2,7 @@
 <p align="center"><strong>Your Google Maps Timeline, printed as a world-tour poster — natively on Android.</strong><br>
 Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same privacy rules as <a href="https://github.com/vsvinav/elsewhere">the web app</a>.</p>
 
-> **Status:** under construction, usable today. All eight tabs are built — Tour, Numbers, Facts, Stops, Dates, Map, Flights and Replay; place names, key verification, share cards and on-device recording come next. Install the latest APK from [Releases](https://github.com/vsvinav/elsewhere-android/releases).
+> **Status:** under construction, usable today. All eight tabs are built — Tour, Numbers, Facts, Stops, Dates, Map, Flights and Replay; share cards and on-device recording come next. Install the latest APK from [Releases](https://github.com/vsvinav/elsewhere-android/releases).
 
 <p align="center">
 <img src="docs/screenshots/tour.png" width="180" alt="Tour: ADA'S ELSEWHERE headline, nights per city, dotted route map">
@@ -22,6 +22,8 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 <img src="docs/screenshots/calendar.png" width="180" alt="Calendar sheet for picking a range">
 <img src="docs/screenshots/rangebar.png" width="180" alt="Range bar with presets">
 <img src="docs/screenshots/flights-ledger.png" width="180" alt="Flights: the route ledger">
+<img src="docs/screenshots/key-refused.png" width="180" alt="Onboarding: a refused Google key, with Google's message, a hint and the limited-maps acknowledgement">
+<img src="docs/screenshots/home-naming.png" width="180" alt="Onboarding: home candidates being named, with the naming stamp">
 </p>
 <p align="center"><sub>Rendered by the app's own screenshot tests from a synthetic record, so no real trips are shown.</sub></p>
 </details>
@@ -33,10 +35,11 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Timeline parser, analytics, local database | ✅ |
 | Shell: ticket strip, range bar, calendar, onboarding | ✅ |
 | Tour · Numbers · Facts · Stops · Dates | ✅ |
-| Map (Google Maps, OpenStreetMap fallback, clusters, search) | ✅ |
+| Map (Google map tiles, OpenStreetMap fallback, clusters, search) | ✅ |
 | Flights globe | ✅ |
 | Replay | ✅ |
-| Place names and photos, share cards | ⏳ |
+| Key verification · place names and photos | ✅ |
+| Share cards | ⏳ |
 | Recording new location on-device | ⏳ |
 
 ## What you get
@@ -73,9 +76,11 @@ You get one `Timeline.json`. Google moved Timeline onto the phone in 2024; Takeo
 
 Without a key the app draws OpenStreetMap tiles and skips place names/photos. With one:
 
-1. [console.cloud.google.com → Maps APIs](https://console.cloud.google.com/google/maps-apis), enable **Maps SDK for Android** and **Places API (New)**.
-2. Create a key; restrict it to Android apps with package `com.elsewhere.app` and your signing SHA-1 (`./gradlew signingReport`).
-3. Paste it in the app at the front door, or later from the ▾ menu.
+1. [console.cloud.google.com → Maps APIs](https://console.cloud.google.com/google/maps-apis), enable **Places API (New)** and **Map Tiles API**.
+2. Create a key. Under *Application restrictions* choose **None** — a key restricted to websites (HTTP referrers) or to Android apps is refused, because the app calls these APIs directly over HTTPS, not through the Maps SDK. If you want to lock it down, use *API restrictions* and allow just those two APIs.
+3. Paste it in the app at the front door, or later from the ▾ menu → Maps key.
+
+The app checks the key the moment you save it, with two free requests, and shows Google's exact answer if either is refused, along with what to change. A key that fails (or no key) means *limited maps*: OpenStreetMap tiles, no place names or photos. You are asked to acknowledge that before going on, and can re-check the key from the menu any time.
 
 The ▾ menu shows a running count of paid calls and a rough dollar figure. Names and photos are fetched once for your 100 busiest stops and cached forever.
 
@@ -104,7 +109,7 @@ app/src/main/java/com/elsewhere/app/
 ├── ingest/     Timeline parser, derive (roles, places, days, trips), enrichment, cost meter
 ├── analytics/  range, tour, stats, facts, flights — pure Kotlin, ported 1:1 from the web app
 ├── data/       Room + DataStore, RecordRepository
-├── map/        MapHost (Google Maps / MapLibre), clustering, pins, replay camera
+├── map/        MapLibre host (Google tiles or free style), clustering, pins, replay camera
 ├── ui/world/   poster theme, fonts, Pass/Bill/Sticker/Stamp, figures
 ├── ui/shell/   masthead, ticket strip, range bar, calendar sheet
 ├── ui/tabs/    one package per tab

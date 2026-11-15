@@ -1,6 +1,7 @@
 package com.elsewhere.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -11,7 +12,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
@@ -34,6 +37,9 @@ import com.elsewhere.app.ui.tabs.numbers.NumbersTab
 import com.elsewhere.app.ui.tabs.replay.ReplayTab
 import com.elsewhere.app.ui.tabs.stops.StopsTab
 import com.elsewhere.app.ui.tabs.tour.TourTab
+import com.elsewhere.app.ui.world.DisplayText
+import com.elsewhere.app.ui.world.NamingStamp
+import com.elsewhere.app.ui.world.Pass
 import com.elsewhere.app.ui.world.Poster
 
 private enum class Picking { FROM, TO }
@@ -75,6 +81,7 @@ fun AppScaffold(
 
     val profile by shell.profile.collectAsStateWithLifecycle()
     val counters by shell.counters.collectAsStateWithLifecycle()
+    val naming by shell.naming.collectAsStateWithLifecycle()
     val range by rangeVm.range.collectAsStateWithLifecycle()
     val bounds by rangeVm.bounds.collectAsStateWithLifecycle()
     val years by rangeVm.years.collectAsStateWithLifecycle()
@@ -97,8 +104,11 @@ fun AppScaffold(
             }
         },
     ) { pad ->
-        NavHost(nav, startDestination = Tab.TOUR.route, Modifier.fillMaxSize().padding(pad)) {
-            for (t in Tab.entries) composable(t.route) { content(t, go) }
+        Box(Modifier.fillMaxSize().padding(pad)) {
+            NavHost(nav, startDestination = Tab.TOUR.route, Modifier.fillMaxSize()) {
+                for (t in Tab.entries) composable(t.route) { content(t, go) }
+            }
+            NamingStamp(naming, Modifier.align(Alignment.TopEnd).padding(12.dp))
         }
     }
 

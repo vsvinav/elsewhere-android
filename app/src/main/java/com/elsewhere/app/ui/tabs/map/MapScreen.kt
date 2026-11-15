@@ -30,7 +30,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,19 +61,16 @@ import com.elsewhere.app.data.Role as PlaceRole
 import com.elsewhere.app.map.Cam
 import com.elsewhere.app.map.ClusterPin
 import com.elsewhere.app.map.Dot
-import com.elsewhere.app.map.GoogleMapHost
 import com.elsewhere.app.map.LABEL_PX
-import com.elsewhere.app.map.MapHost
+import com.elsewhere.app.map.MapLibreHost
 import com.elsewhere.app.map.Pin
 import com.elsewhere.app.map.PinLayers
 import com.elsewhere.app.map.PinOpts
 import com.elsewhere.app.map.PinSummary
-import com.elsewhere.app.map.Provider
 import com.elsewhere.app.map.SizeBy
 import com.elsewhere.app.map.Tap
 import com.elsewhere.app.map.clusterRadius
 import com.elsewhere.app.map.rememberMapHost
-import com.elsewhere.app.map.resolve
 import com.elsewhere.app.map.summary
 import com.elsewhere.app.ui.world.InkButton
 import com.elsewhere.app.ui.world.Poster
@@ -83,7 +79,6 @@ import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.hours
 import com.elsewhere.app.ui.world.n0
 import com.elsewhere.app.ui.world.plural
-import kotlinx.coroutines.launch
 import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.min
@@ -101,19 +96,15 @@ data class MapActions(
 
 @Composable
 fun MapTab(vm: MapViewModel = hiltViewModel()) {
-    val settings by vm.settings.collectAsStateWithLifecycle()
     val layers by vm.layers.collectAsStateWithLifecycle()
     val opts by vm.opts.collectAsStateWithLifecycle()
-    val s = settings
-    if (s == null) { Box(Modifier.fillMaxSize().background(Poster.Stock)); return }
+    val basemap by vm.basemap.collectAsStateWithLifecycle()
+    val tilesError by vm.tilesError.collectAsStateWithLifecycle()
+    val copyright by vm.copyright.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    val host = rememberMapHost(s, onGoogleLoaded = vm::googleLoaded, onGoogleFailed = {
-        vm.googleFailed()
-        // Only an automatic choice actually swaps to OSM; a forced Google stays Google, blank or not.
-        val swapped = resolve(s, sessionDown = true) == Provider.OSM
-        scope.launch { snackbar.showSnackbar(if (swapped) "Google refused the key — using OpenStreetMap" else "Google Maps didn't load") }
-    })
+    val host = rememberMapHost()
+    LaunchedEffect(tilesError) { tilesError?.let { snackbar.showSnackbar("Google refused the map tiles — using the free map. $it") } }
+    LaunchedEffect(host) { host.viewport.collect { it?.let(vm::idle) } }
     val density = LocalDensity.current
     val fit = { l: PinLayers, o: PinOpts -> l.fitBounds(o)?.let { host.fit(it, with(density) { FIT_PAD.roundToPx() }) } != null }
 
@@ -136,14 +127,8 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
 
     val acts = MapActions(vm::toggle, vm::only, vm::showAll, vm::search, vm::select, vm::sizeBy, fit = { layers?.let { fit(it, opts) } })
     MapScreen(layers, opts, acts, snackbar = snackbar) { m ->
-        host.Content(m) {
+        host.Content(m, basemap, copyright) {
             layers?.let { PinCanvas(host, it, opts, Modifier.fillMaxSize()) }
-            if ((host as? GoogleMapHost)?.needsRestart == true) {
-                Text(
-                    "Restart the app to apply the new key", color = Poster.Ink,
-                    modifier = Modifier.align(Alignment.TopCenter).padding(12.dp).background(Poster.Mustard).padding(horizontal = 12.dp, vertical = 6.dp),
-                )
-            }
         }
     }
 }
@@ -272,7 +257,7 @@ private fun PinCard(d: Dot, modifier: Modifier = Modifier, onClose: () -> Unit) 
  * clusters behind it are regridded only when the half-zoom bucket changes.
  */
 @Composable
-private fun PinCanvas(host: MapHost, layers: PinLayers, opts: PinOpts, modifier: Modifier = Modifier) {
+private fun PinCanvas(host: MapLibreHost, layers: PinLayers, opts: PinOpts, modifier: Modifier = Modifier) {
     val cam by host.camera.collectAsState()
     val measurer = rememberTextMeasurer()
     val shapes = remember { PinShapes() }
@@ -351,7 +336,7 @@ private sealed interface Hit {
 }
 
 /** What a tap landed on: a cluster disc, else the nearest pin whose icon covers the finger (a 16dp floor). */
-private fun hitTest(host: MapHost, layers: PinLayers, opts: PinOpts, tap: Tap, d: Float): Hit? {
+private fun hitTest(host: MapLibreHost, layers: PinLayers, opts: PinOpts, tap: Tap, d: Float): Hit? {
     val at = host.project(tap.lat, tap.lng) ?: return null
     val scene = layers.scene(host.camera.value.zoom.toDouble(), opts)
     for (c in scene.clusters) {

@@ -22,6 +22,18 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import okhttp3.OkHttpClient
+import com.elsewhere.app.data.GoogleTiles
+import com.elsewhere.app.data.TileService
+import com.elsewhere.app.ingest.AddressBook
+import com.elsewhere.app.ingest.CostMeter
+import com.elsewhere.app.ingest.EnrichmentStore
+import com.elsewhere.app.ingest.Geocoder
+import com.elsewhere.app.ingest.Enricher
+import com.elsewhere.app.ingest.Nominatim
+import com.elsewhere.app.ingest.PlaceNamer
+import com.elsewhere.app.ingest.KeyCheck
+import com.elsewhere.app.ingest.KeyChecker
 import javax.inject.Singleton
 
 @Module
@@ -35,9 +47,18 @@ object AppModule {
 
     @Provides @Singleton fun appScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    @Provides @Singleton fun http(): OkHttpClient = OkHttpClient()
+    @Provides fun keyChecker(check: KeyCheck): KeyChecker = check
+
     @Provides fun recordSource(repo: RecordRepository): RecordSource = repo
     @Provides fun recordStore(repo: RecordRepository): RecordStore = repo
     @Provides fun mapsSettings(store: SettingsStore): MapsSettings = store
+    @Provides fun costMeter(store: SettingsStore): CostMeter = store
+    @Provides fun addressBook(store: SettingsStore): AddressBook = store
+    @Provides fun enrichmentStore(repo: RecordRepository): EnrichmentStore = repo
+    @Provides fun geocoder(n: Nominatim): Geocoder = n
+    @Provides fun placeNamer(e: Enricher): PlaceNamer = e
+    @Provides fun tileService(t: GoogleTiles): TileService = t
     @Provides fun landSource(loader: LandLoader): LandSource = loader
 
     @Provides fun visits(db: ElsewhereDb) = db.visits()

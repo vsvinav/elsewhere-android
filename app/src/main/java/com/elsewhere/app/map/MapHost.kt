@@ -1,10 +1,5 @@
 package com.elsewhere.app.map
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan
@@ -70,18 +65,6 @@ private fun Cam.near(o: Cam) = abs(lat - o.lat) < 1e-7 && abs(lng - o.lng) < 1e-
 
 /** A tap on the bare map, in degrees; overlays decide what it hit. */
 data class Tap(val lat: Double, val lng: Double)
-
-/** The few camera calls the map screens need, so they run on Google or MapLibre alike. */
-interface MapHost {
-    val camera: StateFlow<Cam>
-    val events: SharedFlow<MapEvent>
-    val taps: SharedFlow<Tap>
-    fun moveTo(cam: Cam, animateMs: Int = 0)
-    fun fit(bounds: Bounds, paddingPx: Int)
-    /** Where a point lands on screen, in px from [Content]'s top-left; null before the map has laid out. */
-    fun project(lat: Double, lng: Double): Offset?
-    @Composable fun Content(modifier: Modifier, overlays: @Composable () -> Unit)
-}
 
 // MapLibre's zoom 0 is a 512px world; Google's is 256px, so the same view is one level apart.
 fun googleToLibreZoom(zoom: Float): Float = zoom - 1f

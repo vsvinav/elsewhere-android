@@ -5,9 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.analytics.Lens
 import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.Record
-import com.elsewhere.app.data.Settings
-import com.elsewhere.app.data.noteGoogleFailed
-import com.elsewhere.app.data.noteGoogleLoaded
+import com.elsewhere.app.data.TileService
+import com.elsewhere.app.data.Viewport
+import com.elsewhere.app.ingest.CostMeter
+import com.elsewhere.app.map.Basemap
+import com.elsewhere.app.map.Basemaps
 import com.elsewhere.app.map.PlayState
 import com.elsewhere.app.map.ReplayTrails
 import com.elsewhere.app.map.tickPlayback
@@ -31,8 +33,12 @@ import javax.inject.Inject
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class PlaybackViewModel @Inject constructor(range: RangeStore, private val maps: MapsSettings) : ViewModel() {
-    val settings: StateFlow<Settings?> = maps.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+class PlaybackViewModel @Inject constructor(range: RangeStore, maps: MapsSettings, tiles: TileService, meter: CostMeter) : ViewModel() {
+    private val basemaps = Basemaps(viewModelScope, maps, tiles, meter)
+    val basemap: StateFlow<Basemap> get() = basemaps.basemap
+    val copyright: StateFlow<String?> get() = basemaps.copyright
+    val tilesError: StateFlow<String?> get() = basemaps.tilesError
+    fun idle(vp: Viewport) = basemaps.idle(vp)
     val data: StateFlow<Record?> = range.filtered
 
     /** Legs thinned per zoom, one cache per record; a range change swaps it. */
@@ -75,7 +81,4 @@ class PlaybackViewModel @Inject constructor(range: RangeStore, private val maps:
 
     fun setFollow(on: Boolean) = state.update { it.copy(follow = on) }
     fun setLens(lens: Lens) = state.update { it.copy(lens = lens) }
-
-    fun googleFailed() { viewModelScope.launch { maps.noteGoogleFailed() } }
-    fun googleLoaded() { viewModelScope.launch { maps.noteGoogleLoaded() } }
 }

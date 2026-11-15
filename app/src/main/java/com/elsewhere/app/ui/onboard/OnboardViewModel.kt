@@ -15,6 +15,13 @@ import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.data.Work
+import com.elsewhere.app.ingest.Geocoder
+import com.elsewhere.app.ingest.KeyChecker
+import com.elsewhere.app.ingest.PlaceNamer
+import com.elsewhere.app.ingest.Progress
+import com.elsewhere.app.ingest.properName
+import com.elsewhere.app.ingest.KeyReport
+import com.elsewhere.app.ingest.Probe
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +38,9 @@ import javax.inject.Inject
 
 enum class Step { Import, Key, Name, Home, Moves, Work, Units, Done }
 
+/** The key page's three faces: the field, the probes running, the verdict (or the no-key acknowledgement). */
+enum class KeyPhase { Entry, Checking, Result }
+
 /** The five questions, in order; `Import` and `Key` come before, `Done` after. */
 val QUESTIONS = listOf(Step.Name, Step.Home, Step.Moves, Step.Work, Step.Units)
 
@@ -39,8 +49,11 @@ enum class Sure(val label: String) { LIKELY("Likely home"), MAYBE("Maybe home"),
 /** A ranked place with the name we can print for it. */
 data class Candidate(
     val placeId: String, val lat: Double, val lng: Double, val city: String?, val cc: String?,
-    val label: String, val address: String?, val score: Double, val share: Double, val members: Int,
+    val label: String, val address: String?, val score: Double, val share: Double, val memberIds: List<String>,
+    /** True once the label is a real name (shop, flat, park) rather than a city or a street number. */
+    val named: Boolean = true,
 ) {
+    val members: Int get() = memberIds.size
     val sure: Sure get() = when { share >= 0.6 -> Sure.LIKELY; share >= 0.3 -> Sure.MAYBE; else -> Sure.STAYED }
     fun matches(h: Home) = h.lat == lat && h.lng == lng
 }
@@ -53,6 +66,8 @@ data class OnboardState(
     val report: ImportReport? = null,
     val range: LongRange = 0L..0L,
     val sleep: List<Candidate> = emptyList(),
+    /** Set while the candidate cards are still being named. */
+    val naming: Progress? = null,
     val weekday: List<Candidate> = emptyList(),
     val moves: List<Move> = emptyList(),
     val name: String = "",
@@ -61,6 +76,10 @@ data class OnboardState(
     val units: Units = Units.KM,
     val key: String = "",
     val mapId: String = "",
+    val keyPhase: KeyPhase = KeyPhase.Entry,
+    /** The last check's verdict; null on the Result face means the key was skipped. */
+    val keyReport: KeyReport? = null,
+    val limitedAck: Boolean = false,
 ) {
     val questionIndex: Int get() = QUESTIONS.indexOf(step)
 }
@@ -90,7 +109,10 @@ fun YearMonth.epoch(): Long = atDay(1).atStartOfDay(ZoneOffset.UTC).toEpochSecon
 fun monthOf(ts: Long): YearMonth = YearMonth.from(LocalDate.ofEpochDay(Math.floorDiv(ts, 86400L)))
 
 @HiltViewModel
-class OnboardViewModel @Inject constructor(private val store: RecordStore, private val maps: MapsSettings) : ViewModel(), OnboardActions {
+class OnboardViewModel @Inject constructor(
+    private val store: RecordStore, private val maps: MapsSettings, private val checker: KeyChecker,
+    private val namer: PlaceNamer, private val geocoder: Geocoder,
+) : ViewModel(), OnboardActions, KeyActions {
     private val _state = MutableStateFlow(OnboardState())
     val state: StateFlow<OnboardState> = _state
     /** Open the door at `step`: the import for a new record, a question or the key when editing. Resets what was there. */
@@ -125,24 +147,85 @@ class OnboardViewModel @Inject constructor(private val store: RecordStore, priva
         _state.update {
             it.copy(range = rec.meta.range, sleep = sleepPlaces(rec, 8).map { s -> candidate(s, rec) }, weekday = weekdayPlaces(rec).map { s -> candidate(s, rec) }, moves = moveMonths(rec))
         }
+        nameCandidates(rec)
     }
 
     private fun candidate(s: Suggestion, rec: Record): Candidate {
         val p = rec.places[s.placeId]
-        return Candidate(s.placeId, s.lat, s.lng, s.city, s.cc, p?.name ?: p?.label ?: s.city ?: "Unnamed place", p?.address, s.score, s.share, s.members.size)
+        val named = p != null && properName(p.name, p.types, p.primaryType)
+        return Candidate(s.placeId, s.lat, s.lng, s.city, s.cc, p?.name ?: p?.label ?: s.city ?: "Unnamed place", p?.address, s.score, s.share, s.members, named)
     }
 
-    fun saveKey(key: String, mapId: String) {
-        viewModelScope.launch {
-            val s = maps.settings.first()
-            // A new key gets a fresh chance at Google; the rejection only ever applied to the old one.
-            val same = key.trim() == s.mapsKey
-            maps.saveSettings(s.copy(mapsKey = key.trim(), mapId = mapId.trim(), googleRejected = s.googleRejected && same, googleFailures = if (same) s.googleFailures else 0))
-            _state.update { it.copy(key = key.trim(), mapId = mapId.trim(), step = if (it.editing) Step.Done else Step.Name) }
+    /**
+     * Cards that only say a city get a better line, as the web's Onboarding does: a Places name when the key
+     * works, else a street and neighbourhood from Nominatim. Each lands as it arrives.
+     */
+    private suspend fun nameCandidates(rec: Record) {
+        val s = maps.settings.first()
+        val paid = s.mapsKey.isNotBlank() && s.keyPlaces
+        val todo = (_state.value.sleep + _state.value.weekday).filter { !it.named }.distinctBy { it.placeId }
+        if (todo.isEmpty()) return
+        _state.update { it.copy(naming = Progress(0, todo.size)) }
+        try {
+            todo.forEachIndexed { i, c -> name(c, rec, s.mapsKey, paid); _state.update { it.copy(naming = Progress(i + 1, todo.size)) } }
+        } finally {
+            _state.update { it.copy(naming = null) }
         }
     }
 
-    fun skipKey() { _state.update { it.copy(step = if (it.editing) Step.Done else Step.Name) } }
+    private suspend fun name(c: Candidate, rec: Record, key: String, paid: Boolean) {
+        val patch: (Candidate) -> Candidate = if (paid) {
+            val name = runCatching { namer.name(c.memberIds, rec.places, key) }.getOrNull() ?: return
+            { it.copy(label = name, named = true) }
+        } else {
+            val addr = runCatching { geocoder.address(c.lat, c.lng) }.getOrNull() ?: return
+            { it.copy(address = it.address ?: addr) }
+        }
+        _state.update { st -> st.copy(sleep = st.sleep.map { if (it.placeId == c.placeId) patch(it) else it }, weekday = st.weekday.map { if (it.placeId == c.placeId) patch(it) else it }) }
+    }
+
+    /** Save the key, then ask Google about it; the page shows the probes running, then the verdict. */
+    override fun saveKey(key: String, mapId: String) {
+        val k = key.trim()
+        if (k.isBlank()) return skipKey()
+        if (_state.value.keyPhase == KeyPhase.Checking) return
+        _state.update { it.copy(key = k, mapId = mapId.trim(), keyPhase = KeyPhase.Checking, keyReport = null, limitedAck = false) }
+        viewModelScope.launch {
+            val cur = maps.settings.first()
+            // A new key is unproven until its probes answer: nothing paid may run on it in the meantime.
+            val fresh = if (k == cur.mapsKey) cur else cur.copy(keyPlaces = false, keyTiles = false, keyCheckedAt = 0, limitedAccepted = false)
+            maps.saveSettings(fresh.copy(mapsKey = k, mapId = mapId.trim()))
+            val report = checker.run(k)
+            val now = maps.settings.first()
+            maps.saveSettings(now.copy(keyPlaces = report.places == Probe.Ok, keyTiles = report.tiles == Probe.Ok, keyCheckedAt = System.currentTimeMillis()))
+            _state.update { it.copy(keyPhase = KeyPhase.Result, keyReport = report) }
+        }
+    }
+
+    /** Settings → Key's "Re-check": the probes again on the key already saved. */
+    override fun recheckKey() { saveKey(_state.value.key, _state.value.mapId) }
+
+    /** No key: the limited-mode acknowledgement, with nothing to report. */
+    override fun skipKey() { _state.update { it.copy(keyPhase = KeyPhase.Result, keyReport = null, limitedAck = false) } }
+
+    /** Back to the field from a verdict. */
+    override fun editKey() { _state.update { it.copy(keyPhase = KeyPhase.Entry) } }
+
+    override fun setLimitedAck(on: Boolean) { _state.update { it.copy(limitedAck = on) } }
+
+    private fun leaveKey() { _state.update { it.copy(keyPhase = KeyPhase.Entry, step = if (it.editing) Step.Done else Step.Name) } }
+
+    /** Both probes passed: on to the questions (or back to the app). */
+    override fun continueKey() { if (_state.value.keyReport?.accepted == true) leaveKey() }
+
+    /** The user ticked "I understand" on limited maps: remember it and move on. */
+    override fun acceptLimited() {
+        if (!_state.value.limitedAck) return
+        viewModelScope.launch {
+            maps.saveSettings(maps.settings.first().copy(limitedAccepted = true))
+            leaveKey()
+        }
+    }
 
     override fun setName(s: String) { _state.update { it.copy(name = s.take(24)) } }
 

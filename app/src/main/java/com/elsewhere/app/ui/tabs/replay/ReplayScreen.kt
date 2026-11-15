@@ -20,7 +20,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -64,12 +63,10 @@ import com.elsewhere.app.map.Bounds
 import com.elsewhere.app.map.Cam
 import com.elsewhere.app.map.Eased
 import com.elsewhere.app.map.Follow
-import com.elsewhere.app.map.GoogleMapHost
 import com.elsewhere.app.map.HEAD_REAL_S
 import com.elsewhere.app.map.MapEvent
-import com.elsewhere.app.map.MapHost
+import com.elsewhere.app.map.MapLibreHost
 import com.elsewhere.app.map.PlayState
-import com.elsewhere.app.map.Provider
 import com.elsewhere.app.map.ReplayTrails
 import com.elsewhere.app.map.Stamp
 import com.elsewhere.app.map.StampHold
@@ -78,7 +75,6 @@ import com.elsewhere.app.map.Trails
 import com.elsewhere.app.map.activeTrails
 import com.elsewhere.app.map.intersects
 import com.elsewhere.app.map.rememberMapHost
-import com.elsewhere.app.map.resolve
 import com.elsewhere.app.map.stampOf
 import com.elsewhere.app.map.trailHead
 import com.elsewhere.app.map.viewBounds
@@ -91,7 +87,6 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sqrt
-import kotlinx.coroutines.launch
 
 // Port of web/src/map/MapScreen.tsx in Play mode over MapView.tsx's replay pass: the record runs along its trails.
 
@@ -103,19 +98,18 @@ data class ReplayActions(
 
 @Composable
 fun ReplayTab(vm: PlaybackViewModel = hiltViewModel()) {
-    val settings by vm.settings.collectAsStateWithLifecycle()
     val data by vm.data.collectAsStateWithLifecycle()
     val trails by vm.trails.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
-    val s = settings; val rec = data
-    if (s == null || rec == null) { Box(Modifier.fillMaxSize().background(Poster.Stock)); return }
+    val basemap by vm.basemap.collectAsStateWithLifecycle()
+    val copyright by vm.copyright.collectAsStateWithLifecycle()
+    val tilesError by vm.tilesError.collectAsStateWithLifecycle()
+    val rec = data
+    if (rec == null) { Box(Modifier.fillMaxSize().background(Poster.Stock)); return }
     val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    val host = rememberMapHost(s, onGoogleLoaded = vm::googleLoaded, onGoogleFailed = {
-        vm.googleFailed()
-        val swapped = resolve(s, sessionDown = true) == Provider.OSM
-        scope.launch { snackbar.showSnackbar(if (swapped) "Google refused the key — using OpenStreetMap" else "Google Maps didn't load") }
-    })
+    val host = rememberMapHost()
+    LaunchedEffect(tilesError) { tilesError?.let { snackbar.showSnackbar("Google refused the map tiles — using the free map. $it") } }
+    LaunchedEffect(host) { host.viewport.collect { it?.let(vm::idle) } }
 
     // Leaving the tab pops its back-stack entry and clears the view model, so the clock stops with it.
     LaunchedEffect(vm) { vm.shown() }
@@ -156,15 +150,9 @@ fun ReplayTab(vm: PlaybackViewModel = hiltViewModel()) {
         play = { vm.setPlaying(!state.playing) }, speed = vm::setSpeed, scrub = vm::scrub, follow = { vm.setFollow(true) }, lens = vm::setLens,
     )
     ReplayScreen(rec, state, tags, acts, snackbar = snackbar) { m ->
-        host.Content(m) {
+        host.Content(m, basemap, copyright) {
             val tr = trails
             if (tr != null) ReplayCanvas(host, rec, tr, state, frame, Modifier.fillMaxSize().onSizeChanged { viewport = it })
-            if ((host as? GoogleMapHost)?.needsRestart == true) {
-                Text(
-                    "Restart the app to apply the new key", color = Poster.Ink,
-                    modifier = Modifier.align(Alignment.TopCenter).padding(12.dp).background(Poster.Mustard).padding(horizontal = 12.dp, vertical = 6.dp),
-                )
-            }
         }
     }
 }
@@ -205,7 +193,7 @@ private fun revealDots(data: Record): List<RevealDot> = data.places.entries
  * stamp itself in the ink of the current movement.
  */
 @Composable
-private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, state: PlayState, frame: State<Long>, modifier: Modifier = Modifier) {
+private fun ReplayCanvas(host: MapLibreHost, data: Record, trails: ReplayTrails, state: PlayState, frame: State<Long>, modifier: Modifier = Modifier) {
     val cam by host.camera.collectAsState()
     val measurer = rememberTextMeasurer()
     val icons = remember { StampIcons() }

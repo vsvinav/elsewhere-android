@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.sp
 /** The web's `.btn`: display caps in an ink block with a 2dp border; `quiet` prints the same outline on bare stock. */
 @Composable
 fun InkButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, quiet: Boolean = false, enabled: Boolean = true, red: Boolean = false) {
-    val fill = when { !enabled -> Poster.Ink; red -> Poster.Red; quiet -> Poster.Stock; else -> Poster.Ink }
+    val fill = when { red -> Poster.Red; quiet -> Poster.Stock; else -> Poster.Ink }
     val edge = if (red) Poster.Red else Poster.Ink
     val color = if (quiet && !red) Poster.Ink else Poster.Stock
     Box(
