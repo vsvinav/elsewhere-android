@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -35,8 +36,11 @@ class ShellViewModel @Inject constructor(
     val refreshing: StateFlow<Boolean> = _refreshing
     val naming: StateFlow<Progress?> = lookups.progress
     /** The bar waits for the names too: derive finishes long before slow Places lookups do, and the user needs to see something is still happening. */
-    val ready: StateFlow<Ready?> = combine(readyState.ready, lookups.progress, ::shellReady)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, shellReady(readyState.ready.value, lookups.progress.value))
+    val ready: StateFlow<Ready?> = shellReady(readyState.ready.value, lookups.progress.value).let { initial ->
+        combine(readyState.ready, lookups.progress, ::Pair)
+            .runningFold(initial) { prev, (r, n) -> shellReady(r, n, prev) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, initial)
+    }
     val profile: StateFlow<Profile?> = repo.profile
     val counters: StateFlow<Counters> = settings.counters.stateIn(viewModelScope, SharingStarted.Eagerly, Counters())
 

@@ -13,6 +13,7 @@ data class Ready(val label: String, val pct: Int)
 private const val TRIPS = "Working out trips"
 private const val CITIES = "Finding cities"
 private const val PATHS = "Drawing paths"
+private const val NAMING = "Naming places"
 
 /** `RecordRepository.import()` reports 0..1: parsing until a half, then rows going into the database, then the cities pass. */
 fun importReady(progress: Float): Ready = when {
@@ -27,10 +28,14 @@ fun derivingReady(prev: Ready?): Ready = Ready(TRIPS, if (prev?.label == CITIES)
 /**
  * What the shell's bar shows: the local work while it is still going, then the Places lookups, so the
  * bar does not lift while names are still landing slowly. Short label so it fits one line on a narrow phone.
+ * `prev` is what the bar showed last: when a burst clears, the bar finishes on the names rather than
+ * bringing back a local stage that finished long ago, whose 100 would make it lift all over again.
  */
-fun shellReady(r: Ready?, n: Progress?): Ready? = when {
+fun shellReady(r: Ready?, n: Progress?, prev: Ready? = null): Ready? = when {
     r != null && r.pct < 100 -> r
-    n != null && n.total > 0 -> Ready("Naming places ${n.done}/${n.total}", n.done * 100 / n.total)
+    n != null && n.total > 0 -> Ready("$NAMING ${n.done}/${n.total}", n.done * 100 / n.total)
+    // The lookups report done-of-total before clearing, but a collector may only see the clear.
+    prev != null && prev.label.startsWith(NAMING) -> prev.label.substringAfterLast('/').let { t -> Ready("$NAMING $t/$t", 100) }
     else -> r
 }
 
