@@ -54,3 +54,21 @@ class PlaybackTest {
         assertEquals(10 * H + 1 + 3086.0 / 60, s.playhead, 2.0)
     }
 }
+
+class ChromeGateTest {
+    @Test fun `the chrome sees the clock at most four times a second but every other change at once`() {
+        val g = ChromeGate(250)
+        val s0 = PlayState(playhead = 0.0, playing = true)
+        assertTrue(g.pass(s0, 1000))
+        assertFalse(g.pass(s0.copy(playhead = 16.0, rate = 3700.0), 1016))
+        assertFalse(g.pass(s0.copy(playhead = 32.0), 1032))
+        assertTrue(g.pass(s0.copy(playhead = 250.0), 1250))
+        // A pause, a new speed or a lens is never held back, and it resets the clock's beat.
+        assertTrue(g.pass(s0.copy(playhead = 260.0, playing = false), 1260))
+        assertFalse(g.pass(s0.copy(playhead = 270.0, playing = false), 1270))
+        assertTrue(g.pass(s0.copy(playhead = 280.0, playing = false, speed = 2.0), 1280))
+        assertTrue(g.pass(s0.copy(playhead = 290.0, playing = false, speed = 2.0, lens = Lens.FLY), 1290))
+        assertTrue(g.pass(s0.copy(playhead = 300.0, playing = false, speed = 2.0, lens = Lens.FLY, follow = false), 1300))
+        assertFalse(g.pass(s0.copy(playhead = 310.0, playing = false, speed = 2.0, lens = Lens.FLY, follow = false), 1310))
+    }
+}

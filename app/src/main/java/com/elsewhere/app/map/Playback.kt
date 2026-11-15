@@ -45,3 +45,20 @@ fun tickPlayback(data: Record, s: PlayState, dt: Double): PlayState {
     val shown = s.rate + (rate - s.rate) * min(1.0, step / 0.8)
     return s.copy(playhead = next, rate = shown)
 }
+
+/**
+ * Which states the chrome under the map needs to see: the canvas reads the clock every frame on its own, so the HUD
+ * and scrub only need the playhead a few times a second, while a pause, speed, lens or follow change shows at once.
+ */
+class ChromeGate(private val periodMs: Long = 250) {
+    private var shown: PlayState? = null
+    private var at = 0L
+
+    fun pass(s: PlayState, nowMs: Long): Boolean {
+        val prev = shown
+        val clockOnly = prev != null && prev.copy(playhead = s.playhead, rate = s.rate) == s
+        if (clockOnly && nowMs - at < periodMs) return false
+        shown = s; at = nowMs
+        return true
+    }
+}

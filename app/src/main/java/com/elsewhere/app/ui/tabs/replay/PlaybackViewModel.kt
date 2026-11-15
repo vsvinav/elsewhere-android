@@ -10,6 +10,7 @@ import com.elsewhere.app.data.Viewport
 import com.elsewhere.app.ingest.CostMeter
 import com.elsewhere.app.map.Basemap
 import com.elsewhere.app.map.Basemaps
+import com.elsewhere.app.map.ChromeGate
 import com.elsewhere.app.map.PlayState
 import com.elsewhere.app.map.ReplayTrails
 import com.elsewhere.app.map.tickPlayback
@@ -20,6 +21,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -46,6 +48,11 @@ class PlaybackViewModel @Inject constructor(range: RangeStore, maps: MapsSetting
         .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val state = MutableStateFlow(PlayState(playhead = Double.NaN, playing = false))
+
+    private val gate = ChromeGate()
+    /** The state as the chrome sees it: the clock at most four times a second, everything else at once. */
+    val chrome: StateFlow<PlayState> = state.filter { gate.pass(it, System.nanoTime() / 1_000_000) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), state.value)
     private var shownOnce = false
 
     init {
