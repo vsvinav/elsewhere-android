@@ -3,7 +3,11 @@ package com.elsewhere.app.ui.tabs.facts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.analytics.Fact
+import com.elsewhere.app.analytics.HubFigures
 import com.elsewhere.app.analytics.Kind
+import com.elsewhere.app.analytics.Passport
+import com.elsewhere.app.analytics.hubFigures
+import com.elsewhere.app.analytics.passport
 import com.elsewhere.app.analytics.facts
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.data.Profile
@@ -24,14 +28,9 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 val KIND_LABEL = mapOf(Kind.EXPLORED to "Explored", Kind.RECORD to "Record", Kind.SCALE to "Scale", Kind.HABIT to "Habit")
-
-/** The card gets its own short facts; the list never repeats them. A thin record falls back to sharing. */
-fun splitFacts(all: List<Fact>): Pair<List<Fact>, List<Fact>> {
-    val cards = all.filter { it.card }
-    return if (cards.size >= 2) cards to all.filter { !it.card } else all to all
-}
 
 /** Deterministic shuffle within each kind, so a reshuffle keeps the explored → habit arc. */
 fun arrange(list: List<Fact>, seed: Int): List<Fact> {
@@ -45,9 +44,12 @@ fun arrange(list: List<Fact>, seed: Int): List<Fact> {
     }
 }
 
-data class FactsUi(val all: List<Fact>, val cards: List<Fact>, val rest: List<Fact>, val units: Units, val year: Int, val raw: Record? = null, val today: String? = null) {
-    val kinds: List<Kind> get() = Kind.entries.filter { k -> rest.any { it.kind == k } }
-    fun count(k: Kind) = rest.count { it.kind == k }
+/** Everything the Facts tab prints. `hub` and `passport` are built once per record here, never on a swipe. */
+data class FactsUi(val all: List<Fact>, val units: Units, val year: Int, val raw: Record? = null, val today: String? = null, val hub: HubFigures? = null, val passport: Passport? = null) {
+    val kinds: List<Kind> get() = Kind.entries.filter { k -> all.any { it.kind == k } }
+    fun count(k: Kind) = all.count { it.kind == k }
+    /** Days the record spans, for the deck's lede. */
+    val days: Int get() = raw?.let { ((it.meta.range.last - it.meta.range.first) / 86400.0).roundToInt().coerceAtLeast(1) } ?: 0
 }
 
 /** The thirty most visited places, the ones the facts are likeliest to name. */
@@ -56,8 +58,7 @@ fun busiest(places: Map<String, Place>, n: Int = 30): List<String> = places.entr
 fun factsUi(data: Record, raw: Record, profile: Profile?, today: String? = null): FactsUi {
     val units = profile?.units ?: Units.KM
     val all = facts(data, units, raw)
-    val (cards, rest) = splitFacts(all)
-    return FactsUi(all, cards, rest, units, yearOf(data.meta.range.last), raw, today)
+    return FactsUi(all, units, yearOf(data.meta.range.last), raw, today, hubFigures(data), passport(raw))
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
