@@ -144,6 +144,18 @@ class RecordRepositoryTest {
         assertEquals(1_800_003_600L, after.meta.range.last)
     }
 
+    @Test fun `device rows alone make a record, with no export ever imported`() = runTest {
+        assertFalse(repo.hasImport.first())
+        repo.insertDevice(listOf(deviceVisit(1_800_000_000L), deviceVisit(1_800_100_000L)), emptyList(), emptyList())
+        assertTrue(repo.hasImport.first { it })
+        repo.saveProfile(profile(boston))
+        val rec = repo.record.first { it != null }!!
+        assertEquals(2, rec.visits.size)
+        assertEquals("", rec.meta.sourceFile)
+        assertEquals(0, rec.meta.importReport.segmentsTotal)
+        assertEquals(2, repo.deviceVisits.value)
+    }
+
     @Test fun `reset clears everything`() = runTest {
         repo.import({ open() }, "mini_timeline.json")
         repo.saveProfile(profile(boston))

@@ -28,7 +28,7 @@ import com.elsewhere.app.ui.world.ReadyBar
  * answers, `Key` to change just the key; `onClose` returns to the app when editing.
  */
 @Composable
-fun OnboardingGraph(startStep: Step, onClose: (() -> Unit)?, vm: OnboardViewModel = hiltViewModel()) {
+fun OnboardingGraph(startStep: Step, onClose: (() -> Unit)?, vm: OnboardViewModel = hiltViewModel(), onRecord: (() -> Unit)? = null) {
     val state by vm.state.collectAsStateWithLifecycle()
     val ready by vm.ready.collectAsStateWithLifecycle()
     val app = LocalContext.current.applicationContext
@@ -52,7 +52,7 @@ fun OnboardingGraph(startStep: Step, onClose: (() -> Unit)?, vm: OnboardViewMode
         label = "onboard",
     ) { step ->
         when (step) {
-            Step.Import -> ImportScreen(state.importing, state.importError, state.report) { uri, name ->
+            Step.Import -> ImportScreen(state.importing, state.importError, state.report, onRecord = onRecord) { uri, name ->
                 vm.import({ app.contentResolver.openInputStream(uri) ?: throw IllegalStateException("Couldn't open that file") }, name)
             }
             Step.Key -> KeyScreen(state, vm, onCancel = onClose)

@@ -28,7 +28,7 @@ import com.elsewhere.app.ui.world.figures.LocalLand
 @Composable
 fun Root(
     vm: RootViewModel = hiltViewModel(),
-    door: @Composable (startStep: Step, onClose: (() -> Unit)?) -> Unit = { s, close -> OnboardingGraph(s, close) },
+    door: @Composable (startStep: Step, onClose: (() -> Unit)?, onRecord: () -> Unit) -> Unit = { s, close, r -> OnboardingGraph(s, close, onRecord = r) },
     app: @Composable (onChangeAnswers: () -> Unit, onMapsKey: () -> Unit, onRecord: () -> Unit) -> Unit = { a, k, r -> AppScaffold(a, k, r) },
     gate: @Composable (ready: Ready?) -> Unit = { r -> KeyGate(ready = r) },
     recordScreen: @Composable (onClose: () -> Unit) -> Unit = { RecordRoute(it) },
@@ -45,9 +45,9 @@ fun Root(
     CompositionLocalProvider(LocalLand provides land) {
         when {
             !ready || gated == null -> Box(Modifier.fillMaxSize().background(Poster.Stock))
-            needsDoor -> door(Step.Import, null)
-            editing != null -> door(editing!!) { editing = null }
             recording -> recordScreen { recording = false }
+            needsDoor -> door(Step.Import, null) { recording = true }
+            editing != null -> door(editing!!, { editing = null }) { recording = true }
             // The web shows KeyGate once there is a profile and the key is unproven; it lifts itself when the settings change.
             gated == true -> gate(readyBar)
             else -> app({ editing = Step.Name }, { editing = Step.Key }, { recording = true })

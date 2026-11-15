@@ -82,8 +82,9 @@ class RecordRepository @Inject constructor(
         .onEach { profileRead.value = true }
         .stateIn(scope, SharingStarted.Eagerly, null)
 
+    /** True once there is anything to derive from: an export, or stays the phone recorded itself. */
     override val hasImport: StateFlow<Boolean> = importVersion
-        .map { db.importMeta().get() != null }
+        .map { db.importMeta().get() != null || db.visits().countDevice() > 0 }
         .onEach { importRead.value = true }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
@@ -121,9 +122,10 @@ class RecordRepository @Inject constructor(
     }
 
     private suspend fun build(profile: Profile, key: String): Record? {
-        val meta = db.importMeta().get() ?: return null
         val visits = db.visits().all()
         deviceCount.value = visits.count { it.source == SOURCE_DEVICE }
+        // No export yet: the phone's own rows stand in for one.
+        val meta = db.importMeta().get() ?: if (deviceCount.value > 0) ImportMetaEntity(sourceFile = "", sourceSha256 = "", builtAt = 0L, segmentsTotal = 0, parsed = 0, skippedJson = "{}") else return null
         val parsed = Parsed(
             visits = visits.map { PVisit(it.id, it.start, it.end, it.tz, it.placeId, it.lat, it.lng, it.type, it.p, it.lvl, it.city, it.cc, it.dist) },
             activities = db.activities().all().map { PActivity(it.id, it.start, it.end, it.tz, it.sLat, it.sLng, it.eLat, it.eLng, it.m, it.mode, it.p, it.eCity) },
