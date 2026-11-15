@@ -48,8 +48,10 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
     private var sizePx = IntSize.Zero
     private var density = 1f
     private var pendingFit: (() -> Unit)? = null
+    private val watch = MoveWatch()
 
     override fun moveTo(cam: Cam, animateMs: Int) {
+        watch.wrote(cam)
         if (animateMs <= 0) { state.position = cam.toLibre(); _camera.value = cam }
         else scope.launch { state.animateTo(cam.toLibre(), animateMs.milliseconds) }
     }
@@ -69,21 +71,17 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
     override fun Content(modifier: Modifier, overlays: @Composable () -> Unit) {
         density = LocalDensity.current.density
         LaunchedEffect(Unit) {
-            // The library exposes no "is moving" flag: a camera change after a quiet spell starts a move (a drag
-            // when the reason is a gesture), and a quiet spell after changes ends it.
-            var settled = true
+            // The library exposes no "is moving" flag: the watch tells a gesture's camera from our own writes, and a
+            // quiet spell after a gesture ends it.
             val positions = snapshotFlow { state.position }
             launch {
                 positions.collect { p ->
                     val prev = _camera.value; val cam = p.toCam()
                     _camera.value = cam
-                    if (cam == prev) return@collect
-                    if (settled) { settled = false; if (state.moveReason == CameraMoveReason.GESTURE) _events.tryEmit(MapEvent.DragStart) }
-                    _events.tryEmit(MapEvent.Move)
-                    if (cam.zoom != prev.zoom) _events.tryEmit(MapEvent.Zoom)
+                    for (e in watch.saw(cam, prev, state.moveReason == CameraMoveReason.GESTURE)) _events.tryEmit(e)
                 }
             }
-            launch { positions.debounce(IDLE_MS).collect { if (!settled) { settled = true; _events.tryEmit(MapEvent.Idle) } } }
+            launch { positions.debounce(IDLE_MS).collect { watch.idle()?.let { _events.tryEmit(it) } } }
         }
 
         Box(modifier.background(Poster.Stock).onSizeChanged { sizePx = it; pendingFit?.invoke(); pendingFit = null }) {

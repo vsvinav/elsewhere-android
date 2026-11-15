@@ -62,10 +62,12 @@ class GoogleMapHost(
     override val taps: SharedFlow<Tap> = _taps.asSharedFlow()
 
     private var loaded by mutableStateOf(false)
+    private val watch = MoveWatch()
     private var pendingFit: (() -> Unit)? = null
     private var failed = false
 
     override fun moveTo(cam: Cam, animateMs: Int) {
+        watch.wrote(cam)
         if (animateMs <= 0 || !loaded) { state.position = cam.toGoogle(); _camera.value = cam }
         else scope.launch { state.animate(CameraUpdateFactory.newCameraPosition(cam.toGoogle()), animateMs) }
     }
@@ -108,20 +110,16 @@ class GoogleMapHost(
         }
 
         LaunchedEffect(Unit) {
+            // A follow-cam keeps the map moving, so `isMoving` alone never flips for a drag: the watch judges each
+            // camera change by its reason against what we wrote, and `isMoving` falling marks the idle.
             launch {
                 snapshotFlow { state.position }.collect { p ->
                     val prev = _camera.value; val cam = p.toCam()
                     _camera.value = cam
-                    if (cam != prev) _events.tryEmit(MapEvent.Move)
-                    if (cam.zoom != prev.zoom) _events.tryEmit(MapEvent.Zoom)
+                    for (e in watch.saw(cam, prev, state.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE)) _events.tryEmit(e)
                 }
             }
-            launch {
-                snapshotFlow { state.isMoving }.collect { moving ->
-                    if (!moving) _events.tryEmit(MapEvent.Idle)
-                    else if (state.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE) _events.tryEmit(MapEvent.DragStart)
-                }
-            }
+            launch { snapshotFlow { state.isMoving }.collect { moving -> if (!moving) watch.idle()?.let { _events.tryEmit(it) } } }
         }
 
         Box(modifier.background(Poster.Stock)) {

@@ -6,6 +6,7 @@ import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.exp
 import kotlin.math.ln
@@ -27,6 +28,44 @@ sealed interface MapEvent {
     data object DragStart : MapEvent
     data object Idle : MapEvent
 }
+
+/**
+ * Tells a hand on the map from the camera the app writes itself. A follow-cam writes every frame, so neither
+ * "the camera changed" nor "the map went quiet" can mean a drag on its own: a drag is a gesture-reasoned change that
+ * is not what we last wrote, reported once until a programmatic move or an idle spell ends it.
+ */
+class MoveWatch {
+    private var written: Cam? = null
+    private var settled = true
+    private var inGesture = false
+
+    fun wrote(cam: Cam) { written = cam }
+
+    /** Events for a camera the SDK reports, given what it showed before and whether the SDK blames a gesture. */
+    fun saw(cam: Cam, prev: Cam, gesture: Boolean): List<MapEvent> {
+        if (cam == prev) return emptyList()
+        val out = ArrayList<MapEvent>(3)
+        val ours = written?.let { cam.near(it) } == true
+        if (ours) written = null
+        if (ours || !gesture) inGesture = false
+        else {
+            settled = false
+            if (!inGesture) { inGesture = true; out.add(MapEvent.DragStart) }
+        }
+        out.add(MapEvent.Move)
+        if (cam.zoom != prev.zoom) out.add(MapEvent.Zoom)
+        return out
+    }
+
+    /** The quiet spell: Idle once per unsettled stretch. */
+    fun idle(): MapEvent? {
+        if (settled) return null
+        settled = true; inGesture = false
+        return MapEvent.Idle
+    }
+}
+
+private fun Cam.near(o: Cam) = abs(lat - o.lat) < 1e-7 && abs(lng - o.lng) < 1e-7 && abs(zoom - o.zoom) < 1e-3 && abs(bearing - o.bearing) < 1e-3
 
 /** A tap on the bare map, in degrees; overlays decide what it hit. */
 data class Tap(val lat: Double, val lng: Double)
