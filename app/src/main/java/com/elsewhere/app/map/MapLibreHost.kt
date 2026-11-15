@@ -24,7 +24,6 @@ import java.security.MessageDigest
 import com.elsewhere.app.data.Viewport
 import com.elsewhere.app.ui.world.PosterType
 import java.io.File
-import androidx.compose.ui.unit.IntSize
 import com.elsewhere.app.ui.world.Poster
 import dev.sargunv.maplibrecompose.compose.CameraState
 import dev.sargunv.maplibrecompose.compose.ClickResult
@@ -82,20 +81,17 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
     /** What the camera shows once it has settled; null before the map has laid out. */
     val viewport: StateFlow<Viewport?> = _viewport.asStateFlow()
 
-    private var sizePx = IntSize.Zero
     private var density = 1f
-    private var pendingFit: (() -> Unit)? = null
+    private val framer = Framer { cam, ms -> moveTo(cam, ms) }
 
     fun moveTo(cam: Cam, animateMs: Int = 0) {
         if (animateMs <= 0) { state.position = cam.toLibre(); _camera.value = cam }
+        // animateTo waits for the map to exist and cancels any move still running, so it always lands.
         else scope.launch { state.animateTo(cam.toLibre(), animateMs.milliseconds) }
     }
 
     /** maplibre-compose 0.5.0 has no fitBounds, so the frame is solved in Mercator once the view has a size. */
-    fun fit(bounds: Bounds, paddingPx: Int) {
-        val go = { moveTo(camForBounds(bounds, sizePx.width, sizePx.height, paddingPx)) }
-        if (sizePx != IntSize.Zero) go() else pendingFit = go
-    }
+    fun fit(bounds: Bounds, paddingPx: Int) = framer.fit(bounds, paddingPx)
 
     /** The library answers in dp and throws before the map exists, so scale here and treat "no map yet" as null. */
     fun project(lat: Double, lng: Double): Offset? =
@@ -135,7 +131,7 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
             launch { positions.debounce(IDLE_MS).collect { if (!settled) { settled = true; _events.tryEmit(MapEvent.Idle) }; _viewport.value = visible() } }
         }
 
-        Box(modifier.background(Poster.Stock).onSizeChanged { sizePx = it; pendingFit?.invoke(); pendingFit = null }) {
+        Box(modifier.background(Poster.Stock).onSizeChanged { framer.size = it }) {
             MaplibreMap(
                 modifier = Modifier.fillMaxSize(),
                 styleUri = styleUri,

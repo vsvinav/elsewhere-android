@@ -11,6 +11,12 @@ class BoundsTest {
         assertEquals(0.0, cam.lat, 0.01); assertEquals(0.0, cam.lng, 1e-9)
     }
 
+    @Test fun `ninety degrees of longitude in 1024px is zoom 4, centred`() {
+        val cam = camForBounds(Bounds(-1.0, -45.0, 1.0, 45.0), 1024, 1024, 0)
+        assertEquals(4f, cam.zoom, 0.001f)
+        assertEquals(0.0, cam.lng, 1e-9); assertEquals(0.0, cam.lat, 1e-9)
+    }
+
     @Test fun `each doubling of the viewport adds a level`() {
         val b = Bounds(37.0, -123.0, 38.0, -122.0)
         val z1 = camForBounds(b, 500, 500, 0).zoom
