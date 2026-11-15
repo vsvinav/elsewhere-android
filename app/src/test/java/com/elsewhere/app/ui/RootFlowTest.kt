@@ -47,7 +47,7 @@ class RootFlowTest {
         val onboard = OnboardViewModel(store, maps, KeyVerifier(maps, Fakes.Checker()), Fakes.Namer(), Fakes.Geo())
         rule.setContent {
             val root = remember { RootViewModel(store, Fakes.Land, maps) }
-            val shell = remember { ShellViewModel(store, maps, Fakes.lookups(maps, CoroutineScope(Dispatchers.Main))) }
+            val shell = remember { ShellViewModel(store, Fakes.Source(record), maps, Fakes.lookups(maps, CoroutineScope(Dispatchers.Main))) }
             val range = remember { RangeViewModel(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main))) }
             ElsewhereTheme {
                 Root(

@@ -24,6 +24,7 @@ import java.time.LocalDate
 class RangeViewModelTest {
     private class Fake(initial: Record?) : RecordSource {
         override val record: StateFlow<Record?> = MutableStateFlow(initial)
+        override suspend fun refresh() {}
     }
 
     private val dispatcher = StandardTestDispatcher()

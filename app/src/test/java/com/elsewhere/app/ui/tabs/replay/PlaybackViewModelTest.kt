@@ -29,7 +29,7 @@ import com.elsewhere.app.ui.tabs.map.MapViewModelTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackViewModelTest {
-    private class Source(rec: Record) : RecordSource { override val record: StateFlow<Record?> = MutableStateFlow(rec) }
+    private class Source(rec: Record) : RecordSource { override val record: StateFlow<Record?> = MutableStateFlow(rec); override suspend fun refresh() {} }
     private val maps = Fakes.Maps()
     private val tiles = MapViewModelTest.Tiles()
 

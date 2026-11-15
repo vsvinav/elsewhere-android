@@ -8,7 +8,11 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +69,7 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}) = when (t
  * The printed app: masthead on top, range bar and ticket strip below, one section in between.
  * `content` renders a tab; tests pass a stand-in so no section needs its own injected ViewModel.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppScaffold(
     onChangeAnswers: () -> Unit, onMapsKey: () -> Unit, onRecord: () -> Unit = {},
@@ -87,6 +92,7 @@ fun AppScaffold(
     val counters by shell.counters.collectAsStateWithLifecycle()
     val naming by shell.naming.collectAsStateWithLifecycle()
     val ready by shell.ready.collectAsStateWithLifecycle()
+    val refreshing by shell.refreshing.collectAsStateWithLifecycle()
     val range by rangeVm.range.collectAsStateWithLifecycle()
     val bounds by rangeVm.bounds.collectAsStateWithLifecycle()
     val years by rangeVm.years.collectAsStateWithLifecycle()
@@ -111,8 +117,15 @@ fun AppScaffold(
         },
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
-            NavHost(nav, startDestination = Tab.TOUR.route, Modifier.fillMaxSize()) {
-                for (t in Tab.entries) composable(t.route) { content(t, go) }
+            // One pull-to-refresh for every tab; it only takes the overscroll a scrolling child hands up, so the maps keep their pan.
+            val pull = rememberPullToRefreshState()
+            PullToRefreshBox(
+                isRefreshing = refreshing, onRefresh = shell::refresh, state = pull, modifier = Modifier.fillMaxSize(),
+                indicator = { PullToRefreshDefaults.Indicator(pull, refreshing, Modifier.align(Alignment.TopCenter), containerColor = Poster.Stock, color = Poster.Mustard) },
+            ) {
+                NavHost(nav, startDestination = Tab.TOUR.route, Modifier.fillMaxSize()) {
+                    for (t in Tab.entries) composable(t.route) { content(t, go) }
+                }
             }
             NamingStamp(naming, Modifier.align(Alignment.TopEnd).padding(12.dp))
         }

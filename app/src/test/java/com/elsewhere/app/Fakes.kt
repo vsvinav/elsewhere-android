@@ -71,6 +71,8 @@ object Fakes {
 
     class Source(initial: Record? = null) : RecordSource {
         override val record = MutableStateFlow(initial)
+        var refreshes = 0
+        override suspend fun refresh() { refreshes++ }
     }
 
     /** Place lookups that never go out: a key-less pool over an empty store. */
