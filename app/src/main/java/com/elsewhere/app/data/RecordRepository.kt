@@ -99,7 +99,15 @@ class RecordRepository @Inject constructor(
     suspend fun import(open: () -> InputStream, fileName: String, onProgress: (Float) -> Unit = {}): ImportReport {
         onProgress(0f)
         val digest = MessageDigest.getInstance("SHA-256")
-        val parsed = withContext(Dispatchers.IO) { DigestInputStream(open(), digest).use { parseTimeline(it) } }
+        val parsed = withContext(Dispatchers.IO) {
+            DigestInputStream(open(), digest).use {
+                val out = parseTimeline(it)
+                // The parser stops at the closing brace; hash whatever follows so the digest covers the whole file.
+                val buf = ByteArray(8192)
+                while (it.read(buf) != -1) { }
+                out
+            }
+        }
         val sha = digest.digest().joinToString("") { "%02x".format(it) }
         onProgress(0.5f)
 

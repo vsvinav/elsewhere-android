@@ -25,6 +25,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import java.security.MessageDigest
 import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
@@ -65,6 +66,14 @@ class RecordRepositoryTest {
         assertEquals(report.parsed, rec.meta.importReport.parsed)
         assertEquals("mini_timeline.json", rec.meta.sourceFile)
         assertEquals(64, rec.meta.sourceSha256.length)
+    }
+
+    @Test fun `sha256 covers the whole file, not just what the parser read`() = runTest {
+        repo.import({ open() }, "mini_timeline.json")
+        repo.saveProfile(profile(boston))
+        val rec = repo.record.first { it != null }!!
+        val expected = MessageDigest.getInstance("SHA-256").digest(open().use { it.readBytes() }).joinToString("") { "%02x".format(it) }
+        assertEquals(expected, rec.meta.sourceSha256)
     }
 
     @Test fun `changing the profile re-derives without re-import`() = runTest {

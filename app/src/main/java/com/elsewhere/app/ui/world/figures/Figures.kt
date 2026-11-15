@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -277,19 +278,19 @@ fun Globe(lat: Double, lng: Double, homeLat: Double, homeLng: Double, modifier: 
             pen = true
         }
     }
+    // Projecting every country outline is the expensive part; keep it until the view changes.
+    val paths = remember(lat, lng, homeLat, homeLng, land) {
+        val lp = land?.let { l -> Path().also { p -> for (r in l.rings) ring(p, r) } }
+        val arc = DoubleArray(66)
+        for (i in 0..32) { val (lo, la) = interpolate(homeLng, homeLat, lng, lat, i / 32.0); arc[i * 2] = lo; arc[i * 2 + 1] = la }
+        lp to Path().also { ring(it, arc) }
+    }
     Canvas(modifier.aspectRatio(1f)) {
         val u = size.width / 140f
         scale(u, u, pivot = Offset.Zero) {
             drawCircle(Poster.Ink, R, Offset(cx, cy))
-            if (land != null) {
-                val lp = Path()
-                for (r in land.rings) ring(lp, r)
-                drawPath(lp, Poster.Stock, alpha = 0.85f, style = Stroke(0.7f, join = StrokeJoin.Round))
-            }
-            val arc = DoubleArray(66)
-            for (i in 0..32) { val (lo, la) = interpolate(homeLng, homeLat, lng, lat, i / 32.0); arc[i * 2] = lo; arc[i * 2 + 1] = la }
-            val ap = Path(); ring(ap, arc)
-            drawPath(ap, Poster.Red, style = Stroke(2f))
+            paths.first?.let { drawPath(it, Poster.Stock, alpha = 0.85f, style = Stroke(0.7f, join = StrokeJoin.Round)) }
+            drawPath(paths.second, Poster.Red, style = Stroke(2f))
             val home = proj(homeLng, homeLat); val far = proj(lng, lat)
             drawCircle(Poster.Stock, 3f, Offset(home.first, home.second))
             drawCircle(Poster.Red, 4f, Offset(far.first, far.second))
