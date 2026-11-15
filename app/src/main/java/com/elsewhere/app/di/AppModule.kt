@@ -23,6 +23,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
+import com.elsewhere.app.data.GoogleTiles
+import com.elsewhere.app.data.TileService
 import com.elsewhere.app.ingest.AddressBook
 import com.elsewhere.app.ingest.CostMeter
 import com.elsewhere.app.ingest.EnrichmentStore
@@ -56,6 +58,7 @@ object AppModule {
     @Provides fun enrichmentStore(repo: RecordRepository): EnrichmentStore = repo
     @Provides fun geocoder(n: Nominatim): Geocoder = n
     @Provides fun placeNamer(e: Enricher): PlaceNamer = e
+    @Provides fun tileService(t: GoogleTiles): TileService = t
     @Provides fun landSource(loader: LandLoader): LandSource = loader
 
     @Provides fun visits(db: ElsewhereDb) = db.visits()

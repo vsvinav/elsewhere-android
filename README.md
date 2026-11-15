@@ -32,7 +32,7 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Timeline parser, analytics, local database | ✅ |
 | Shell: ticket strip, range bar, calendar, onboarding | ✅ |
 | Tour · Numbers · Facts · Stops · Dates | ✅ |
-| Map (Google Maps, OpenStreetMap fallback, clusters, search) | ✅ |
+| Map (Google map tiles, OpenStreetMap fallback, clusters, search) | ✅ |
 | Flights globe | ✅ |
 | Replay | 🔨 |
 | Place names and photos, share cards | ⏳ |
@@ -105,7 +105,7 @@ app/src/main/java/com/elsewhere/app/
 ├── ingest/     Timeline parser, derive (roles, places, days, trips), enrichment, cost meter
 ├── analytics/  range, tour, stats, facts, flights — pure Kotlin, ported 1:1 from the web app
 ├── data/       Room + DataStore, RecordRepository
-├── map/        MapHost (Google Maps / MapLibre), clustering, pins, replay camera
+├── map/        MapLibre host (Google tiles or free style), clustering, pins, replay camera
 ├── ui/world/   poster theme, fonts, Pass/Bill/Sticker/Stamp, figures
 ├── ui/shell/   masthead, ticket strip, range bar, calendar sheet
 ├── ui/tabs/    one package per tab

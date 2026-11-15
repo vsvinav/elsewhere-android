@@ -40,7 +40,7 @@ dependencies {
     implementation(libs.serialization.json); implementation(libs.coroutines.android)
     implementation(libs.retrofit); implementation(libs.retrofit.serialization); implementation(libs.okhttp)
     implementation(libs.coil.compose); implementation(libs.work.runtime)
-    implementation(libs.maps.compose); implementation(libs.play.maps); implementation(libs.maplibre.compose)
+    implementation(libs.maplibre.compose)
     testImplementation(libs.junit5.api); testImplementation(libs.junit5.params); testRuntimeOnly(libs.junit5.engine)
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.3")
     testImplementation(libs.coroutines.test); testImplementation(libs.okhttp.mockwebserver)

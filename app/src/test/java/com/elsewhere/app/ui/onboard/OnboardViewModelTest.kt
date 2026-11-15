@@ -160,17 +160,6 @@ class OnboardViewModelTest {
         assertEquals(Step.Done, vm.state.value.step)
     }
 
-    @Test fun `a new key clears Google's refusal, the same key keeps it`() = runTest(dispatcher) {
-        val (vm, _, maps) = imported()
-        maps.cur.value = Settings(mapsKey = "old", googleRejected = true, googleFailures = 2)
-        vm.saveKey("old", "map-1"); run()
-        assertEquals(true, maps.cur.value.googleRejected)
-        assertEquals(2, maps.cur.value.googleFailures)
-        vm.saveKey("new", ""); run()
-        assertEquals(false, maps.cur.value.googleRejected)
-        assertEquals(0, maps.cur.value.googleFailures)
-    }
-
     @Test fun `picking a home and printing saves one open-ended home from the record start`() = runTest(dispatcher) {
         val (vm, store, _) = imported()
         vm.skipKey(); vm.setLimitedAck(true); vm.acceptLimited(); run(); vm.next()

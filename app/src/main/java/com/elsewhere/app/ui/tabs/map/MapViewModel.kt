@@ -4,7 +4,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.analytics.Cat
 import com.elsewhere.app.data.MapsSettings
-import com.elsewhere.app.data.Settings
+import com.elsewhere.app.data.TileService
+import com.elsewhere.app.data.TileSession
+import com.elsewhere.app.data.TilesError
+import com.elsewhere.app.data.Viewport
+import com.elsewhere.app.data.rasterStyle
+import com.elsewhere.app.data.tileTemplate
+import com.elsewhere.app.ingest.CostMeter
+import com.elsewhere.app.ingest.Kind
+import com.elsewhere.app.map.Basemap
+import com.elsewhere.app.map.Provider
+import com.elsewhere.app.map.resolve
 import com.elsewhere.app.map.PinLayers
 import com.elsewhere.app.map.PinOpts
 import com.elsewhere.app.map.SizeBy
@@ -12,10 +22,17 @@ import com.elsewhere.app.ui.shell.RangeStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import java.io.IOException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -25,12 +42,52 @@ import javax.inject.Inject
 
 /**
  * The Map tab's state: the pins of the record in the current window, what the chips and search leave of them,
- * and the map settings a host needs, plus the one write a host makes: counting sessions where Google failed to load.
+ * and the base map: Google's tiles through one Map Tiles session per key (counted as one map load, as the
+ * web counts one Maps JS load) or the free style when there is no accepted key or Google refuses the session.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
-class MapViewModel @Inject constructor(range: RangeStore, private val maps: MapsSettings) : ViewModel() {
-    val settings: StateFlow<Settings?> = maps.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+class MapViewModel @Inject constructor(range: RangeStore, private val maps: MapsSettings, private val tiles: TileService, private val meter: CostMeter) : ViewModel() {
+    private val _tilesError = MutableStateFlow<String?>(null)
+    /** Google's own words when the tile session could not be opened; the screen says so once. */
+    val tilesError: StateFlow<String?> = _tilesError
+
+    private val copyright = MutableStateFlow<String?>(null)
+    private val viewports = MutableSharedFlow<Viewport>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    private val session: StateFlow<Pair<String, TileSession>?> = maps.settings
+        .map { s -> if (resolve(s) == Provider.GOOGLE) s.mapsKey else null }.distinctUntilChanged()
+        .mapLatest { key ->
+            if (key == null) return@mapLatest null
+            try {
+                val s = tiles.session(key)
+                _tilesError.value = null
+                meter.tally(Kind.MAPS)
+                key to s
+            } catch (e: TilesError) {
+                _tilesError.value = e.message; null
+            } catch (e: IOException) {
+                _tilesError.value = e.message ?: "No internet connection"; null
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val basemap: StateFlow<Basemap> = combine(session, copyright) { ks, c ->
+        ks?.let { (key, s) -> Basemap.Google(rasterStyle(tileTemplate(s, key)), c) } ?: Basemap.Free
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, Basemap.Free)
+
+    init {
+        // The attribution Google's terms want follows the camera, a second after it settles.
+        viewModelScope.launch {
+            viewports.debounce(1000).collect { vp ->
+                val (key, s) = session.value ?: return@collect
+                copyright.value = tiles.copyright(s, key, vp)
+            }
+        }
+    }
+
+    /** The camera came to rest showing `vp`. */
+    fun idle(vp: Viewport) { viewports.tryEmit(vp) }
 
     /** One pin cache per record; a range change swaps it, and the screen redraws without moving the camera. */
     val layers: StateFlow<PinLayers?> = range.filtered.mapLatest { it?.let(::PinLayers) }
@@ -44,19 +101,4 @@ class MapViewModel @Inject constructor(range: RangeStore, private val maps: Maps
     fun search(q: String) = opts.update { it.copy(query = q) }
     fun select(id: String?) = opts.update { it.copy(selected = id) }
     fun sizeBy(s: SizeBy) = opts.update { it.copy(sizeBy = s) }
-
-    /** One failed session could be the network; two on the same key and the key is taken as refused. */
-    fun googleFailed() {
-        viewModelScope.launch {
-            val s = maps.settings.first(); val n = s.googleFailures + 1
-            maps.saveSettings(s.copy(googleFailures = n, googleRejected = s.googleRejected || n >= REJECT_AFTER))
-        }
-    }
-
-    /** A session that loads wipes the slate, so "two failures" means two in a row, not two ever. */
-    fun googleLoaded() {
-        viewModelScope.launch { val s = maps.settings.first(); if (s.googleFailures != 0) maps.saveSettings(s.copy(googleFailures = 0)) }
-    }
-
-    private companion object { const val REJECT_AFTER = 2 }
 }

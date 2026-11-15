@@ -10,7 +10,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.remember
+import com.elsewhere.app.data.Viewport
+import com.elsewhere.app.ui.world.PosterType
+import java.io.File
 import androidx.compose.ui.unit.IntSize
 import com.elsewhere.app.ui.world.Poster
 import dev.sargunv.maplibrecompose.compose.CameraState
@@ -33,41 +42,64 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
+/** What the base map is drawn from: the free style's URL, or Google's raster tiles with the text their terms want shown. */
+sealed interface Basemap {
+    data object Free : Basemap
+    data class Google(val styleJson: String, val copyright: String?) : Basemap
+}
+
 /**
- * The free map: OpenFreeMap's vector tiles (OpenStreetMap data) through MapLibre, no key, no bill.
- * Their terms need the attribution kept on screen, so the ornament stays. Zooms convert to Google's convention.
+ * The map: MapLibre drawing either OpenFreeMap's vector tiles (OpenStreetMap data, no key, no bill) or Google's
+ * roadmap raster tiles through a Map Tiles session. Both providers' terms need attribution kept on screen, so the
+ * ornament stays and Google's copyright line prints beside it. Zooms convert to Google's convention.
  */
-class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val state: CameraState) : MapHost {
+class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val state: CameraState) {
     private val _camera = MutableStateFlow(initial)
-    override val camera: StateFlow<Cam> = _camera.asStateFlow()
+    val camera: StateFlow<Cam> = _camera.asStateFlow()
     private val _events = MutableSharedFlow<MapEvent>(extraBufferCapacity = 64)
-    override val events: SharedFlow<MapEvent> = _events.asSharedFlow()
+    val events: SharedFlow<MapEvent> = _events.asSharedFlow()
     private val _taps = MutableSharedFlow<Tap>(extraBufferCapacity = 8)
-    override val taps: SharedFlow<Tap> = _taps.asSharedFlow()
+    val taps: SharedFlow<Tap> = _taps.asSharedFlow()
+    private val _viewport = MutableStateFlow<Viewport?>(null)
+    /** What the camera shows once it has settled; null before the map has laid out. */
+    val viewport: StateFlow<Viewport?> = _viewport.asStateFlow()
 
     private var sizePx = IntSize.Zero
     private var density = 1f
     private var pendingFit: (() -> Unit)? = null
 
-    override fun moveTo(cam: Cam, animateMs: Int) {
+    fun moveTo(cam: Cam, animateMs: Int = 0) {
         if (animateMs <= 0) { state.position = cam.toLibre(); _camera.value = cam }
         else scope.launch { state.animateTo(cam.toLibre(), animateMs.milliseconds) }
     }
 
     /** maplibre-compose 0.5.0 has no fitBounds, so the frame is solved in Mercator once the view has a size. */
-    override fun fit(bounds: Bounds, paddingPx: Int) {
+    fun fit(bounds: Bounds, paddingPx: Int) {
         val go = { moveTo(camForBounds(bounds, sizePx.width, sizePx.height, paddingPx)) }
         if (sizePx != IntSize.Zero) go() else pendingFit = go
     }
 
     /** The library answers in dp and throws before the map exists, so scale here and treat "no map yet" as null. */
-    override fun project(lat: Double, lng: Double): Offset? =
+    fun project(lat: Double, lng: Double): Offset? =
         runCatching { state.screenLocationFromPosition(Position(lng, lat)) }.getOrNull()?.let { Offset(it.x.value * density, it.y.value * density) }
+
+    /** Where a point lands on screen, in px from [Content]'s top-left; null before the map has laid out. */
+    private fun visible(): Viewport? = runCatching { state.queryVisibleBoundingBox() }.getOrNull()?.let {
+        Viewport(_camera.value.zoom.toInt(), north = it.northeast.latitude, south = it.southwest.latitude, east = it.northeast.longitude, west = it.southwest.longitude)
+    }
 
     @OptIn(FlowPreview::class)
     @Composable
-    override fun Content(modifier: Modifier, overlays: @Composable () -> Unit) {
+    fun Content(modifier: Modifier, basemap: Basemap = Basemap.Free, overlays: @Composable () -> Unit) {
         density = LocalDensity.current.density
+        val context = LocalContext.current
+        // MapLibre loads styles by URI only, so Google's inline style is written to the cache dir and read back.
+        val styleUri = remember(basemap) {
+            when (basemap) {
+                Basemap.Free -> STYLE
+                is Basemap.Google -> File(context.cacheDir, "google-tiles.json").apply { writeText(basemap.styleJson) }.toURI().toString()
+            }
+        }
         LaunchedEffect(Unit) {
             // The library exposes no "is moving" flag: a camera change after a quiet spell starts a move (a drag
             // when the reason is a gesture), and a quiet spell after changes ends it.
@@ -83,13 +115,13 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
                     if (cam.zoom != prev.zoom) _events.tryEmit(MapEvent.Zoom)
                 }
             }
-            launch { positions.debounce(IDLE_MS).collect { if (!settled) { settled = true; _events.tryEmit(MapEvent.Idle) } } }
+            launch { positions.debounce(IDLE_MS).collect { if (!settled) { settled = true; _events.tryEmit(MapEvent.Idle) }; _viewport.value = visible() } }
         }
 
         Box(modifier.background(Poster.Stock).onSizeChanged { sizePx = it; pendingFit?.invoke(); pendingFit = null }) {
             MaplibreMap(
                 modifier = Modifier.fillMaxSize(),
-                styleUri = STYLE,
+                styleUri = styleUri,
                 pitchRange = 0f..0f,
                 gestureSettings = GestureSettings(isTiltGesturesEnabled = false),
                 ornamentSettings = OrnamentSettings(
@@ -101,6 +133,13 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
                 onMapClick = { p, _ -> _taps.tryEmit(Tap(p.latitude, p.longitude)); ClickResult.Pass },
             )
             overlays()
+            if (basemap is Basemap.Google && basemap.copyright != null) {
+                Text(
+                    basemap.copyright, color = Poster.Ink, maxLines = 1,
+                    style = PosterType.Label.copy(fontSize = 9.sp, letterSpacing = 0.sp),
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 96.dp, bottom = 6.dp, end = 96.dp).background(Poster.Stock.copy(alpha = 0.8f)).padding(horizontal = 4.dp, vertical = 1.dp),
+                )
+            }
         }
     }
 

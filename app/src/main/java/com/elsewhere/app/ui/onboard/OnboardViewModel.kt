@@ -191,10 +191,7 @@ class OnboardViewModel @Inject constructor(
         if (_state.value.keyPhase == KeyPhase.Checking) return
         _state.update { it.copy(key = k, mapId = mapId.trim(), keyPhase = KeyPhase.Checking, keyReport = null, limitedAck = false) }
         viewModelScope.launch {
-            val s = maps.settings.first()
-            // A new key gets a fresh chance at Google; the rejection only ever applied to the old one.
-            val same = k == s.mapsKey
-            maps.saveSettings(s.copy(mapsKey = k, mapId = mapId.trim(), googleRejected = s.googleRejected && same, googleFailures = if (same) s.googleFailures else 0))
+            maps.saveSettings(maps.settings.first().copy(mapsKey = k, mapId = mapId.trim()))
             val report = checker.run(k)
             val now = maps.settings.first()
             maps.saveSettings(now.copy(keyPlaces = report.places == Probe.Ok, keyTiles = report.tiles == Probe.Ok, keyCheckedAt = System.currentTimeMillis()))

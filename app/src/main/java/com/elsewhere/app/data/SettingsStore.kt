@@ -22,9 +22,6 @@ import javax.inject.Singleton
 
 data class Settings(
     val mapsKey: String = "", val mapId: String = "", val mapProvider: MapProvider = MapProvider.AUTO,
-    val googleRejected: Boolean = false,
-    /** Sessions in which Google failed to come up on this key; two in a row persist `googleRejected`. */
-    val googleFailures: Int = 0,
     /** What the last key check found, and when (epoch ms; 0 = never checked). */
     val keyPlaces: Boolean = false, val keyTiles: Boolean = false, val keyCheckedAt: Long = 0,
     /** The user has read and accepted "limited maps": free tiles, no place names or photos. */
@@ -41,8 +38,6 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         val mapsKey = stringPreferencesKey("mapsKey")
         val mapId = stringPreferencesKey("mapId")
         val mapProvider = stringPreferencesKey("mapProvider")
-        val googleRejected = booleanPreferencesKey("googleRejected")
-        val googleFailures = intPreferencesKey("googleFailures")
         val keyPlaces = booleanPreferencesKey("keyPlaces")
         val keyTiles = booleanPreferencesKey("keyTiles")
         val keyCheckedAt = longPreferencesKey("keyCheckedAt")
@@ -64,8 +59,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
     override val settings: Flow<Settings> = store.data.map { p ->
         Settings(
             mapsKey = p[K.mapsKey] ?: "", mapId = p[K.mapId] ?: "",
-            mapProvider = p[K.mapProvider]?.let { runCatching { MapProvider.valueOf(it) }.getOrNull() } ?: MapProvider.AUTO,
-            googleRejected = p[K.googleRejected] ?: false, googleFailures = p[K.googleFailures] ?: 0,
+            mapProvider = MapProvider.parse(p[K.mapProvider]),
             keyPlaces = p[K.keyPlaces] ?: false, keyTiles = p[K.keyTiles] ?: false, keyCheckedAt = p[K.keyCheckedAt] ?: 0,
             limitedAccepted = p[K.limitedAccepted] ?: false,
         )
@@ -82,7 +76,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
     override suspend fun saveSettings(s: Settings) {
         store.edit {
             it[K.mapsKey] = s.mapsKey; it[K.mapId] = s.mapId
-            it[K.mapProvider] = s.mapProvider.name; it[K.googleRejected] = s.googleRejected; it[K.googleFailures] = s.googleFailures
+            it[K.mapProvider] = s.mapProvider.name
             it[K.keyPlaces] = s.keyPlaces; it[K.keyTiles] = s.keyTiles; it[K.keyCheckedAt] = s.keyCheckedAt; it[K.limitedAccepted] = s.limitedAccepted
         }
     }
