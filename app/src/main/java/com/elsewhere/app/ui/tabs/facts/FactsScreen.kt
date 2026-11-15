@@ -65,6 +65,12 @@ import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.RecordStamp
 import com.elsewhere.app.ui.world.figures.Fig
+import com.elsewhere.app.analytics.HighlightState
+import com.elsewhere.app.analytics.highlightState
+import com.elsewhere.app.analytics.localToday
+import com.elsewhere.app.ui.shell.RangeViewModel
+import com.elsewhere.app.ui.tabs.highlights.HighlightCard
+import com.elsewhere.app.ui.tabs.highlights.OpenDoor
 import kotlinx.coroutines.launch
 
 // Port of web/src/tabs/Facts/Facts.tsx: one fact on a card up top, the rest printed as passes.
@@ -73,18 +79,18 @@ import kotlinx.coroutines.launch
 private fun wide(f: Figure?) = f is Figure.Scale || f is Figure.Beds
 
 @Composable
-fun FactsTab(vm: FactsViewModel = hiltViewModel()) {
+fun FactsTab(vm: FactsViewModel = hiltViewModel(), range: RangeViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    ui?.let { FactsScreen(it) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
+    ui?.let { FactsScreen(it, onOpen = { r, _, _ -> range.setRange(r) }) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
 }
 
 @Composable
-fun FactsScreen(ui: FactsUi, modifier: Modifier = Modifier, scroll: Boolean = true) {
+fun FactsScreen(ui: FactsUi, modifier: Modifier = Modifier, scroll: Boolean = true, onOpen: OpenDoor = { _, _, _ -> }) {
     var seed by rememberSaveable { mutableIntStateOf(0) }
     var only by rememberSaveable { mutableStateOf<Kind?>(null) }
     val list = arrange(ui.rest, seed).filter { only == null || it.kind == only }
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier)) {
-        FactsHero(ui, only, onOnly = { only = if (only == it) null else it }, onShuffle = { seed = (System.currentTimeMillis() and 0xffff).toInt() })
+        FactsHero(ui, only, onOnly = { only = if (only == it) null else it }, onShuffle = { seed = (System.currentTimeMillis() and 0xffff).toInt() }, onOpen = onOpen)
         Column(Modifier.padding(horizontal = 12.dp, vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             list.forEachIndexed { i, f -> FactPass(f, i + 1, list.size) }
         }
@@ -93,11 +99,14 @@ fun FactsScreen(ui: FactsUi, modifier: Modifier = Modifier, scroll: Boolean = tr
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
-internal fun FactsHero(ui: FactsUi, only: Kind?, onOnly: (Kind) -> Unit, onShuffle: () -> Unit) {
+internal fun FactsHero(ui: FactsUi, only: Kind?, onOnly: (Kind) -> Unit, onShuffle: () -> Unit, onOpen: OpenDoor = { _, _, _ -> }) {
     val cards = ui.cards
-    val pager = rememberPagerState(pageCount = { cards.size })
+    // "On this day" rides in front of the fact cards when the record has one (the web's HighlightSlot).
+    val highlight = ui.raw?.takeIf { highlightState(it, ui.today ?: localToday()) != HighlightState.None }
+    val extra = if (highlight != null) 1 else 0
+    val pager = rememberPagerState(pageCount = { cards.size + extra })
     val scope = rememberCoroutineScope()
-    LaunchedEffect(cards) { if (pager.currentPage >= cards.size) pager.scrollToPage(0) }
+    LaunchedEffect(cards) { if (pager.currentPage >= cards.size + extra) pager.scrollToPage(0) }
     Bill(first = true) {
         Box(Modifier.fillMaxWidth()) {
             Column {
@@ -111,18 +120,21 @@ internal fun FactsHero(ui: FactsUi, only: Kind?, onOnly: (Kind) -> Unit, onShuff
             if (ui.all.isNotEmpty()) "${ui.rest.size} things your record says about you, read sideways. Firsts are judged over the whole record, so a January trip stays new when you cut the range down."
             else "Nothing to say yet. Widen the range, or wait for the record to fill in.",
         )
-        if (cards.isNotEmpty()) {
+        val n = cards.size + extra
+        if (n > 0) {
             Spacer(Modifier.height(30.dp))
-            val star = cards[pager.currentPage.coerceIn(0, cards.size - 1)]
-            Field(if (star.card) "Side note" else KIND_LABEL.getValue(star.kind), "${pager.currentPage + 1} of ${cards.size}")
+            val cur = pager.currentPage.coerceIn(0, n - 1)
+            val star = cards.getOrNull(cur - extra)
+            Field(if (star == null) "On this day" else if (star.card) "Side note" else KIND_LABEL.getValue(star.kind), "${cur + 1} of $n")
             Spacer(Modifier.height(18.dp))
             HorizontalPager(pager, Modifier.fillMaxWidth(), pageSpacing = 16.dp, verticalAlignment = Alignment.Top) { page ->
-                FlipCard(cards[page], Modifier.padding(end = 8.dp, bottom = 8.dp))
+                if (page < extra) HighlightCard(highlight!!, onOpen, Modifier.padding(end = 8.dp, bottom = 8.dp), today = ui.today)
+                else FlipCard(cards[page - extra], Modifier.padding(end = 8.dp, bottom = 8.dp))
             }
             Spacer(Modifier.height(18.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                InkButton("←", { scope.launch { pager.animateScrollToPage((pager.currentPage + cards.size - 1) % cards.size) } }, Modifier.semantics { contentDescription = "Previous fact" }, quiet = true)
-                InkButton("→", { scope.launch { pager.animateScrollToPage((pager.currentPage + 1) % cards.size) } }, Modifier.semantics { contentDescription = "Next fact" }, quiet = true)
+                InkButton("←", { scope.launch { pager.animateScrollToPage((pager.currentPage + n - 1) % n) } }, Modifier.semantics { contentDescription = "Previous fact" }, quiet = true)
+                InkButton("→", { scope.launch { pager.animateScrollToPage((pager.currentPage + 1) % n) } }, Modifier.semantics { contentDescription = "Next fact" }, quiet = true)
                 if (ui.all.size > 1) InkButton("Shuffle", onShuffle, quiet = true)
             }
         }

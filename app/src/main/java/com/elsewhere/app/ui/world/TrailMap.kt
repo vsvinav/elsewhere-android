@@ -78,12 +78,15 @@ fun trailLayout(data: Record, stops: List<Stop>, land: FeatureCollection?, heigh
     val raw = data.strokes.map { it.pts }.filter { it.size > 1 }
     // One arc per pair of airports: a return leg over the same arc would fill in the other's dashes.
     val fl = oneArcPerRoute(data.activities.filter { it.mode == "FLYING" && it.m > 80_000 })
-    val n = raw.sumOf { it.size } + fl.size * 2
+    // A span with no strokes or flights (one day in one city) is framed on its stops alone, with a little air.
+    val anchors = if (raw.isEmpty() && fl.isEmpty()) stops else emptyList()
+    val n = raw.sumOf { it.size } + fl.size * 2 + anchors.size * 2
     if (n == 0) return TrailLayout()
     val lngs = DoubleArray(n); val lats = DoubleArray(n)
     var i = 0
     for (l in raw) for (p in l) { lngs[i] = p.lng; lats[i] = p.lat; i++ }
     for (a in fl) { lngs[i] = a.sLng; lats[i] = a.sLat; i++; lngs[i] = a.eLng; lats[i] = a.eLat; i++ }
+    for (st in anchors) { lngs[i] = st.lng - 0.4; lats[i] = st.lat - 0.4; i++; lngs[i] = st.lng + 0.4; lats[i] = st.lat + 0.4; i++ }
     val sortedLats = lats.sortedArray()
     val k = cos(quantile(sortedLats, 0.5) * PI / 180)
     val xs = DoubleArray(n) { lngs[it] * k }.sortedArray()

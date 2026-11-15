@@ -18,7 +18,8 @@ import org.junit.Test
 
 class FactsSnapshot {
     @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, theme = "android:Theme.Material.Light.NoActionBar")
-    private val ui = factsUi(SampleRecord.record, SampleRecord.record, SampleRecord.profile)
+    // A fixed today, so the "On this day" page in front of the fact cards stays the same print.
+    private val ui = factsUi(SampleRecord.record, SampleRecord.record, SampleRecord.profile, today = "2025-05-20")
 
     @Test fun hero() = paparazzi.snapshot {
         ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { FactsHero(ui, null, {}, {}) } }
