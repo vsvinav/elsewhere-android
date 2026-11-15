@@ -45,6 +45,7 @@ import com.elsewhere.app.ui.world.PlaceSticker
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.RecordStamp
+import com.elsewhere.app.ui.shell.YearWheel
 import com.elsewhere.app.ui.world.SetlistRow
 import com.elsewhere.app.ui.world.Share
 import com.elsewhere.app.ui.world.Tone
@@ -67,16 +68,20 @@ import kotlin.math.roundToInt
 @Composable
 fun TourTab(onGo: (Tab) -> Unit, onRecord: () -> Unit = {}, vm: TourViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    ui?.let { TourScreen(it, onGo, onSeen = vm::seen, onRecord = onRecord) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
+    val window by vm.window.collectAsStateWithLifecycle()
+    ui?.let { TourScreen(it, onGo, onSeen = vm::seen, onRecord = onRecord, window = window, onRange = vm::setRange) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
 }
 
 private fun lensColor(mode: String) = when (lensOf(mode)) { Lens.FLY -> Poster.Red; Lens.FOOT -> Poster.Mustard; else -> Poster.Ink }
 
 /** `scroll = false` lays the whole poster out at its full height, for snapshots. */
 @Composable
-fun TourScreen(ui: TourUi, onGo: (Tab) -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true, onSeen: (String) -> Unit = {}, onRecord: () -> Unit = {}) {
+fun TourScreen(
+    ui: TourUi, onGo: (Tab) -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true, onSeen: (String) -> Unit = {}, onRecord: () -> Unit = {},
+    window: LongRange = ui.record.meta.range, onRange: (LongRange) -> Unit = {},
+) {
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier)) {
-        TourHero(ui, onGo, onRecord)
+        TourHero(ui, onGo, onRecord, window, onRange)
         ui.nights?.let { NightsBill(it) }
         HeadlineBill(ui, onGo)
         SetlistBill(ui)
@@ -89,7 +94,7 @@ fun TourScreen(ui: TourUi, onGo: (Tab) -> Unit, modifier: Modifier = Modifier, s
 private fun TourUi.countries() = "${n0(facts.countries)} ${plural(facts.countries, "country", "countries")}"
 
 @Composable
-internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit, onRecord: () -> Unit = {}) {
+internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit, onRecord: () -> Unit = {}, window: LongRange = ui.record.meta.range, onRange: (LongRange) -> Unit = {}) {
     val f = ui.facts; val t = ui.tour; val u = ui.units
     Bill(first = true, share = Share(if (ui.name.isNotEmpty()) "${ui.name}'s elsewhere" else "elsewhere ${ui.yearSpan}")) {
         val printing = LocalPrinting.current
@@ -104,6 +109,10 @@ internal fun TourHero(ui: TourUi, onGo: (Tab) -> Unit, onRecord: () -> Unit = {}
                 }
             }
             RecordStamp("Official record", "${t.years.second}", if (ui.deviceDays > 0) "recording" else "live", Modifier.align(Alignment.TopEnd), size = 92.dp)
+        }
+        if (!printing) {
+            Spacer(Modifier.height(22.dp))
+            YearWheel(ui.bounds, window, onRange)
         }
         Spacer(Modifier.height(28.dp))
         val counting = if (ui.deviceDays > 0) " …and still counting: ${n0(ui.deviceDays)} ${plural(ui.deviceDays, "day")} recorded on this phone." else ""

@@ -49,7 +49,7 @@ class RangeViewModel @Inject constructor(store: RangeStore) : ViewModel() {
 
     /** Every calendar year the record touches, for the year chips. */
     val years: StateFlow<List<Int>> = _bounds.map { b ->
-        if (b.last <= 0) emptyList() else (dayOf(b.first).year..dayOf(b.last).year).toList()
+        if (b.last <= 0) emptyList() else yearsOf(b)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private fun adopt(rec: Record) {
@@ -87,7 +87,7 @@ class RangeViewModel @Inject constructor(store: RangeStore) : ViewModel() {
         return when (p) {
             Preset.All -> r
             Preset.Last90 -> clamp(midnight(r.last) - 89 * DAY, r.last)
-            is Preset.Year -> clamp(LocalDate.of(p.year, 1, 1).epoch(), LocalDate.of(p.year, 12, 31).epoch() + DAY - 1)
+            is Preset.Year -> yearSpan(r, p.year)
         }
     }
 }

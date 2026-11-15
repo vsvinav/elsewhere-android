@@ -39,6 +39,8 @@ data class TourUi(
     val hasWork: Boolean, val homeCity: String?, val record: Record, val named: Int, val photos: Int,
     /** Days with at least one stay the phone recorded itself, as opposed to the export. */
     val deviceDays: Int = 0,
+    /** The whole record's span, the year wheel's track; the range only ever cuts inside it. */
+    val bounds: LongRange = record.meta.range,
 ) {
     val yearSpan: String get() = tour.years.let { (a, b) -> if (a == b) "$a" else "$a–$b" }
 }
@@ -58,7 +60,7 @@ fun tourUi(data: Record, raw: Record, profile: Profile?, land: FeatureCollection
         actSub = act?.let { listOfNotNull(actPlace?.address, it.country).joinToString(" · ").ifEmpty { null } },
         hasWork = !profile?.works.isNullOrEmpty(), homeCity = profile?.homes?.lastOrNull()?.city,
         record = data, named = data.places.values.count { it.name != null }, photos = data.places.values.count { it.photo != null },
-        deviceDays = deviceDays(data),
+        deviceDays = deviceDays(data), bounds = raw.meta.range,
     )
 }
 
@@ -71,6 +73,10 @@ fun deviceDays(r: Record): Int = r.visits.asSequence().filter { it.placeId.start
 class TourViewModel @Inject constructor(private val range: RangeStore, store: RecordStore, landSource: LandSource, private val lookups: PlaceLookups) : ViewModel() {
     /** A third-place row has scrolled into view: ask for its name and photo. */
     fun seen(id: String) { range.filtered.value?.let { lookups.need(listOf(id), it.places) } }
+
+    /** The date window the wheel scrubs. */
+    val window: StateFlow<LongRange> = range.range
+    fun setRange(r: LongRange) { range.range.value = r }
 
     private data class In(val data: Record, val raw: Record, val profile: Profile?, val land: FeatureCollection?)
 
