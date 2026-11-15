@@ -44,10 +44,7 @@ class PhotoStore @Inject constructor(
         row
     }
 
-    suspend fun caption(id: String, caption: String?) {
-        val row = db.photos().get(id) ?: return
-        db.photos().upsert(row.copy(caption = caption?.take(CAPTION_MAX)?.ifBlank { null }))
-    }
+    suspend fun caption(id: String, caption: String?) = db.photos().caption(id, caption?.take(CAPTION_MAX)?.ifBlank { null })
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) { db.photos().delete(id); files.delete(id) }
 

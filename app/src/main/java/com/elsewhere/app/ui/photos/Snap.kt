@@ -41,6 +41,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -206,10 +207,15 @@ fun PhotoSheet(
             card(Share(name))
             Spacer(Modifier.height(12.dp))
             Pass(Modifier.fillMaxWidth()) {
-                PosterTextField(caption, { caption = it.take(CAPTION_MAX); onCaption(caption) }, label = "Caption · ${caption.length}/$CAPTION_MAX", placeholder = "A line for the card")
+                // Committed when the field loses focus or on Done, like the web's blur/Enter, not on every keystroke.
+                val commit = { if (caption != (o.photo.caption ?: "")) onCaption(caption) }
+                PosterTextField(
+                    caption, { caption = it.take(CAPTION_MAX) }, Modifier.onFocusChanged { if (!it.isFocused) commit() },
+                    label = "Caption · ${caption.length}/$CAPTION_MAX", placeholder = "A line for the card",
+                )
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    InkButton("Done", onClose)
+                    InkButton("Done", { commit(); onClose() })
                     InkButton(saved ?: "Save to Photos", {
                         val activity = context.findActivity() ?: return@InkButton
                         scope.launch {

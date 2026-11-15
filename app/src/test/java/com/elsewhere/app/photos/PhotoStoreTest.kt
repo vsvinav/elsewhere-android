@@ -85,6 +85,11 @@ class PhotoStoreTest {
         val row = store.snap(picture(), null)!!
         store.caption(row.id, "x".repeat(100))
         assertEquals(80, db.photos().get(row.id)!!.caption!!.length)
+        assertEquals(row.copy(caption = "x".repeat(80)), db.photos().get(row.id))
+        store.caption(row.id, "   ")
+        assertNull(db.photos().get(row.id)!!.caption)
+        store.caption("nobody", "lost")
+        assertEquals(1, store.list().size)
         assertTrue(files.original(row.id).exists()); assertTrue(files.thumb(row.id).exists())
         store.delete(row.id)
         assertTrue(store.list().isEmpty())

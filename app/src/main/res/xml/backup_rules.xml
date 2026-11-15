@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Photos: the database and thumbnails go along; the originals stay on the phone. -->
+<!-- Everything goes along except the full-size photos; the database and thumbnails are enough to bring the cards back. -->
 <full-backup-content>
-    <include domain="database" path="elsewhere.db" />
-    <include domain="file" path="photos/thumbs/" />
     <exclude domain="file" path="photos/originals/" />
 </full-backup-content>

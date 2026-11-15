@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM photos ORDER BY ts DESC") suspend fun list(): List<PhotoEntity>
     @Query("SELECT * FROM photos WHERE placeId = :placeId ORDER BY ts DESC") suspend fun forPlace(placeId: String): List<PhotoEntity>
     @Query("SELECT * FROM photos WHERE id = :id") suspend fun get(id: String): PhotoEntity?
+    @Query("UPDATE photos SET caption = :caption WHERE id = :id") suspend fun caption(id: String, caption: String?)
     @Query("DELETE FROM photos WHERE id = :id") suspend fun delete(id: String)
     @Query("DELETE FROM photos") suspend fun clear()
 }
