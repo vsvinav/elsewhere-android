@@ -45,10 +45,14 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
-/** What the base map is drawn from: the free style's URL, or Google's raster tiles with the text their terms want shown. */
+/**
+ * What the base map is drawn from: the free style's URL, Google's raster tiles with the text their terms want
+ * shown, or Google's native SDK styled by the user's Map ID (blank for Google's default look).
+ */
 sealed interface Basemap {
     data object Free : Basemap
     data class Google(val styleJson: String) : Basemap
+    data class Sdk(val mapId: String) : Basemap
 }
 
 /**
@@ -117,12 +121,12 @@ class MapLibreHost(private val scope: CoroutineScope, initial: Cam, private val 
         val cacheDir = LocalContext.current.cacheDir
         // A style written on an earlier visit is used from the first frame, so a verified key never flashes the free map.
         val styleUri by produceState(
-            when (basemap) { Basemap.Free -> STYLE; is Basemap.Google -> cachedStyleFile(cacheDir, basemap.styleJson)?.toURI()?.toString() ?: STYLE },
+            when (basemap) { is Basemap.Google -> cachedStyleFile(cacheDir, basemap.styleJson)?.toURI()?.toString() ?: STYLE; else -> STYLE },
             basemap,
         ) {
             value = when (basemap) {
-                Basemap.Free -> STYLE
                 is Basemap.Google -> withContext(Dispatchers.IO) { styleFile(cacheDir, basemap.styleJson).toURI().toString() }
+                else -> STYLE
             }
         }
         LaunchedEffect(Unit) {
