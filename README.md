@@ -40,6 +40,7 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Shell: ticket strip, range bar, calendar, onboarding | ✅ |
 | Tour · Numbers · Facts · Stops · Dates | ✅ |
 | Map (Google map tiles, OpenStreetMap fallback, clusters, search) | ✅ |
+| Native Google map (Maps SDK) | ✅ |
 | Flights globe · From-airport bill | ✅ |
 | Replay | ✅ |
 | Key verification · place names and photos | ✅ |
@@ -89,6 +90,8 @@ Without a key the app draws OpenStreetMap tiles and skips place names/photos. Wi
 2. Create a key. Under *Application restrictions* choose **None** — a key restricted to websites (HTTP referrers) or to Android apps is refused, because the app calls these APIs directly over HTTPS, not through the Maps SDK. If you want to lock it down, use *API restrictions* and allow just those two APIs.
 3. Paste it in the app at the front door, or later from the ▾ menu → Maps key.
 
+Release APKs include Google's native Maps SDK, which draws the Google map for free, so your key only needs **Places API (New)**; the app marks Map Tiles as *not needed* when it checks the key. Map Tiles API is only needed if you build the app yourself without a `MAPS_SDK_KEY` (see below).
+
 The app checks the key the moment you save it, with two free requests, and shows Google's exact answer if either is refused, along with what to change. A key that fails (or no key) means *limited maps*: OpenStreetMap tiles, no place names or photos. You are asked to acknowledge that before going on, and can re-check the key from the menu any time.
 
 The ▾ menu shows a running count of paid calls and a rough dollar figure. Names and photos are fetched once for your 100 busiest stops and cached forever.
@@ -106,6 +109,14 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 ./gradlew testDebugUnitTest        # JUnit twins of the web app's vitest suite
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+**Maps SDK key (optional).** The native Google map needs a second key, baked into the APK at build time because the Maps SDK reads it from the manifest rather than from the user. Create a key restricted to **Maps SDK for Android**, with *Application restrictions* → Android apps → package `com.elsewhere.app` plus your signing certificate's SHA‑1. Release builds use `D8:83:03:21:58:D6:0B:A6:9D:4C:10:9E:61:56:1C:44:04:B2:B9:C3`; a local debug build signs with `~/.android/debug.keystore`, whose SHA‑1 is printed by `keytool -list -v -keystore ~/.android/debug.keystore -storepass android`. Then either
+
+```bash
+./gradlew assembleDebug -Pelsewhere.mapsSdkKey=AIza…      # or export MAPS_SDK_KEY=AIza…
+```
+
+or, for GitHub Actions, add the key as the repository secret `MAPS_SDK_KEY`. Without it the app falls back to Google map tiles (on a key with Map Tiles API) or OpenStreetMap.
 
 ## Recording on this phone
 
