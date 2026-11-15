@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.elsewhere.app.ask.LlmConfig
+import com.elsewhere.app.ask.LlmProvider
 import com.elsewhere.app.ingest.AddressBook
 import com.elsewhere.app.ingest.CostMeter
 import com.elsewhere.app.ingest.Kind
@@ -37,7 +39,7 @@ data class Recording(val enabled: Boolean = false, val since: Long = 0L, val pau
 data class Counters(val detailsCalls: Int = 0, val photoCalls: Int = 0, val mapLoads: Int = 0, val since: Long = 0)
 
 @Singleton
-class SettingsStore @Inject constructor(private val store: DataStore<Preferences>) : MapsSettings, CostMeter, AddressBook {
+class SettingsStore @Inject constructor(private val store: DataStore<Preferences>) : MapsSettings, LlmSettings, CostMeter, AddressBook {
     private object K {
         val profile = stringPreferencesKey("profile")
         val mapsKey = stringPreferencesKey("mapsKey")
@@ -56,6 +58,10 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         val pausedUntil = longPreferencesKey("pausedUntil")
         val segmenter = stringPreferencesKey("segmenterState")
         val addresses = stringPreferencesKey("addresses")
+        val llmProvider = stringPreferencesKey("llmProvider")
+        val llmKey = stringPreferencesKey("llmKey")
+        val llmModel = stringPreferencesKey("llmModel")
+        val llmBaseUrl = stringPreferencesKey("llmBaseUrl")
     }
     private fun keyOf(kind: Kind) = when (kind) { Kind.DETAILS -> K.detailsCalls; Kind.PHOTOS -> K.photoCalls; Kind.MAPS -> K.mapLoads }
 
@@ -76,6 +82,14 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
 
     override val counters: Flow<Counters> = store.data.map { p ->
         Counters(p[K.detailsCalls] ?: 0, p[K.photoCalls] ?: 0, p[K.mapLoads] ?: 0, p[K.usageSince] ?: 0)
+    }
+
+    override val llm: Flow<LlmConfig> = store.data.map { p ->
+        LlmConfig(LlmProvider.parse(p[K.llmProvider]), p[K.llmKey] ?: "", p[K.llmModel] ?: "", p[K.llmBaseUrl] ?: "")
+    }
+
+    override suspend fun saveLlm(c: LlmConfig) {
+        store.edit { it[K.llmProvider] = c.provider.wire; it[K.llmKey] = c.key; it[K.llmModel] = c.model; it[K.llmBaseUrl] = c.baseUrl }
     }
 
     val recording: Flow<Recording> = store.data.map { p ->
