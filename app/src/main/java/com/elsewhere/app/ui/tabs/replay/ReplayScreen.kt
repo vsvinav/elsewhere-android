@@ -65,7 +65,7 @@ import com.elsewhere.app.map.Eased
 import com.elsewhere.app.map.Follow
 import com.elsewhere.app.map.HEAD_REAL_S
 import com.elsewhere.app.map.MapEvent
-import com.elsewhere.app.map.MapLibreHost
+import com.elsewhere.app.map.MapHost
 import com.elsewhere.app.map.PlayState
 import com.elsewhere.app.map.ReplayTrails
 import com.elsewhere.app.map.Stamp
@@ -193,7 +193,7 @@ private fun revealDots(data: Record): List<RevealDot> = data.places.entries
  * stamp itself in the ink of the current movement.
  */
 @Composable
-private fun ReplayCanvas(host: MapLibreHost, data: Record, trails: ReplayTrails, state: PlayState, frame: State<Long>, modifier: Modifier = Modifier) {
+private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, state: PlayState, frame: State<Long>, modifier: Modifier = Modifier) {
     val cam by host.camera.collectAsState()
     val measurer = rememberTextMeasurer()
     val icons = remember { StampIcons() }

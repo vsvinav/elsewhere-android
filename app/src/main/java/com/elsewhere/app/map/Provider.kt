@@ -22,7 +22,7 @@ fun resolve(s: Settings): Provider = when (s.mapProvider) {
 
 /** The one MapLibre host, kept across recompositions; the base map swaps underneath it as [Basemap] changes. */
 @Composable
-fun rememberMapHost(initial: Cam = Cam(20.0, 0.0, 2f)): MapLibreHost {
+fun rememberMapHost(initial: Cam = Cam(20.0, 0.0, 2f)): MapHost {
     val scope = rememberCoroutineScope()
     // CameraState's constructor is internal to maplibre-compose, so the library remembers it for us.
     val libreState = rememberCameraState(initial.toLibre())

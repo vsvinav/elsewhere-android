@@ -62,7 +62,7 @@ import com.elsewhere.app.map.Cam
 import com.elsewhere.app.map.ClusterPin
 import com.elsewhere.app.map.Dot
 import com.elsewhere.app.map.LABEL_PX
-import com.elsewhere.app.map.MapLibreHost
+import com.elsewhere.app.map.MapHost
 import com.elsewhere.app.map.Pin
 import com.elsewhere.app.map.PinLayers
 import com.elsewhere.app.map.PinOpts
@@ -262,7 +262,7 @@ private fun PinCard(d: Dot, modifier: Modifier = Modifier, onClose: () -> Unit) 
  * clusters behind it are regridded only when the half-zoom bucket changes.
  */
 @Composable
-private fun PinCanvas(host: MapLibreHost, layers: PinLayers, opts: PinOpts, modifier: Modifier = Modifier) {
+private fun PinCanvas(host: MapHost, layers: PinLayers, opts: PinOpts, modifier: Modifier = Modifier) {
     val cam by host.camera.collectAsState()
     val measurer = rememberTextMeasurer()
     val shapes = remember { PinShapes() }
@@ -341,7 +341,7 @@ private sealed interface Hit {
 }
 
 /** What a tap landed on: a cluster disc, else the nearest pin whose icon covers the finger (a 16dp floor). */
-private fun hitTest(host: MapLibreHost, layers: PinLayers, opts: PinOpts, tap: Tap, d: Float): Hit? {
+private fun hitTest(host: MapHost, layers: PinLayers, opts: PinOpts, tap: Tap, d: Float): Hit? {
     val at = host.project(tap.lat, tap.lng) ?: return null
     val scene = layers.scene(host.camera.value.zoom.toDouble(), opts)
     for (c in scene.clusters) {
