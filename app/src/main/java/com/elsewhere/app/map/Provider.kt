@@ -63,7 +63,7 @@ fun rememberMapHost(settings: Settings, initial: Cam = Cam(20.0, 0.0, 2f), onGoo
                 // Counted once per process: a forced-Google user rebuilding the host per visit must not fail twice in one session.
                 GoogleMapHost(
                     scope, initial, settings.mapId, keyLive = live,
-                    onFailed = { if (!GoogleDown.down) { GoogleDown.mark(settings.mapsKey); failed() } }, onLoaded = { loaded() },
+                    onFailed = { if (!GoogleDown.isDown(settings.mapsKey)) { GoogleDown.mark(settings.mapsKey); failed() } }, onLoaded = { loaded() },
                 )
             }
             Provider.OSM -> MapLibreHost(scope, initial, libreState)
