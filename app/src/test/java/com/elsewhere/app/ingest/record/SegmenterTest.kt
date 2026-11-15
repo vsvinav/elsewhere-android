@@ -86,6 +86,15 @@ class SegmenterTest {
         assertEquals(t0 + 10 * 60, s.state.stay!!.lastTs)
     }
 
+    @Test fun `a fix that is not newer than the last one is ignored`() {
+        val s = seg()
+        for (i in 0..10) s.feed(fix(t0 + i * 60, home))
+        assertTrue(s.feed(fix(t0 + 5 * 60, shop)).isEmpty())
+        assertTrue(s.feed(fix(t0 + 10 * 60, shop)).isEmpty())
+        assertEquals(t0 + 10 * 60, s.state.lastTs)
+        assertEquals(11, s.state.stay!!.n)
+    }
+
     @Test fun `GPS jitter inside the radius keeps one visit`() {
         val s = seg()
         val out = ArrayList<Emission>()

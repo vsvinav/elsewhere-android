@@ -32,6 +32,7 @@ import com.google.android.gms.location.Priority
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
@@ -49,7 +50,9 @@ class RecordService : Service() {
     @Inject lateinit var gate: PermissionGate
     @Inject lateinit var settings: SettingsStore
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // One lane: fixes must reach the segmenter in the order they arrived.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
     private lateinit var fused: FusedLocationProviderClient
     private var still = false
     private var paused = false

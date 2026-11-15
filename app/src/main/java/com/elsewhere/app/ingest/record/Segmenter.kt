@@ -42,10 +42,12 @@ class Segmenter(state: SegmenterState = SegmenterState(), private val tzAt: (Lon
         private set
 
     fun feed(f: Fix): List<Emission> {
+        // Fixes must arrive in order; a late or repeated one has nothing to add.
+        if (state.lastTs?.let { f.ts <= it } == true) return emptyList()
         if (f.accM > MAX_ACC_M) {
             // Too coarse to place, but a coarse fix whose circle covers the open stay still says "still here".
             val stay = state.stay ?: return emptyList()
-            if (f.ts > stay.lastTs && metres(stay.lat, stay.lng, f.lat, f.lng) <= RADIUS_M + f.accM) {
+            if (metres(stay.lat, stay.lng, f.lat, f.lng) <= RADIUS_M + f.accM) {
                 state = state.copy(stay = stay.copy(lastTs = f.ts), lastTs = f.ts)
             }
             return emptyList()
