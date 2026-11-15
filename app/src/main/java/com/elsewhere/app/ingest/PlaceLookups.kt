@@ -97,6 +97,10 @@ class PlaceLookups(
     private val queued = HashSet<String>()
     /** Ids that failed once for a passing reason (network, 429, 5xx) get one more go. */
     private val retried = HashSet<String>()
+    /** Ids given up on, failed twice or dropped when the pool stopped; a refresh asks for them again. */
+    private val dropped = LinkedHashSet<String>()
+    /** The burst that has just finished, reported as done-of-total before the progress clears so a bar can land on 100. */
+    private var finished: Progress? = null
     private var running = 0
     private var pending = 0
     private var total = 0
@@ -114,10 +118,15 @@ class PlaceLookups(
 
     /** Lookups are counted for the stamp as they are asked for; the burst's total resets once everything has landed. */
     private fun ask(n: Int = 1) { pending += n; total += n }
-    private fun settle(n: Int = 1) { pending -= n; if (pending == 0) total = 0 }
-    private fun emit() { state.report(synchronized(lock) { if (total > 0) Progress(total - pending, total) else null }) }
+    private fun settle(n: Int = 1) { pending -= n; if (pending == 0) { finished = Progress(total, total); total = 0 } }
+    private fun emit() {
+        val (now, done) = synchronized(lock) { val f = finished; finished = null; (if (total > 0) Progress(total - pending, total) else null) to f }
+        if (done != null && done.total > 0) state.report(done)
+        state.report(now)
+    }
 
-    private fun dropQueue() { settle(queue.size); queue.forEach { queued.remove(it) }; queue.clear() }
+    /** Nothing landed, so the burst does not count as finished. */
+    private fun dropQueue() { settle(queue.size); finished = null; dropped += queue; queue.forEach { queued.remove(it) }; queue.clear() }
 
     /**
      * Ask for these places to be named and photographed. Cached ids, home, places already named with a
@@ -154,15 +163,21 @@ class PlaceLookups(
         emit(); pump()
     }
 
-    /** A refresh: ids that were dropped after failing, and a pool a refused key stopped, may be asked for once more. */
+    /** A refresh: ids given up on go back in the queue with a fresh second go, and a pool a refused key stopped runs again. */
     fun retry() {
-        synchronized(lock) { retried.clear(); stopped = false }
+        synchronized(lock) {
+            retried.clear(); stopped = false
+            if (!canSpend()) return
+            val again = dropped.filter { it !in cache && it !in queued }
+            dropped.clear()
+            if (again.isNotEmpty()) { queue += again; queued += again; ask(again.size) }
+        }
         state.fail(null)
         emit(); pump()
     }
 
     /** Start over: forget what was looked up, so a fresh record asks again. */
-    fun forget() { synchronized(lock) { cache.clear(); dirty.clear(); loaded = null; retried.clear() } }
+    fun forget() { synchronized(lock) { cache.clear(); dirty.clear(); loaded = null; retried.clear(); dropped.clear() } }
 
     private fun pump() {
         while (true) {
@@ -185,10 +200,10 @@ class PlaceLookups(
         } catch (e: Exception) {
             if (fatal(e)) {
                 done()
-                synchronized(lock) { stopped = true; dropQueue() }
+                synchronized(lock) { stopped = true; dropped += id; dropQueue() }
                 state.fail(e.message)
             } else {
-                val again = synchronized(lock) { if (id in retried) false else { retried += id; queue.addLast(id); paused = true; true } }
+                val again = synchronized(lock) { if (id in retried) { dropped += id; false } else { retried += id; queue.addLast(id); paused = true; true } }
                 if (!again) done()
                 else scope.launch { delay(backoffMs); synchronized(lock) { paused = false }; pump() }
             }

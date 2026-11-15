@@ -7,6 +7,7 @@ import com.elsewhere.app.data.MapProvider
 import com.elsewhere.app.data.Settings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -248,31 +249,57 @@ class PlaceLookupsTest {
         assertEquals(listOf("a", "b"), src.asked)
     }
 
-    @Test fun `retry lets ids that failed, or a stopped pool, be asked for again`() = runTest(dispatcher) {
+    @Test fun `retry asks again for ids that were dropped after failing, without anyone needing them afresh`() = runTest(dispatcher) {
         val l = lookups(backoffMs = 2000); settle()
-        // Twice unlucky: dropped, and asked again it gets no second go. A refresh gives it one.
+        // Twice unlucky: dropped. Nothing asks for it again; a refresh alone brings it back with a fresh second go.
         src.fails("a", PlacesError("Places API 503", 503), PlacesError("Places API 503", 503), PlacesError("Places API 503", 503))
         l.need(listOf("a"), places); settle()
         assertEquals(listOf("a", "a"), src.asked)
-        l.need(listOf("a"), places); settle()
-        assertEquals(listOf("a", "a", "a"), src.asked)
         assertNull(store.rows["a"])
-        l.retry()
-        src.fails("a", PlacesError("Places API 503", 503))
-        l.need(listOf("a"), places); settle()
-        assertEquals(listOf("a", "a", "a", "a", "a"), src.asked)
+        l.retry(); settle()
+        assertEquals(listOf("a", "a", "a", "a"), src.asked)
         assertEquals("A", store.rows["a"]!!.name)
+        // Landed now: another refresh costs nothing.
+        l.retry(); settle()
+        assertEquals(4, src.asked.size)
+    }
 
-        // A refused key stopped the pool; a refresh asks once more, and the refusal returns if the key is still bad.
-        src.fails("b", PlacesError("PERMISSION_DENIED", 403), PlacesError("PERMISSION_DENIED", 403))
-        l.need(listOf("b"), places); settle()
+    @Test fun `retry restarts a pool a refused key stopped, with what it dropped, and the refusal returns if the key is still bad`() = runTest(dispatcher) {
+        val l = lookups(); settle()
+        src.fails("a", PlacesError("PERMISSION_DENIED", 403), PlacesError("PERMISSION_DENIED", 403))
+        val ids = listOf("a", "b", "c", "d", "e")
+        l.need(ids, ids.associateWith { place() }); settle()
         assertEquals("PERMISSION_DENIED", state.error.value)
-        l.need(listOf("b"), places); settle()
-        assertEquals(1, src.asked.count { it == "b" })
+        assertEquals(listOf("a", "b", "c", "d"), src.asked) // e was still queued, and was dropped
         l.retry()
         assertNull(state.error.value)
-        l.need(listOf("b"), places); settle()
-        assertEquals(2, src.asked.count { it == "b" })
+        settle()
+        assertEquals(listOf("a", "b", "c", "d", "a", "e"), src.asked)
         assertEquals("PERMISSION_DENIED", state.error.value)
+        assertEquals("E", store.rows["e"]!!.name)
+    }
+
+    @Test fun `retry without a key keeps the dropped ids for when there is one`() = runTest(dispatcher) {
+        val l = lookups(); settle()
+        src.fails("a", PlacesError("Places API 503", 503), PlacesError("Places API 503", 503))
+        l.need(listOf("a"), places); settle()
+        maps.cur.value = Settings(); settle()
+        l.retry(); settle()
+        assertEquals(listOf("a", "a"), src.asked)
+        maps.cur.value = Settings(mapsKey = "k", keyPlaces = true); settle()
+        l.retry(); settle()
+        assertEquals(listOf("a", "a", "a"), src.asked)
+    }
+
+    @Test fun `a burst ends on done-of-total before the progress clears`() = runTest(dispatcher) {
+        val l = lookups(); settle()
+        val seen = ArrayList<Progress?>()
+        // Unconfined, so the collector sees every value rather than the latest of each pair.
+        val job = scope.launch(Dispatchers.Unconfined) { l.progress.collect { seen += it } }
+        src.gates["a"] = CompletableDeferred()
+        l.need(listOf("a", "b"), places); settle()
+        src.gates["a"]!!.complete(Unit); settle()
+        assertEquals(listOf(null, Progress(0, 2), Progress(1, 2), Progress(2, 2), null), seen)
+        job.cancel()
     }
 }
