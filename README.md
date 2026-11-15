@@ -67,6 +67,8 @@ Every bill and pass has a **Save** menu: share it as a PNG as-is, letterboxed as
 
 ## Quick start
 
+> Step-by-step, jargon-free instructions for the export, the app and the optional Google key: **[SETUP.md](https://github.com/vsvinav/elsewhere/blob/main/SETUP.md)**.
+
 ### Install
 
 1. Open the latest run under **Actions → Android** and download `elsewhere-debug.apk` (or grab a tagged build from **Releases**).
