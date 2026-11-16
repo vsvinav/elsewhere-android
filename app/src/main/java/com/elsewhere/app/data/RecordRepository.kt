@@ -93,6 +93,14 @@ class RecordRepository @Inject constructor(
         .onEach { importRead.value = true }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
+    override val hasExport: StateFlow<Boolean> = importVersion
+        .map { db.importMeta().get() != null }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+
+    override val recordedDays: StateFlow<Int> = importVersion
+        .map { db.visits().recordedDays() }
+        .stateIn(scope, SharingStarted.Eagerly, 0)
+
     override val ready: StateFlow<Boolean> = combine(profileRead, importRead) { a, b -> a && b }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
