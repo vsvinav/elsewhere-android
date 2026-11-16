@@ -35,12 +35,10 @@ object PendingCrew {
 
     fun take(intent: Intent?) {
         intent ?: return
-        intent.getStringExtra(EXTRA_CODE)?.let { code.value = it }
         if (intent.getBooleanExtra(EXTRA_MAP, false)) map.value = true
         com.elsewhere.app.crew.ShareCode.fromLink(intent.dataString)?.let { code.value = it }
     }
 
-    const val EXTRA_CODE = "crew_code"
     const val EXTRA_MAP = "crew_map"
 }
 

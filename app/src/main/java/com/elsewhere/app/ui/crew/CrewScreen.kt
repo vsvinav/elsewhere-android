@@ -62,11 +62,12 @@ fun CrewRoute(onBack: () -> Unit, vm: CrewViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val pending by PendingCrew.code.collectAsStateWithLifecycle()
+    var prefill by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(ui?.relaySet) { if (ui?.relaySet == true) vm.ensureCode() }
-    // A pair link lands here already claimed: the visitor only has to confirm.
-    LaunchedEffect(pending) { pending?.let { PendingCrew.code.value = null; vm.claim(it) } }
+    // A pair link only fills the code in; the visitor still taps Pair, so a stray link can't claim on its own.
+    LaunchedEffect(pending) { pending?.let { PendingCrew.code.value = null; prefill = it } }
     CrewScreen(
-        ui, vm, onBack,
+        ui, vm, onBack, prefill = prefill,
         onScan = { scanPairCode(ctx, vm::claim) { } },
         onShareCode = { sharePairCode(ctx, it) },
     )
@@ -76,7 +77,7 @@ fun CrewRoute(onBack: () -> Unit, vm: CrewViewModel = hiltViewModel()) {
 @Composable
 fun CrewScreen(
     ui: CrewUi?, actions: CrewActions, onBack: () -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true,
-    onScan: (() -> Unit)? = null, onShareCode: ((String) -> Unit)? = null, shareOpen: Boolean = false, openFriend: String? = null,
+    onScan: (() -> Unit)? = null, onShareCode: ((String) -> Unit)? = null, shareOpen: Boolean = false, openFriend: String? = null, prefill: String? = null,
 ) {
     BackHandler { onBack() }
     var selected by rememberSaveable { mutableStateOf(openFriend) }
@@ -109,7 +110,7 @@ fun CrewScreen(
                     InkButton("Share location", { sheet = true }, Modifier.fillMaxWidth())
                     Spacer(Modifier.height(32.dp))
                 }
-                if (ui.relaySet) PairBill(ui, actions, onShowQr = { qr = true }, onScan = onScan, onShareCode = onShareCode)
+                if (ui.relaySet) PairBill(ui, actions, onShowQr = { qr = true }, onScan = onScan, onShareCode = onShareCode, prefill = prefill)
                 else Text(NO_RELAY, color = Poster.Red, style = PosterType.Lede)
                 Spacer(Modifier.height(64.dp))
             }
@@ -212,8 +213,8 @@ private fun Chip(text: String, onClick: () -> Unit) {
 
 /** The code bill: the big code with its countdown, three ways to pass it, and a slot for a friend's. */
 @Composable
-private fun PairBill(ui: CrewUi, actions: CrewActions, onShowQr: () -> Unit, onScan: (() -> Unit)?, onShareCode: ((String) -> Unit)?) {
-    var typed by rememberSaveable { mutableStateOf("") }
+private fun PairBill(ui: CrewUi, actions: CrewActions, onShowQr: () -> Unit, onScan: (() -> Unit)?, onShareCode: ((String) -> Unit)?, prefill: String?) {
+    var typed by rememberSaveable(prefill) { mutableStateOf(prefill ?: "") }
     val code = ui.code
     CapsText("Your share code", color = Poster.Ink, size = 11.sp)
     Spacer(Modifier.height(6.dp))

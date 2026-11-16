@@ -30,6 +30,7 @@ import com.elsewhere.app.crew.Rooms
 import com.elsewhere.app.data.db.ElsewhereDb
 import com.elsewhere.app.data.Recording
 import com.elsewhere.app.data.SettingsStore
+import com.elsewhere.app.sonar.PendingCrew
 import com.elsewhere.app.sonar.SonarAlerts
 import com.elsewhere.app.sonar.SonarEngine
 import com.elsewhere.app.ui.world.ElsewhereTheme
@@ -71,6 +72,7 @@ class CrewFlowTest {
     }
 
     private val server = MockWebServer()
+    private var claims = 0
     private val rooms = FakeRooms()
     private lateinit var store: CrewStore
     private lateinit var settings: SettingsStore
@@ -85,7 +87,7 @@ class CrewFlowTest {
     @Before fun setUp() {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when {
-                request.path!!.endsWith("/claim") -> MockResponse().setBody("""{"signPub":"$martaSign","kxPub":"$martaKx","name":"Marta","kxSig":"$martaKxSig"}""")
+                request.path!!.endsWith("/claim") -> { claims++; MockResponse().setBody("""{"signPub":"$martaSign","kxPub":"$martaKx","name":"Marta","kxSig":"$martaKxSig"}""") }
                 request.method == "POST" -> MockResponse().setResponseCode(200)
                 else -> MockResponse().setResponseCode(404)
             }
@@ -105,7 +107,7 @@ class CrewFlowTest {
         vm.pollMs = 60_000L
     }
 
-    @After fun tearDown() { runCatching { server.shutdown() }; db.close() }
+    @After fun tearDown() { PendingCrew.code.value = null; runCatching { server.shutdown() }; db.close() }
 
     /** Background work lands on the main looper, which Robolectric only drains when asked. */
     private fun await(cond: () -> Boolean) {
@@ -164,6 +166,19 @@ class CrewFlowTest {
         assertTrue(p.test)
         assertTrue(p.hit!!.id.matches(Regex("[0-9a-f]{8}")))
         assertTrue(runBlocking { store.debounce(listOf("PAIRM")) }.lastHitByPair.isEmpty())
+    }
+
+    @Test fun `a pair link only fills the code in, and nothing is claimed until Pair is tapped`() {
+        PendingCrew.code.value = "PT-MRT-7Q4K"
+        setContent()
+        await { vm.ui.value?.code != null }
+        node("PT-MRT-7Q4K").assertIsDisplayed()
+        rule.waitForIdle(); Thread.sleep(200); shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("the link must not claim on its own", 0, claims)
+        assertTrue(vm.ui.value?.pair !is PairState.Confirm)
+        node("PAIR").performClick()
+        await { vm.ui.value?.pair is PairState.Confirm }
+        assertEquals(1, claims)
     }
 
     @Test fun `without a relay the code bill tells you where to set one`() {
