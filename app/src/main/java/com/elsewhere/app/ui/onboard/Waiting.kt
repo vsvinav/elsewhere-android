@@ -1,6 +1,5 @@
 package com.elsewhere.app.ui.onboard
 
-import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -71,8 +70,8 @@ class WaitingViewModel @Inject constructor(private val store: RecordStore, priva
 @Composable
 fun WaitingRoute(onSettings: () -> Unit, vm: WaitingViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val app = LocalContext.current.applicationContext as Application
-    val pick = rememberTimelinePicker { uri, name -> vm.import({ app.contentResolver.openInputStream(uri) ?: throw IllegalStateException("Couldn't open that file") }, name) }
+    val resolver = LocalContext.current.contentResolver
+    val pick = rememberTimelinePicker { uri, name -> vm.import({ resolver.openInputStream(uri) ?: throw IllegalStateException("Couldn't open that file") }, name) }
     WaitingScreen(state, vm::resume, pick, onSettings)
 }
 

@@ -77,6 +77,25 @@ class SettingsScreenTest {
         assertEquals(0, closed)
     }
 
+    @Test fun `the Data section takes a Timeline export, and a bad file says so`() {
+        lateinit var vm: SettingsViewModel
+        rule.setContent {
+            vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account) }
+            val ui by vm.ui.collectAsStateWithLifecycle()
+            ElsewhereTheme { SettingsScreen(ui, vm, onBack = { closed++ }, sdk = false, onAccount = { opened = it }) }
+        }
+        rule.waitForIdle()
+        node("DATA").assertIsDisplayed()
+        node("ADD A TIMELINE EXPORT").assertIsDisplayed()
+        vm.import({ throw IOException("not json") }, "x.json")
+        rule.waitForIdle()
+        rule.onNodeWithText("not json").performScrollTo().assertIsDisplayed()
+        vm.import({ "{}".byteInputStream() }, "Timeline.json")
+        rule.waitForIdle()
+        assertEquals(true, store.hasExport.value)
+        rule.onNodeWithText("not json").assertDoesNotExist()
+    }
+
     @Test fun `signed out, the Account section offers to log in and saves the service URL`() {
         show()
         node("ACCOUNT").assertIsDisplayed()
@@ -136,13 +155,13 @@ class SettingsScreenTest {
     /** The page scrolls, so a node is brought into view before it is read or pressed. */
     private fun node(text: String) = rule.onNodeWithText(text).performScrollTo()
 
-    @Test fun `the three sections print under the title`() {
+    @Test fun `the sections print under the title`() {
         show()
         node("SETTINGS").assertIsDisplayed()
         node("GOOGLE MAPS").assertIsDisplayed()
         node("ASK ELSEWHERE").assertIsDisplayed()
         node("UNITS").assertIsDisplayed()
-        rule.onAllNodesWithText("DATA").assertCountEquals(0)
+        node("DATA").assertIsDisplayed()
         node(LLM_CAPTION).assertIsDisplayed()
     }
 

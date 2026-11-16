@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.InputStream
 import javax.inject.Inject
 
 /** Where the Google key check stands on this screen. */
@@ -54,6 +55,7 @@ data class AccountUi(val session: Session? = null, val vault: VaultState = Vault
 data class SettingsUi(
     val maps: Settings, val llm: LlmConfig, val units: Units,
     val keyCheck: KeyCheck = KeyCheck.Idle, val test: LlmTest = LlmTest.Idle, val account: AccountUi = AccountUi(),
+    val importing: Float? = null, val importError: String? = null,
 )
 
 /** Everything the settings page can do; the view model is the real one, snapshots pass a no-op. */
@@ -67,6 +69,7 @@ interface SettingsActions {
     fun setAccountUrl(url: String)
     fun logOut()
     fun deleteAccount()
+    fun import(open: () -> InputStream, fileName: String)
 }
 
 @HiltViewModel
@@ -79,11 +82,22 @@ class SettingsViewModel @Inject constructor(
     private val accountError = MutableStateFlow<String?>(null)
 
     private val account = combine(accounts.account, accounts.vaultState, accountError) { a, v, e -> AccountUi(a?.session, v, e) }
+    private val importing = MutableStateFlow<Float?>(null)
+    private val importError = MutableStateFlow<String?>(null)
 
-    val ui: StateFlow<SettingsUi?> = combine(maps.settings, llm.llm, repo.profile, keyCheck, test, account) { arr ->
+    val ui: StateFlow<SettingsUi?> = combine(maps.settings, llm.llm, repo.profile, keyCheck, test, account, importing, importError) { arr ->
         @Suppress("UNCHECKED_CAST")
-        SettingsUi(arr[0] as Settings, arr[1] as LlmConfig, (arr[2] as Profile?)?.units ?: Units.KM, arr[3] as KeyCheck, arr[4] as LlmTest, arr[5] as AccountUi)
+        SettingsUi(arr[0] as Settings, arr[1] as LlmConfig, (arr[2] as Profile?)?.units ?: Units.KM, arr[3] as KeyCheck, arr[4] as LlmTest, arr[5] as AccountUi, arr[6] as Float?, arr[7] as String?)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    override fun import(open: () -> InputStream, fileName: String) {
+        if (importing.value != null) return
+        importing.value = 0f; importError.value = null
+        viewModelScope.launch {
+            try { repo.import(open, fileName) { importing.value = it } } catch (e: Exception) { importError.value = e.message ?: "Couldn't read that file" }
+            importing.value = null
+        }
+    }
 
     /** A blank key still saves: it clears the stored key and its verdict, keeping the Map ID. */
     override fun saveKey(key: String, mapId: String) {

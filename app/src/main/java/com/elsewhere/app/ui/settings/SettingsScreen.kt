@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -49,6 +50,7 @@ import com.elsewhere.app.account.VaultState
 import com.elsewhere.app.ui.account.AccountEntry
 import com.elsewhere.app.ui.account.AccountRoute
 import com.elsewhere.app.ui.account.WelcomeScreen
+import com.elsewhere.app.ui.onboard.rememberTimelinePicker
 import com.elsewhere.app.ui.world.CapsText
 import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.InkButton
@@ -56,6 +58,7 @@ import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterTextField
 import com.elsewhere.app.ui.world.PosterType
 
+const val DATA_CAPTION = "Google Takeout → Location History (Timeline) → Timeline.json. Years of history, added to the record this phone keeps."
 const val LLM_CAPTION = "Your key is stored on this phone only and is sent straight to the provider you choose."
 
 val LLM_PROVIDER_LABEL: Map<LlmProvider, String> = mapOf(
@@ -75,10 +78,12 @@ fun SettingsRoute(
     var entry by rememberSaveable { mutableStateOf<AccountEntry?>(null) }
     var welcome by rememberSaveable { mutableStateOf(false) }
     BackHandler(welcome) { welcome = false }
+    val resolver = LocalContext.current.contentResolver
+    val pick = rememberTimelinePicker { uri, name -> vm.import({ resolver.openInputStream(uri) ?: throw IllegalStateException("Couldn't open that file") }, name) }
     when {
         entry != null -> account(entry!!, { entry = null }, { entry = null })
         welcome -> WelcomeScreen({ welcome = false; entry = AccountEntry.SignUp }, { welcome = false; entry = AccountEntry.LogIn }, { welcome = false }, welcomed = true)
-        else -> SettingsScreen(ui, vm, onBack, onAccount = { if (it == AccountEntry.LogIn) welcome = true else entry = it })
+        else -> SettingsScreen(ui, vm, onBack, onAccount = { if (it == AccountEntry.LogIn) welcome = true else entry = it }, onAddExport = pick)
     }
 }
 
@@ -86,7 +91,7 @@ fun SettingsRoute(
 @Composable
 fun SettingsScreen(
     ui: SettingsUi?, actions: SettingsActions, onBack: () -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true, sdk: Boolean = Sdk.available,
-    onAccount: (AccountEntry) -> Unit = {},
+    onAccount: (AccountEntry) -> Unit = {}, onAddExport: () -> Unit = {},
 ) {
     BackHandler { onBack() }
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()) else Modifier)) {
@@ -107,6 +112,8 @@ fun SettingsScreen(
             AskElsewhere(ui, actions)
             Spacer(Modifier.height(48.dp))
             UnitsSection(ui, actions)
+            Spacer(Modifier.height(48.dp))
+            DataSection(ui, onAddExport)
             Spacer(Modifier.height(48.dp))
             CrewSection(ui, actions)
             Spacer(Modifier.height(64.dp))
@@ -269,6 +276,20 @@ private fun AskElsewhere(ui: SettingsUi, actions: SettingsActions) {
             is LlmTest.Ok -> Text("Connected · ${t.model}", color = Poster.Green, style = PosterType.Label)
             is LlmTest.Failed -> SelectionContainer { Text(t.message, color = Poster.Red, style = PosterType.Label.copy(fontFamily = FontFamily.Monospace, letterSpacing = 0.sp)) }
         }
+    }
+}
+
+/** A Timeline export can arrive any time after the door; it joins what the phone has recorded. */
+@Composable
+private fun DataSection(ui: SettingsUi, onAddExport: () -> Unit) {
+    H2("Data")
+    Text(DATA_CAPTION, color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 16.sp))
+    Spacer(Modifier.height(20.dp))
+    if (ui.importing != null) CapsText("Reading segments…", color = Poster.Ink)
+    else InkButton("Add a Timeline export", onAddExport, quiet = true)
+    if (ui.importError != null) {
+        Spacer(Modifier.height(12.dp))
+        Text(ui.importError, color = Poster.Red, style = PosterType.Label)
     }
 }
 
