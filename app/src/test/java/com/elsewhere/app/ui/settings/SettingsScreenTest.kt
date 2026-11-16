@@ -97,6 +97,14 @@ class SettingsScreenTest {
         node("LOG IN OR SIGN UP").assertIsDisplayed()
     }
 
+    @Test fun `signed in before any answers, the vault has nothing to keep yet and offers no Update`() {
+        account.account.value = AccountState(session = Session("s", "acct_1", "ana@example.com"), welcomed = true)
+        account.vaultState.value = VaultState.None
+        show()
+        node(VAULT_NONE).assertIsDisplayed()
+        rule.onAllNodesWithText("UPDATE").assertCountEquals(0)
+    }
+
     @Test fun `log out drops the session`() {
         account.account.value = AccountState(session = Session("s", "acct_1", "ana@example.com"), welcomed = true)
         show()

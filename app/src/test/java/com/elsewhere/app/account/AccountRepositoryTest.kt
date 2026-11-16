@@ -115,6 +115,26 @@ class AccountRepositoryTest {
         assertEquals(VaultState.UpToDate, w.vault())
     }
 
+    /** A restart loses the key but not the hash: the same plaintext still reads as up to date, and nothing is re-sent. */
+    @Test fun `after a restart an unchanged record is still up to date and the stored hash is the plaintext's sha256`() = runTest {
+        val first = world()
+        first.repo.finish("ada@example.org", "123456"); first.repo.setPassphrase("correct horse battery staple")
+        advanceTimeBy(2_001)
+        val hash = first.store.state.value.vaultHash!!
+        val key = Vault.deriveKey("correct horse battery staple", Vault.unb64(first.store.state.value.salt!!))
+        val plaintext = Vault.open(key, first.api.vault!!)
+        assertEquals(Crypto.sha256hex(plaintext.toByteArray()), hash)
+
+        val again = world(first.store.state.value)      // same disk, fresh process, no key
+        assertEquals(VaultState.UpToDate, again.vault())
+        again.record.saveProfile(profile.copy(name = "Ada L."))
+        assertEquals(VaultState.OutOfDate, again.vault())
+        again.record.saveProfile(profile)
+        assertEquals(VaultState.UpToDate, again.vault())
+        advanceTimeBy(5_000)
+        assertEquals(0, again.api.calls.count { it == "put" })
+    }
+
     @Test fun `without the key in memory an upload is skipped silently and Settings sees out of date`() = runTest {
         val salt = Vault.b64(Vault.newSalt())
         val w = world(AccountState(session = Session("s3cret", "acct_1", "ada@example.org"), salt = salt, vaultAt = 5L, vaultHash = "stale"))
