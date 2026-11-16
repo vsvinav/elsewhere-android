@@ -53,6 +53,13 @@ class FriendsLayerTest {
         val mark = FriendMark.of(CrewFixtures.fix(CrewFixtures.marta, 38.7, -9.1, "Lisbon", 180), now)
         rule.setContent { ElsewhereTheme { FriendBubble(mark, myCity = "Lisbon", onClose = {}) } }
         rule.onNodeWithText("YOU'RE BOTH IN LISBON").assertIsDisplayed()
+        rule.onNodeWithText("Their last fix · city-level").assertIsDisplayed()
+    }
+
+    @Test fun `a precise fix with a city still says precise`() {
+        val mark = FriendMark.of(CrewFixtures.fix(CrewFixtures.asta, 64.13, -21.9, "Reykjavík", 60, Grade.precise), now)
+        rule.setContent { ElsewhereTheme { FriendBubble(mark, myCity = "Lisbon", onClose = {}) } }
+        rule.onNodeWithText("Their last fix · precise").assertIsDisplayed()
     }
 
     @Test fun `sharing from a cold Record starts recording first`() {

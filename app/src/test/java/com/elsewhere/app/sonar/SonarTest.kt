@@ -58,7 +58,8 @@ class SonarTest {
         val friend = Side(at(38.7223, -9.1393, now), false, null)
         assertEquals(Int.MAX_VALUE, newcomerAbsence(me, friend))
         assertEquals(Int.MAX_VALUE, newcomerAbsence(friend, me))
-        assertEquals(3, newcomerAbsence(me.copy(fix = me.fix.copy(ts = now)), friend.copy(absenceDays = 9)), "a tie takes the shorter gap")
+        assertEquals(3, newcomerAbsence(me.copy(fix = me.fix.copy(ts = now)), friend.copy(absenceDays = 9)), "a tie goes to me")
+        assertEquals(30, newcomerAbsence(me.copy(fix = me.fix.copy(ts = now), absenceDays = 30), friend.copy(absenceDays = 9)), "a tie goes to me even when mine is longer")
         assertEquals(3, newcomerAbsence(me.copy(fix = me.fix.copy(ts = now + 1)), friend.copy(absenceDays = 9)))
     }
 
@@ -71,6 +72,11 @@ class SonarTest {
         assertFalse(eligible(me, friend.copy(absenceDays = 13), now), "newcomer back too soon")
         assertTrue(eligible(me.copy(absenceDays = 1), friend, now), "only the newcomer needs the gap")
         assertFalse(eligible(me, friend.copy(fix = at(38.80, -9.1400, now + 1)), now), "too far")
+        val edge = at(38.7223 + 1700.0 / 111_195.0, -9.1393, now + 1)
+        assertTrue(abs(metres(lisbon, edge) - 1700.0) < 5.0)
+        assertFalse(eligible(me, friend.copy(fix = edge), now), "1700 m, just outside the mile")
+        assertTrue(eligible(me, friend.copy(absenceDays = null), now), "never been here counts as forever")
+        assertEquals(Decision.Fire("PAIR:$now"), decide(me, friend.copy(absenceDays = null), "PAIR", now, Debounce(), null))
         assertFalse(eligible(me, friend, now + FRESH_MS + 1), "stale")
         assertFalse(eligible(me.copy(fix = lisbon.copy(ts = now - FRESH_MS - 1)), friend, now), "my fix stale")
     }

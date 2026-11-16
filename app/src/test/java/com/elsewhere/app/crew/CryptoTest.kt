@@ -99,4 +99,22 @@ class CryptoTest {
     @Test fun `generated keys are fresh every time`() {
         assertNotEquals(DeviceKeys.generate().deviceId, DeviceKeys.generate().deviceId)
     }
+
+    @Test fun `the kx key is vouched for by the signing key, and not after a swap`() {
+        val sig = Crypto.kxSig(a.signPriv, a.kxPub)
+        assertEquals(sig, Crypto.kxSig(a.signPriv, a.kxPub), "Ed25519 is deterministic")
+        assertTrue(Crypto.verifyKxSig(a.signPub, a.kxPub, sig))
+        assertFalse(Crypto.verifyKxSig(a.signPub, b.kxPub, sig), "a substituted kx key")
+        assertFalse(Crypto.verifyKxSig(b.signPub, a.kxPub, sig), "someone else's signing key")
+        assertFalse(Crypto.verifyKxSig(a.signPub, a.kxPub, null))
+        assertFalse(Crypto.verifyKxSig(a.signPub, a.kxPub, "not base64!"))
+    }
+
+    @Test fun `the fingerprint covers both keys in Crockford base32`() {
+        val fp = Crypto.fingerprint(a.signPub, a.kxPub)
+        assertEquals(8, fp.length)
+        assertTrue(fp.all { it in "0123456789ABCDEFGHJKMNPQRSTVWXYZ" })
+        assertNotEquals(fp, Crypto.fingerprint(a.signPub, b.kxPub))
+        assertEquals("D1JPRV3F", Crypto.crockford32("hello".toByteArray()))
+    }
 }

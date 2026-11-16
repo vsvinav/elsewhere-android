@@ -5,6 +5,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -28,6 +29,16 @@ class VectorsTest {
             assertEquals(j["signPubSha256"]!!.jsonPrimitive.content, Crypto.sha256(k.signPub).hex())
             assertEquals(j["deviceId"]!!.jsonPrimitive.content, k.deviceId)
         }
+    }
+
+    @Test fun `the kx binding signature and the fingerprint match byte for byte`() {
+        for ((k, j) in listOf(a to aj, b to bj)) {
+            val sig = j["kxSig"]!!.jsonPrimitive.content
+            assertEquals(sig, Crypto.kxSig(k.signPriv, k.kxPub))
+            assertTrue(Crypto.verifyKxSig(k.signPub, k.kxPub, sig))
+            assertEquals(j["fingerprint"]!!.jsonPrimitive.content, Crypto.fingerprint(k.signPub, k.kxPub))
+        }
+        assertFalse(Crypto.verifyKxSig(a.signPub, b.kxPub, aj["kxSig"]!!.jsonPrimitive.content))
     }
 
     @Test fun `pair id and pair key from either side`() {

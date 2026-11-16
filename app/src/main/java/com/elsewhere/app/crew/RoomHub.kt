@@ -1,5 +1,6 @@
 package com.elsewhere.app.crew
 
+import com.elsewhere.app.sonar.FRESH_MS
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -55,6 +56,8 @@ class RoomHub(
     private val foregroundFlow = MutableStateFlow(false)
     private val sockets = HashMap<String, Conn>()
     private val lock = Mutex()
+    /** Newest sender time accepted per friend: an older or repeated ping is a replay and is dropped. */
+    private val lastT = HashMap<String, Long>()
     private var supervisor: Job? = null
 
     private inner class Conn(val friend: Friend) {
@@ -109,7 +112,7 @@ class RoomHub(
         runCatching { relay.last(friend.pairId) }.getOrNull()?.forEach { env -> if (env.from == friend.deviceId) handle(friend, env) }
     }
 
-    private suspend fun receive(friend: Friend, text: String) {
+    internal suspend fun receive(friend: Friend, text: String) {
         val env = runCatching { Envelope.decode(text) }.getOrNull() ?: return
         if (env.from != friend.deviceId) return
         handle(friend, env)
@@ -120,12 +123,20 @@ class RoomHub(
         when (val m = Message.parse(friend.deviceId, plain) ?: return) {
             is Message.Pinged -> {
                 val p = m.ping
+                if (!accept(friend.deviceId, p.t)) return
                 fixesFlow.update { it + (friend.deviceId to FriendFix(friend.deviceId, friend.name, p.lat, p.lng, p.city, p.grade, p.t, clock())) }
                 messagesFlow.emit(m)
             }
             is Message.Stopped -> { fixesFlow.update { it - friend.deviceId }; messagesFlow.emit(m) }
             is Message.Revoked -> { fixesFlow.update { it - friend.deviceId }; store.removeFriend(friend.deviceId); messagesFlow.emit(m) }
         }
+    }
+
+    private suspend fun accept(deviceId: String, t: Long): Boolean = lock.withLock {
+        if (kotlin.math.abs(clock() - t * 1000) > FRESH_MS) return false
+        if (t <= (lastT[deviceId] ?: Long.MIN_VALUE)) return false
+        lastT[deviceId] = t
+        true
     }
 
     /** Seal and send; opens the room first if we are not holding it. True when the socket took it. */

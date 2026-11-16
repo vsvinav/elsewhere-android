@@ -25,4 +25,10 @@ class MessageTest {
         assertNull(Message.parse("A", """{"type":"dance"}"""))
         assertNull(Message.parse("A", "not json"))
     }
+
+    @Test fun `a ping whose time is not a number, or missing, is not a ping`() {
+        assertNull(Message.parse("A", vectorPlain.replace("\"t\":1763222520", "\"t\":\"1763222520\"")))
+        assertNull(Message.parse("A", vectorPlain.replace("\"t\":1763222520,", "")))
+        assertNull(Message.parse("A", vectorPlain.replace("\"t\":1763222520", "\"t\":1763222520.5")))
+    }
 }

@@ -20,6 +20,7 @@ import com.elsewhere.app.crew.CrewStore
 import com.elsewhere.app.crew.Crypto
 import com.elsewhere.app.crew.DeviceKeys
 import com.elsewhere.app.crew.Friend
+import com.elsewhere.app.crew.Grants
 import com.elsewhere.app.crew.Pairing
 import com.elsewhere.app.crew.REVOKE_JSON
 import com.elsewhere.app.crew.RelayClient
@@ -74,13 +75,15 @@ class CrewFlowTest {
     private lateinit var scope: CoroutineScope
     private lateinit var db: ElsewhereDb
     private lateinit var vm: CrewViewModel
-    private val martaSign = Crypto.b64(DeviceKeys.generate().signPub)
-    private val martaKx = Crypto.b64(DeviceKeys.generate().kxPub)
+    private val martaKeys = DeviceKeys.generate()
+    private val martaSign = Crypto.b64(martaKeys.signPub)
+    private val martaKx = Crypto.b64(martaKeys.kxPub)
+    private val martaKxSig = Crypto.kxSig(martaKeys.signPriv, martaKeys.kxPub)
 
     @Before fun setUp() {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when {
-                request.path!!.endsWith("/claim") -> MockResponse().setBody("""{"signPub":"$martaSign","kxPub":"$martaKx","name":"Marta"}""")
+                request.path!!.endsWith("/claim") -> MockResponse().setBody("""{"signPub":"$martaSign","kxPub":"$martaKx","name":"Marta","kxSig":"$martaKxSig"}""")
                 request.method == "POST" -> MockResponse().setResponseCode(200)
                 else -> MockResponse().setResponseCode(404)
             }
@@ -130,7 +133,10 @@ class CrewFlowTest {
         node("MARTA").performClick()
         node("Sonar").performClick()
         await { vm.ui.value?.friends?.single()?.grants?.sonar == true }
-        assertTrue(runBlocking { store.friend(marta.deviceId)!!.grants.sonar })
+        assertEquals("Sonar implies city-level live", Grants(liveCity = true, sonar = true), runBlocking { store.friend(marta.deviceId)!!.grants })
+        node("Sonar").performClick()
+        await { vm.ui.value?.friends?.single()?.grants?.sonar == false }
+        assertEquals("turning Sonar off leaves Live · city alone", Grants(liveCity = true), runBlocking { store.friend(marta.deviceId)!!.grants })
 
         node("REMOVE").performClick()
         await { vm.ui.value?.friends?.isEmpty() == true }

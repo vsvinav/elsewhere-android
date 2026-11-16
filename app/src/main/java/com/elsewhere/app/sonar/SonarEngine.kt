@@ -15,9 +15,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 
@@ -52,8 +53,20 @@ class SonarEngine(
         job = scope.launch { hub.messages.collect { m -> if (m is Message.Pinged) runCatching { evaluate(m) } } }
     }
 
+    /** Hit ids already acted on; a ping that carries one again (a replay, or our own id reflected) carries nothing. */
+    private val seenHits = object : LinkedHashMap<String, Unit>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Unit>?) = size > SEEN_HITS
+    }
+    private val seenLock = Mutex()
+
+    private suspend fun freshHit(hit: Ping.Hit?): String? = seenLock.withLock {
+        val id = hit?.id ?: return null
+        if (seenHits.put(id, Unit) != null) null else id
+    }
+
     suspend fun evaluate(m: Message.Pinged): Decision {
         val p = m.ping
+        val incomingHit = freshHit(p.hit)
         if (p.grade == Grade.city) return Decision.Quiet
         val friend = store.friend(m.from) ?: return Decision.Quiet
         if (!friend.grants.sonar) return Decision.Quiet
@@ -66,10 +79,11 @@ class SonarEngine(
             val recent = db.rawFixes().since(now / 1000 - 6L * 3600).map { it.toSonarFix() }
             val me = mySide(mine, history, recent, friendFix, now)
             val them = Side(friendFix, p.habitat, p.absenceDays)
-            decide(me, them, friend.pairId, now, store.debounce(listOf(friend.pairId)), p.hit?.id)
+            decide(me, them, friend.pairId, now, store.debounce(listOf(friend.pairId)), incomingHit)
         }
         when (decision) {
             is Decision.Fire -> {
+                seenLock.withLock { seenHits[decision.hitId] = Unit }
                 store.recordHit(friend.pairId, now)
                 publisher.carryHit(friend, Ping.Hit(decision.hitId, now / 1000))
                 land(friend, decision.hitId, now)
@@ -88,9 +102,11 @@ class SonarEngine(
     /** Quiet until local midnight. */
     suspend fun muteToday(deviceId: String) {
         val now = clock()
-        val midnight = LocalDate.ofInstant(Instant.ofEpochMilli(now), zone()).plusDays(1).atTime(LocalTime.MIDNIGHT).atZone(zone()).toInstant().toEpochMilli()
+        val midnight = Instant.ofEpochMilli(now).atZone(zone()).toLocalDate().plusDays(1).atTime(LocalTime.MIDNIGHT).atZone(zone()).toInstant().toEpochMilli()
         store.mute(deviceId, midnight)
     }
 
     suspend fun unmute(deviceId: String) = store.mute(deviceId, null)
+
+    companion object { const val SEEN_HITS = 64 }
 }

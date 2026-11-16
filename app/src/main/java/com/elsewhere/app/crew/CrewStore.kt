@@ -15,7 +15,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import javax.inject.Inject
@@ -25,7 +24,7 @@ import javax.inject.Singleton
 enum class ShareLength { HOUR, TONIGHT, UNTIL_STOP;
     fun until(now: Long, zone: ZoneId = ZoneId.systemDefault()): Long = when (this) {
         HOUR -> now + 3_600_000L
-        TONIGHT -> LocalDate.ofInstant(Instant.ofEpochMilli(now), zone).plusDays(1).atTime(LocalTime.MIDNIGHT).atZone(zone).toInstant().toEpochMilli()
+        TONIGHT -> Instant.ofEpochMilli(now).atZone(zone).toLocalDate().plusDays(1).atTime(LocalTime.MIDNIGHT).atZone(zone).toInstant().toEpochMilli()
         UNTIL_STOP -> Long.MAX_VALUE
     }
 }

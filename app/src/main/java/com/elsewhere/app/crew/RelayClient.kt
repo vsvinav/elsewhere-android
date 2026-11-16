@@ -24,7 +24,10 @@ import kotlin.coroutines.resumeWithException
 
 /** The public half of a device, as exchanged through a pair code. */
 @Serializable
-data class PairRecord(val signPub: String, val kxPub: String, val name: String)
+data class PairRecord(val signPub: String, val kxPub: String, val name: String, val kxSig: String? = null) {
+    /** False when the relay, or anyone between, has handed us a kx key the signing key never vouched for. */
+    val keysBound: Boolean get() = runCatching { Crypto.verifyKxSig(Crypto.b64decode(signPub), Crypto.b64decode(kxPub), kxSig) }.getOrDefault(false)
+}
 
 class RelayException(val code: Int, message: String) : IOException("$code $message")
 
@@ -45,7 +48,7 @@ class RelayClient(
     private val keys: suspend () -> DeviceKeys,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
 
     suspend fun createCode(code: String, me: PairRecord) {
         call("POST", "/pair/$code", json.encodeToString(PairRecord.serializer(), me))

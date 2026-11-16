@@ -89,7 +89,7 @@ class CrewViewModel @Inject constructor(
     var clock: () -> Long = System::currentTimeMillis
     var io: CoroutineDispatcher = Dispatchers.IO
     /** How often the owner's open code asks the relay whether someone has claimed it. */
-    var pollMs: Long = 5_000L
+    var pollMs: Long = 3_000L
 
     private val pair = MutableStateFlow<PairState>(PairState.Idle)
     private val tick = MutableStateFlow(clock())

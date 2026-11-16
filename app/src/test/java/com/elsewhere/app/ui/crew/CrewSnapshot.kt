@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
@@ -51,10 +52,10 @@ class CrewSnapshot {
             ui.fixes.values.map { FriendMark.of(it, ui.now) }.sortedBy { it.name }, layerOn = true, selected = CrewFixtures.marta.deviceId,
             hits = setOf(CrewFixtures.marta.deviceId), myCity = "Lisbon", crew = ui,
         )
-        val at = mutableStateOf(mapOf(CrewFixtures.marta.deviceId to Offset(620f, 820f), CrewFixtures.asta.deviceId to Offset(420f, 400f), CrewFixtures.kenji.deviceId to Offset(880f, 980f)))
+        val at = remember { mutableStateOf(mapOf(CrewFixtures.marta.deviceId to Offset(620f, 820f), CrewFixtures.asta.deviceId to Offset(420f, 400f), CrewFixtures.kenji.deviceId to Offset(880f, 980f))) }
         MapScreen(
             PinLayers(SampleRecord.record), PinOpts(), MapActions(), Modifier.height(1200.dp),
-            live = NowStamp(38.71, -9.15, "14:02", "Lisbon", "just now"), liveAt = mutableStateOf(Offset(300f, 700f)),
+            live = NowStamp(38.71, -9.15, "14:02", "Lisbon", "just now"), liveAt = remember { mutableStateOf(Offset(300f, 700f)) },
             friends = friends, friendsAt = at,
         ) { m -> Box(m.fillMaxSize().background(Poster.Stock)) }
     }

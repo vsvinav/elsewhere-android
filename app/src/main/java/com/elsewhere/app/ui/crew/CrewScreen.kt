@@ -184,7 +184,8 @@ private fun FriendDetail(ui: CrewUi, f: Friend, actions: CrewActions) {
         Spacer(Modifier.height(12.dp))
         TickRow(f.grants.liveCity, { actions.setGrants(f.deviceId, f.grants.copy(liveCity = it)) }, "Live · city")
         TickRow(f.grants.livePrecise, { actions.setGrants(f.deviceId, f.grants.copy(livePrecise = it)) }, "Live · precise")
-        TickRow(f.grants.sonar, { actions.setGrants(f.deviceId, f.grants.copy(sonar = it)) }, "Sonar")
+        // Sonar implies city-level live sharing; switching it off leaves Live · city as it was.
+        TickRow(f.grants.sonar, { actions.setGrants(f.deviceId, if (it) f.grants.copy(sonar = true, liveCity = true) else f.grants.copy(sonar = false)) }, "Sonar")
         Text(SONAR_COPY, Modifier.padding(start = 34.dp), color = Poster.Ink3, style = PosterType.Label)
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {

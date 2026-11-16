@@ -140,4 +140,17 @@ class SonarEngineTest {
         assertEquals("Within a mile of you, and neither of you is usually around here. Say hi?", n.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
         assertEquals(listOf("Open Crew Map", "Mute Sonar for today"), n.actions.map { it.title.toString() })
     }
+
+    @Test fun `a hit id is acted on once, replays carry nothing, and the memory is bounded`() = runTest {
+        assertEquals(Decision.Echo("PAIRM:1"), engine.evaluate(ping(hit = Ping.Hit("PAIRM:1", now / 1000), habitat = true)))
+        now += 25 * 3_600_000L
+        assertEquals(Decision.Quiet, engine.evaluate(ping(hit = Ping.Hit("PAIRM:1", now / 1000), habitat = true)))
+        assertEquals(1, alerts.names.size)
+        for (i in 2..(SonarEngine.SEEN_HITS + 1)) {
+            now += 25 * 3_600_000L
+            assertEquals(Decision.Echo("PAIRM:$i"), engine.evaluate(ping(hit = Ping.Hit("PAIRM:$i", now / 1000), habitat = true)))
+        }
+        now += 25 * 3_600_000L
+        assertEquals("the oldest id has been forgotten", Decision.Echo("PAIRM:1"), engine.evaluate(ping(hit = Ping.Hit("PAIRM:1", now / 1000), habitat = true)))
+    }
 }

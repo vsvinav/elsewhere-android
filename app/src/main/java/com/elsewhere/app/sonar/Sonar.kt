@@ -77,14 +77,10 @@ fun stintStart(myFixes: List<Fix>, at: Fix): Long {
 }
 
 /** The newcomer is whoever arrived later; on a tie the shorter absence counts, which can only hold fire. */
+/** The later arriver's gap; a tie goes to me, as on the web, so both phones pick the same side. */
 fun newcomerAbsence(me: Side, friend: Side): Int {
-    val mine = me.absenceDays ?: Int.MAX_VALUE
-    val theirs = friend.absenceDays ?: Int.MAX_VALUE
-    return when {
-        friend.fix.ts > me.fix.ts -> theirs
-        me.fix.ts > friend.fix.ts -> mine
-        else -> minOf(mine, theirs)
-    }
+    val later = if (me.fix.ts >= friend.fix.ts) me else friend
+    return later.absenceDays ?: Int.MAX_VALUE
 }
 
 fun eligible(me: Side, friend: Side, now: Long): Boolean =

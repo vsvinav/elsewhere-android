@@ -53,7 +53,9 @@ data class Envelope(val v: Int = 1, val from: String, val n: String, val c: Stri
 /** The maths shared with the web client, byte for byte: ids, the pair key, envelopes and request signatures. */
 object Crypto {
     private const val B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+    private const val CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
     private const val HKDF_INFO = "elsewhere/pair/v1"
+    private val KX_INFO = "elsewhere/kx/v1".toByteArray()
     private val random = SecureRandom()
 
     fun sha256(b: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(b)
@@ -63,14 +65,19 @@ object Crypto {
     fun b64decode(s: String): ByteArray = Base64.getDecoder().decode(s)
 
     /** RFC 4648 base32, upper case, no `=` padding. */
-    fun base32nopad(b: ByteArray): String {
+    fun base32nopad(b: ByteArray): String = base32(b, B32)
+
+    /** Crockford's alphabet (no I, L, O, U), for strings people read aloud. */
+    fun crockford32(b: ByteArray): String = base32(b, CROCKFORD)
+
+    private fun base32(b: ByteArray, alphabet: String): String {
         val out = StringBuilder((b.size * 8 + 4) / 5)
         var buf = 0; var bits = 0
         for (x in b) {
             buf = (buf shl 8) or (x.toInt() and 0xff); bits += 8
-            while (bits >= 5) { bits -= 5; out.append(B32[(buf shr bits) and 31]) }
+            while (bits >= 5) { bits -= 5; out.append(alphabet[(buf shr bits) and 31]) }
         }
-        if (bits > 0) out.append(B32[(buf shl (5 - bits)) and 31])
+        if (bits > 0) out.append(alphabet[(buf shl (5 - bits)) and 31])
         return out.toString()
     }
 
@@ -115,6 +122,12 @@ object Crypto {
     fun verifyRequest(signPub: ByteArray, method: String, path: String, ts: Long, body: ByteArray, sigB64: String): Boolean =
         runCatching { Ed25519Verify(signPub).verify(b64decode(sigB64), requestMessage(method, path, ts, body)) }.isSuccess
 
-    /** Eight characters a person can read back to confirm a pairing; the head of the device id. */
-    fun fingerprint(signPub: ByteArray): String = deviceId(signPub).substring(0, 8)
+    /** Binds the key-agreement key to the signing identity, so a relay cannot swap it. */
+    fun kxSig(signPriv: ByteArray, kxPub: ByteArray): String = b64(Ed25519Sign(signPriv).sign(KX_INFO + kxPub))
+
+    fun verifyKxSig(signPub: ByteArray, kxPub: ByteArray, sigB64: String?): Boolean =
+        sigB64 != null && runCatching { Ed25519Verify(signPub).verify(b64decode(sigB64), KX_INFO + kxPub) }.isSuccess
+
+    /** Eight characters a person can read back to confirm a pairing; covers both keys so a swapped kx key would show. */
+    fun fingerprint(signPub: ByteArray, kxPub: ByteArray): String = crockford32(sha256(signPub + kxPub)).substring(0, 8)
 }

@@ -4,6 +4,8 @@ import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 
 @Serializable
 data class Grants(val liveCity: Boolean = false, val livePrecise: Boolean = false, val sonar: Boolean = false) {
@@ -24,7 +26,7 @@ data class Friend(
     val grants: Grants = Grants(),
     val mutedUntil: Long? = null,
 ) {
-    val fingerprint: String get() = Crypto.fingerprint(Crypto.b64decode(signPub))
+    val fingerprint: String get() = Crypto.fingerprint(Crypto.b64decode(signPub), Crypto.b64decode(kxPub))
     val initial: String get() = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
     fun muted(now: Long) = (mutedUntil ?: 0L) > now
     val key: ByteArray get() = Crypto.b64decode(pairKey)
@@ -52,7 +54,12 @@ data class Ping(
 
     companion object {
         val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = true }
-        fun decode(s: String): Ping = json.decodeFromString(serializer(), s)
+        /** `t` must be a bare integer on the wire; a quoted or fractional time is refused rather than coerced. */
+        fun decode(s: String): Ping {
+            val t = json.parseToJsonElement(s).jsonObject["t"] as? JsonPrimitive
+            require(t != null && !t.isString && t.content.toLongOrNull() != null) { "t" }
+            return json.decodeFromString(serializer(), s)
+        }
     }
 }
 

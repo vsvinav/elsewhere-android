@@ -6,7 +6,7 @@ import java.util.Random
 /** The other side of a pairing, shown for confirmation before anything is saved. */
 data class Pending(val code: String, val record: PairRecord) {
     val name: String get() = record.name
-    val fingerprint: String get() = Crypto.fingerprint(Crypto.b64decode(record.signPub))
+    val fingerprint: String get() = Crypto.fingerprint(Crypto.b64decode(record.signPub), Crypto.b64decode(record.kxPub))
 }
 
 /**
@@ -22,7 +22,7 @@ class Pairing(
 ) {
     private suspend fun me(): PairRecord {
         val k = store.keys()
-        return PairRecord(Crypto.b64(k.signPub), Crypto.b64(k.kxPub), myName())
+        return PairRecord(Crypto.b64(k.signPub), Crypto.b64(k.kxPub), myName(), Crypto.kxSig(k.signPriv, k.kxPub))
     }
 
     /** The code already open, or a fresh one registered with the relay. */
@@ -36,16 +36,17 @@ class Pairing(
     }
 
     /** Whoever claimed my code, once someone has. */
-    suspend fun poll(code: ShareCode): Pending? = relay.pollCode(code.code)?.let { Pending(code.code, it) }
+    suspend fun poll(code: ShareCode): Pending? = relay.pollCode(code.code)?.let { it.requireBound(); Pending(code.code, it) }
 
     /** Claim a friend's code; the relay hands back who made it. */
     suspend fun claim(raw: String): Pending {
         val code = ShareCode.parse(raw) ?: throw IllegalArgumentException("That's not a pair code")
-        return Pending(code, relay.claimCode(code, me()))
+        return Pending(code, relay.claimCode(code, me()).also { it.requireBound() })
     }
 
     /** Save the friend, deriving the pair id and key; my open code is spent if it was the one used. */
     suspend fun confirm(p: Pending): Friend {
+        p.record.requireBound()
         val k = store.keys()
         val theirSign = Crypto.b64decode(p.record.signPub)
         val theirKx = Crypto.b64decode(p.record.kxPub)
@@ -60,3 +61,7 @@ class Pairing(
         return f
     }
 }
+
+const val KEYS_UNBOUND = "Couldn't verify this friend's keys"
+
+private fun PairRecord.requireBound() { if (!keysBound) throw SecurityException(KEYS_UNBOUND) }

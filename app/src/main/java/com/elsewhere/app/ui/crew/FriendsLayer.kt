@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.elsewhere.app.crew.FriendFix
+import com.elsewhere.app.crew.Grade
 import com.elsewhere.app.map.MapHost
 import com.elsewhere.app.record.age
 import com.elsewhere.app.ui.world.CapsText
@@ -51,9 +52,9 @@ const val SONAR_RING_TAG = "sonar-ring"
 const val RING_MS = 1_200
 
 /** One friend on the map: where their last ping put them and how old it is. */
-data class FriendMark(val id: String, val name: String, val initial: String, val city: String?, val lat: Double, val lng: Double, val ageLabel: String, val stale: Boolean) {
+data class FriendMark(val id: String, val name: String, val initial: String, val city: String?, val lat: Double, val lng: Double, val ageLabel: String, val stale: Boolean, val grade: Grade = Grade.city) {
     companion object {
-        fun of(f: FriendFix, now: Long) = FriendMark(f.deviceId, f.name, f.name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?", f.city, f.lat, f.lng, age(f.t, now / 1000), f.stale(now))
+        fun of(f: FriendFix, now: Long) = FriendMark(f.deviceId, f.name, f.name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?", f.city, f.lat, f.lng, age(f.t, now / 1000), f.stale(now), f.grade)
     }
 }
 
@@ -127,7 +128,7 @@ fun SonarRings(modifier: Modifier = Modifier) {
         for (lag in listOf(0f, 0.3f)) {
             val p = (t - lag).coerceIn(0f, 1f)
             if (p <= 0f) continue
-            drawCircle(Poster.Red.copy(alpha = (1f - p) * 0.9f), max * (0.25f + 0.75f * p), center, style = Stroke(3.dp.toPx()))
+            drawCircle(Poster.Mustard.copy(alpha = (1f - p) * 0.9f), max * (0.25f + 0.75f * p), center, style = Stroke(3.dp.toPx()))
         }
     }
 }
@@ -145,7 +146,7 @@ fun FriendBubble(m: FriendMark, myCity: String?, onClose: () -> Unit, modifier: 
             CapsText("${m.name} · ${m.city ?: "somewhere"} · ${m.ageLabel}", color = Poster.Ink2, size = 9.sp)
             if (same) { Spacer(Modifier.height(4.dp)); DisplayText("You're both in ${m.city}", 20.sp) }
             Spacer(Modifier.height(4.dp))
-            Text(if (m.stale) "Last known · stale after 15 min" else "Their last fix · ${if (m.city != null) "city-level" else "precise"}", color = Poster.Ink3, style = PosterType.Label)
+            Text(if (m.stale) "Last known · stale after 15 min" else "Their last fix · ${if (m.grade == Grade.precise) "precise" else "city-level"}", color = Poster.Ink3, style = PosterType.Label)
         }
         Text("×", Modifier.clickable(role = Role.Button, onClick = onClose).semantics { contentDescription = "Close" }.padding(8.dp), color = Poster.Ink, style = PosterType.Display.copy(fontSize = 22.sp))
     }
