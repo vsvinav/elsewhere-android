@@ -2,7 +2,7 @@
 <p align="center"><strong>Your Google Maps Timeline, printed as a world-tour poster — natively on Android.</strong><br>
 Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same privacy rules as <a href="https://github.com/vsvinav/elsewhere">the web app</a>.</p>
 
-> **Status:** under construction, usable today. All eight tabs are built — Tour, Numbers, Facts, Stops, Dates, Map, Flights and Replay — plus share cards and on-device recording. Install the latest APK from [Releases](https://github.com/vsvinav/elsewhere-android/releases).
+> **Status:** all eight tabs are built — Tour, Numbers, Facts, Stops, Dates, Map, Flights and Replay — plus share cards and on-device recording. v2 (year wheel, Highlights, Play, Passport, Heat, Live now, Snap, Crew and Sonar) is shipping as `v2.0.0-alpha.N` previews. Install the latest APK from [Releases](https://github.com/vsvinav/elsewhere-android/releases).
 
 <p align="center">
 <img src="docs/screenshots/tour.png" width="180" alt="Tour: ADA'S ELSEWHERE headline, nights per city, dotted route map">
@@ -48,6 +48,38 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Share cards | ✅ |
 | Recording new location on-device | ✅ |
 | Pull to refresh on the poster and list tabs (Tour, Numbers, Facts, Dates, Flights, Stops; Map and Replay are the map itself) · bar stays while names land | ✅ |
+| **v2 (preview, `v2.0.0-alpha.N` releases):** year wheel · Highlights · Fun Facts hero · Play strip · Passport · Doors · Trip deck · Heat · Live now · Snap a place · Globe share · Settings · Crew · Sonar | ✅ |
+
+## What's new in v2 (preview)
+
+Install a `v2.0.0-alpha.N` APK from [Releases](https://github.com/vsvinav/elsewhere-android/releases); it installs over v0.x and keeps your record. Where each addition lives:
+
+| Feature | Where |
+| --- | --- |
+| **Year wheel** — spin a dial of years to re-range the record | Tour hero. |
+| **Highlights** — full-width "On this day" card | Facts, at the top. |
+| **Fun Facts hero** — the swipeable deck of shorter, ruder facts, with Shuffle and kind chips | Facts, below Highlights. |
+| **Play strip** — five small games off your record | Facts, the PLAY strip. |
+| **Passport** — a stamp per country | Facts, bottom of the page. |
+| **Doors** — tap a month or figure to open the Dates behind it; back returns | Numbers month bars, *door to door*; Dates. |
+| **Trip deck** — each trip as a card to open, swipe and share | Dates. |
+| **Heat** — where you go most, as a density layer | Map → **HEAT** chip. |
+| **Live now** — your position and a pulsing stamp while recording | Map → **LIVE** chip, while *Record on this phone* is running. |
+| **Snap a place** — attach a photo to a stop | Stops → open a stop → **SNAP** stamp. |
+| **Globe share** — the Flights globe as a card | Flights → Save. |
+| **Settings** — keys, units, Ask Elsewhere, Crew relay, data | ▾ (the **E**) → Settings. |
+| **Crew** — pair with friends by code or QR; opt in per friend to *Live · city*, *Live · precise*, *Sonar* | ▾ → **Crew**. Friends' stamps on the Map; Map → **Share** broadcasts while recording. |
+| **Sonar** — pings you both when you're within a mile and neither of you is usually there | Rings on the Map and a notification with *Mute for today*. |
+
+### Setting up Crew and Sonar
+
+Crew talks through a relay you run yourself — a small Cloudflare Worker in the web repo's [`relay/`](https://github.com/vsvinav/elsewhere/tree/v2/relay) folder. It stores device ids and **encrypted** pings only; it cannot read anyone's location. Deploy once on the free tier (`cd relay && npm ci && npx wrangler login && npx wrangler deploy`), then paste the printed URL into **Settings → Crew → Relay URL** on every device.
+
+1. **Pair.** Open Crew. One phone shows a code (`PT-XXX-XXXX`) and **SHOW QR**; the other types it or scans (no camera permission needed; a `elsewhere://pair/…` link also works). Both see "Pair with *name*?" and an 8-character fingerprint — check they match, then confirm.
+2. **Share.** Toggle *Live · city* or *Live · precise* for that friend. Start **Record on this phone**, then Map → **Share**; the recording notification shows who you're sharing with and has **Stop**.
+3. **Sonar.** Toggle *Sonar* (it also turns on *Live · city*). It fires only when both of you are within a mile, both away from your usual places, after at least 14 days away, at most once a day — so two phones at home stay quiet by design.
+
+Leaving the Relay URL empty turns Crew off. Removing a friend tells their phone to remove you too.
 
 ## What you get
 
