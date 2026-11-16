@@ -60,6 +60,8 @@ import com.elsewhere.app.ui.world.motionOn
 import com.elsewhere.app.ui.world.n0
 import com.elsewhere.app.ui.world.plural
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.elsewhere.app.ui.crew.CrewViewModel
+import com.elsewhere.app.ui.crew.SharingBanner
 import com.elsewhere.app.highlights.HighlightsViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -101,7 +103,9 @@ fun RecordRoute(onClose: () -> Unit, vm: RecordViewModel = hiltViewModel()) {
     val settingsIntent = { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     val highlights = hiltViewModel<HighlightsViewModel>()
     val highlightsAt by highlights.at.collectAsStateWithLifecycle()
-    RecordScreen(ui, highlightsAt = highlightsAt, onHighlightsAt = highlights::set, actions = RecordActions(
+    val crew = hiltViewModel<CrewViewModel>()
+    val crewUi by crew.ui.collectAsStateWithLifecycle()
+    RecordScreen(ui, highlightsAt = highlightsAt, onHighlightsAt = highlights::set, banner = { crewUi?.let { SharingBanner(it, onStop = crew::stopShare) } }, actions = RecordActions(
         onAllow = { p ->
             asked = p
             // Fine and coarse go together: Android 12 lets the user pick, and coarse alone is useless to us.
@@ -119,8 +123,12 @@ fun RecordRoute(onClose: () -> Unit, vm: RecordViewModel = hiltViewModel()) {
 
 /** `scroll = false` lays the whole sheet out at full height, for snapshots. */
 @Composable
-fun RecordScreen(ui: RecordUi, actions: RecordActions, modifier: Modifier = Modifier, scroll: Boolean = true, highlightsAt: Int? = null, onHighlightsAt: (Int?) -> Unit = {}) {
+fun RecordScreen(
+    ui: RecordUi, actions: RecordActions, modifier: Modifier = Modifier, scroll: Boolean = true, highlightsAt: Int? = null, onHighlightsAt: (Int?) -> Unit = {},
+    banner: @Composable () -> Unit = {},
+) {
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()) else Modifier)) {
+        banner()
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(40.dp).background(Poster.Ink), contentAlignment = Alignment.Center) { DisplayText("E", 26.sp, color = Poster.Stock) }
             Spacer(Modifier.weight(1f))

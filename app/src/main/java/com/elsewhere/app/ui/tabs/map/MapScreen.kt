@@ -118,6 +118,17 @@ import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.roundToInt
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.elsewhere.app.sonar.PendingCrew
+import com.elsewhere.app.ui.crew.CrewViewModel
+import com.elsewhere.app.ui.crew.FriendActions
+import com.elsewhere.app.ui.crew.FriendBubble
+import com.elsewhere.app.ui.crew.FriendMark
+import com.elsewhere.app.ui.crew.FriendStamps
+import com.elsewhere.app.ui.crew.FriendsUi
+import com.elsewhere.app.ui.crew.ShareSheet
+import com.elsewhere.app.ui.crew.SharingBanner
+import com.elsewhere.app.ui.crew.friendOffsets
 
 // Port of web/src/map/Pins.tsx (PinHud) over MapView.tsx's pin pass: every stop in the window as a pin.
 
@@ -133,7 +144,7 @@ data class MapActions(
 )
 
 @Composable
-fun MapTab(vm: MapViewModel = hiltViewModel()) {
+fun MapTab(vm: MapViewModel = hiltViewModel(), crew: CrewViewModel = hiltViewModel()) {
     val layers by vm.layers.collectAsStateWithLifecycle()
     val opts by vm.opts.collectAsStateWithLifecycle()
     val origin by vm.origin.collectAsStateWithLifecycle()
@@ -178,14 +189,32 @@ fun MapTab(vm: MapViewModel = hiltViewModel()) {
     // One projection per camera frame, read by the stamp's layout alone: the rest of the chrome never recomposes for it.
     val liveAt = produceState<Offset?>(null, host, live) { liveOffsets(host, live).collect { value = it } }
     val acts = MapActions(vm::toggle, vm::only, vm::showAll, vm::search, vm::select, vm::sizeBy, fit = { layers?.let { fit(it, opts) } }, seen = vm::seen, heat = vm::heat)
+
+    // The Friends layer: marks rebuilt only when a ping lands or the clock ticks, never per frame.
+    val crewUi by crew.ui.collectAsStateWithLifecycle()
+    val layerOn by crew.layer.collectAsStateWithLifecycle()
+    val friendSel by crew.selected.collectAsStateWithLifecycle()
+    val hits by crew.hits.collectAsStateWithLifecycle()
+    val pendingMap by PendingCrew.map.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingMap) { if (pendingMap) { crew.setLayer(true); PendingCrew.map.value = false } }
+    val friends = remember(crewUi, layerOn, friendSel, hits, live) {
+        val c = crewUi ?: return@remember null
+        if (c.friends.isEmpty()) null
+        else FriendsUi(c.fixes.values.filter { !it.gone(c.now) }.map { FriendMark.of(it, c.now) }.sortedBy { it.name }, layerOn, friendSel, hits, live?.city, c)
+    }
+    val friendsAt = produceState<Map<String, Offset>>(emptyMap(), host, friends?.marks) { friendOffsets(host, friends?.marks ?: emptyList()).collect { value = it } }
+    var sheet by rememberSaveable { mutableStateOf(false) }
+    val friendActs = FriendActions(layer = crew::setLayer, select = crew::select, share = { sheet = true }, stop = crew::stopShare)
     MapScreen(
         layers, opts, acts, snackbar = snackbar, origin = origin, onBack = vm::back, live = live, liveAt = liveAt,
         onLive = { live?.let { host.moveTo(Cam(it.lat, it.lng, maxOf(host.camera.value.zoom, 15f)), animateMs = 400) } },
+        friends = friends, friendsAt = friendsAt, friendActs = friendActs,
     ) { m ->
         host.Content(m, basemap, copyright) {
             layers?.let { PinCanvas(host, it, opts, Modifier.fillMaxSize()) }
         }
     }
+    if (sheet) crewUi?.let { ShareSheet(it, crew, onClose = { sheet = false }) }
 }
 
 /** Chips and search above the map, the pin HUD below it, the open pin's card over its bottom edge, a door's stub over its top. */
@@ -194,26 +223,31 @@ fun MapScreen(
     layers: PinLayers?, opts: PinOpts, acts: MapActions, modifier: Modifier = Modifier,
     snackbar: SnackbarHostState? = null, origin: Origin? = null, onBack: () -> Unit = {},
     live: NowStamp? = null, liveAt: State<Offset?> = remember { mutableStateOf(null) }, onLive: () -> Unit = {},
+    friends: FriendsUi? = null, friendsAt: State<Map<String, Offset>> = remember { mutableStateOf(emptyMap()) }, friendActs: FriendActions = FriendActions(),
     map: @Composable BoxScope.(Modifier) -> Unit,
 ) {
     val shown = remember(layers, opts.hidden, opts.query) { layers?.shown(opts) ?: emptyList() }
     val sum = remember(shown) { summary(shown) }
     Column(modifier.fillMaxSize().background(Poster.Stock)) {
+        friends?.crew?.let { SharingBanner(it, onStop = friendActs.stop) }
         CatChips(layers?.counts ?: emptyMap(), opts.hidden, acts)
         PosterTextField(opts.query, acts.search, Modifier.padding(horizontal = 12.dp), placeholder = "Find a stop…")
         Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth().weight(1f).border(2.dp, Poster.Ink)) {
             map(Modifier.fillMaxSize().padding(2.dp))
             if (live != null) NowStampMark(live, liveAt, onLive, Modifier.fillMaxSize().padding(2.dp))
+            if (friends != null && friends.layerOn) FriendStamps(friends, friendsAt, onTap = { friendActs.select(if (friends.selected == it) null else it) }, Modifier.fillMaxSize().padding(2.dp))
             OriginTag(origin, onBack, Modifier.align(Alignment.TopStart).padding(12.dp))
             val sel = opts.selected?.let { id -> layers?.all?.firstOrNull { it.id == id } ?: layers?.homes?.firstOrNull { it.id == id } }
             if (sel != null) {
                 LaunchedEffect(sel.id) { if (sel.place.name == null || sel.place.photo == null) acts.seen(sel.id) }
                 PinCard(sel, Modifier.align(Alignment.BottomCenter).padding(12.dp)) { acts.select(null) }
             }
+            val friend = friends?.takeIf { it.layerOn }?.let { f -> f.marks.firstOrNull { it.id == f.selected } }
+            if (friend != null) FriendBubble(friend, friends.myCity, onClose = { friendActs.select(null) }, Modifier.align(Alignment.BottomCenter).padding(12.dp))
             if (snackbar != null) SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
         }
-        PinHud(sum, opts.sizeBy, opts.heat, acts, live = live != null)
+        PinHud(sum, opts.sizeBy, opts.heat, acts, live = live != null, friends = friends, friendActs = friendActs)
     }
 }
 
@@ -255,7 +289,7 @@ private val ChipStyle get() = PosterType.Display.copy(fontSize = 15.sp, fontWeig
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PinHud(sum: PinSummary, sizeBy: SizeBy, heat: Boolean, acts: MapActions, live: Boolean = false) {
+private fun PinHud(sum: PinSummary, sizeBy: SizeBy, heat: Boolean, acts: MapActions, live: Boolean = false, friends: FriendsUi? = null, friendActs: FriendActions = FriendActions()) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -289,10 +323,22 @@ private fun PinHud(sum: PinSummary, sizeBy: SizeBy, heat: Boolean, acts: MapActi
                         .semantics { stateDescription = if (heat) "Heat on" else "Heat off" }.padding(horizontal = 7.dp, vertical = 4.dp),
                 )
                 if (heat) HeatLegend(Modifier.align(Alignment.CenterVertically))
+                if (friends != null) {
+                    val on = friends.layerOn
+                    Text(
+                        "FRIENDS", color = if (on) Poster.Ink else Poster.Ink, style = ChipStyle.copy(fontSize = 13.sp),
+                        modifier = Modifier.align(Alignment.CenterVertically).background(if (on) Poster.Mustard else Poster.Stock).border(1.dp, Poster.Ink)
+                            .toggleable(value = on, role = Role.Switch, onValueChange = friendActs.layer)
+                            .semantics { stateDescription = if (on) "Friends on" else "Friends off" }.padding(horizontal = 7.dp, vertical = 4.dp),
+                    )
+                }
             }
         }
         Spacer(Modifier.width(12.dp))
-        InkButton("Fit pins", acts.fit, quiet = true)
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            InkButton("Fit pins", acts.fit, quiet = true)
+            if (friends?.crew?.shareable?.isNotEmpty() == true) InkButton(if (friends.crew.sharing) "Sharing" else "Share", friendActs.share, red = friends.crew.sharing)
+        }
     }
 }
 

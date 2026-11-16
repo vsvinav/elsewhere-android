@@ -14,6 +14,11 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import com.elsewhere.app.crew.CrewPublisher
+import com.elsewhere.app.crew.CrewStore
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.core.app.ServiceCompat
 import com.elsewhere.app.MainActivity
 import com.elsewhere.app.R
@@ -55,6 +60,8 @@ class RecordService : Service() {
     @Inject lateinit var hints: ActivityHints
     @Inject lateinit var gate: PermissionGate
     @Inject lateinit var settings: SettingsStore
+    @Inject lateinit var crew: CrewStore
+    @Inject lateinit var publisher: CrewPublisher
 
     // One lane: fixes must reach the segmenter in the order they arrived.
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -79,6 +86,7 @@ class RecordService : Service() {
     }
 
     private var posted: String? = null
+    private var shareLine: String? = null
 
     /**
      * Repost only when the line changes: on Android 14+ a swiped-away notification would otherwise be put
@@ -86,7 +94,7 @@ class RecordService : Service() {
      */
     private fun repost() {
         val n = notification()
-        val line = n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        val line = n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() + "\n" + n.extras.getCharSequence(Notification.EXTRA_TEXT)
         if (line == posted) return
         posted = line
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, n)
@@ -99,10 +107,18 @@ class RecordService : Service() {
         fused = LocationServices.getFusedLocationProviderClient(this)
         channel()
         getSystemService(NotificationManager::class.java).cancel(NUDGE_ID)
+        // The share rides on this notification: its second line names who sees us, and offers to stop just that.
+        scope.launch {
+            combine(crew.share, crew.friends, ticks()) { s, f, _ -> s?.line(f, System.currentTimeMillis()) }
+                .distinctUntilChanged().collect { shareLine = it; repost() }
+        }
     }
+
+    private fun ticks() = kotlinx.coroutines.flow.flow { while (true) { emit(Unit); delay(60_000L) } }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
+        if (intent?.action == ACTION_STOP_SHARE) { scope.launch { publisher.stopShare() }; return START_STICKY }
         if (!gate.granted(Manifest.permission.ACCESS_FINE_LOCATION)) return standDown()
         // A redelivery after the system killed us carries no action: the settings know whether we were paused.
         paused = pausedFor(intent?.action, if (intent == null) runBlocking { settings.recording.first() } else Recording(), System.currentTimeMillis() / 1000)
@@ -188,12 +204,18 @@ class RecordService : Service() {
     private fun notification(): Notification {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val stop = PendingIntent.getService(this, 1, Intent(this, RecordService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        return NotificationCompat.Builder(this, CHANNEL)
+        val share = shareLine
+        val b = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_record_pin)
             .setContentTitle(if (paused) "Elsewhere is paused" else notificationText(lastFixTs, System.currentTimeMillis() / 1000))
-            .setContentText(if (paused) "Recording resumes by itself. Nothing is uploaded." else "Stays on this phone. Nothing is uploaded.")
+            .setContentText(share ?: if (paused) "Recording resumes by itself. Nothing is uploaded." else "Stays on this phone. Nothing is uploaded.")
             .setContentIntent(open)
             .addAction(0, "Stop", stop)
+        if (share != null) {
+            val stopShare = PendingIntent.getService(this, 2, Intent(this, RecordService::class.java).setAction(ACTION_STOP_SHARE), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            b.addAction(0, "Stop share", stopShare)
+        }
+        return b
             .setOngoing(false).setSilent(true).setPriority(NotificationCompat.PRIORITY_LOW)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
@@ -203,6 +225,7 @@ class RecordService : Service() {
         const val CHANNEL = "recording"
         const val NOTIFICATION_ID = 41
         const val ACTION_STOP = "com.elsewhere.app.record.STOP"
+        const val ACTION_STOP_SHARE = "com.elsewhere.app.record.STOP_SHARE"
         const val ACTION_PAUSE = "com.elsewhere.app.record.PAUSE"
         const val NUDGE_ID = 42
 

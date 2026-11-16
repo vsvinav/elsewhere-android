@@ -37,6 +37,15 @@ data class ShareSession(val friendIds: Set<String>, val startedAt: Long, val unt
         val m = ((now - startedAt) / 60_000L).coerceAtLeast(0)
         return if (m < 60) "$m min" else "${m / 60} h ${m % 60} min"
     }
+
+    /** The notification's second line: "Sharing city-level with Marta, Ásta · 42 min". */
+    fun line(friends: List<Friend>, now: Long): String? {
+        if (!active(now)) return null
+        val with = friends.filter { it.deviceId in friendIds }
+        if (with.isEmpty()) return null
+        val grade = if (with.any { it.grants.livePrecise }) "precise" else "city-level"
+        return "Sharing $grade with ${with.joinToString(", ") { it.name }} · ${elapsedLabel(now)}"
+    }
 }
 
 /** Everything Crew keeps on the phone: my keys, my friends, the open code, the share window and Sonar's debounce. */
