@@ -14,7 +14,6 @@ import com.elsewhere.app.crew.Grade
 import com.elsewhere.app.crew.Grants
 import com.elsewhere.app.crew.Message
 import com.elsewhere.app.crew.Ping
-import com.elsewhere.app.crew.PublishPlanner
 import com.elsewhere.app.crew.RelayClient
 import com.elsewhere.app.crew.RoomHub
 import com.elsewhere.app.crew.Rooms
@@ -111,7 +110,8 @@ class SonarEngineTest {
         assertTrue(p.test)
         assertEquals(id, p.hit!!.id)
         assertEquals(Grade.sonar, p.grade)
-        assertEquals(PublishPlanner.cellCentre(38.7223, -9.1393).first, p.lat)
+        assertEquals(null, p.lat)
+        assertEquals(null, p.lng)
         assertTrue(store.debounce(listOf("PAIRM")).lastHitByPair.isEmpty())
         assertEquals("my own id reflected is nothing", Decision.Quiet, engine.evaluate(ping(hit = Ping.Hit(id, now / 1000), test = true)))
         store.setGrants("M", Grants(liveCity = true))
