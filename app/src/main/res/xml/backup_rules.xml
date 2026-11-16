@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Everything goes along except the full-size photos; the database and thumbnails are enough to bring the cards back. -->
+<!-- Everything goes along except the full-size photos and the prefs, which hold keys and tokens; the recovery vault carries identity. -->
 <full-backup-content>
     <exclude domain="file" path="photos/originals/" />
+    <exclude domain="file" path="datastore/" />
 </full-backup-content>
