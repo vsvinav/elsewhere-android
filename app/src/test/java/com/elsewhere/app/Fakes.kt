@@ -1,5 +1,11 @@
 package com.elsewhere.app
 
+import com.elsewhere.app.account.AccountInfo
+import com.elsewhere.app.account.AccountState
+import com.elsewhere.app.account.Accounts
+import com.elsewhere.app.account.Session
+import com.elsewhere.app.account.VaultState
+import com.elsewhere.app.account.WrongPassphrase
 import com.elsewhere.app.ask.LlmClient
 import com.elsewhere.app.ask.LlmConfig
 import com.elsewhere.app.data.Counters
@@ -49,6 +55,31 @@ object Fakes {
         override suspend fun provisionalRecord(): Record = rec
         override suspend fun saveProfile(p: Profile) { saved = p; profile.value = p }
         override suspend fun reset() { resets++; hasImport.value = false; profile.value = null }
+    }
+
+    /** An account layer that remembers what was asked of it; `welcomed = true` by default so older flows skip Welcome. */
+    class Account(state: AccountState = AccountState(welcomed = true), var hasVault: Boolean = false, var passphrase: String = "secret-pass") : Accounts {
+        override val account = MutableStateFlow<AccountState?>(state)
+        override val vaultState = MutableStateFlow(VaultState.None)
+        val started = mutableListOf<String>()
+        val codes = mutableListOf<String>()
+        var passphrasesSet = mutableListOf<String>()
+        var restored = mutableListOf<String>()
+        var unlocked = mutableListOf<String>()
+        var logOuts = 0; var deletes = 0
+        var fail: Throwable? = null
+        override suspend fun welcome() { account.value = account.value!!.copy(welcomed = true) }
+        override suspend fun start(email: String) { fail?.let { throw it }; started += email }
+        override suspend fun finish(email: String, code: String): AccountInfo {
+            fail?.let { throw it }; codes += code
+            account.value = account.value!!.copy(session = Session("sess", "acct_1", email))
+            return AccountInfo("acct_1", email, 0L, hasVault)
+        }
+        override suspend fun setPassphrase(passphrase: String) { fail?.let { throw it }; passphrasesSet += passphrase; vaultState.value = VaultState.UpToDate }
+        override suspend fun restore(passphrase: String) { fail?.let { throw it }; if (passphrase != this.passphrase) throw WrongPassphrase(); restored += passphrase }
+        override suspend fun unlock(passphrase: String) { fail?.let { throw it }; if (passphrase != this.passphrase) throw WrongPassphrase(); unlocked += passphrase; vaultState.value = VaultState.UpToDate }
+        override suspend fun logOut() { fail?.let { throw it }; logOuts++; account.value = account.value!!.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) }
+        override suspend fun deleteAccount() { fail?.let { throw it }; deletes++; account.value = account.value!!.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) }
     }
 
     class Maps : MapsSettings {
