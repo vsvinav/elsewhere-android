@@ -20,7 +20,7 @@ fun versionCodeOf(v: String): Int {
 }
 
 // One keystore for every published APK, so an upgrade installs in place and keeps the phone's recorded data.
-// CI writes it to ELSEWHERE_KEYSTORE; without it the build signs with the default debug key.
+// CI writes it to ELSEWHERE_KEYSTORE; without it the release build is left unsigned.
 val keystorePath: String? = System.getenv("ELSEWHERE_KEYSTORE")?.takeIf { File(it).isFile }
 
 // Google's Maps SDK reads its key from the manifest, so it belongs to whoever builds the APK, not the user:
@@ -49,8 +49,11 @@ android {
         }
     }
     buildTypes {
-        debug { if (keystorePath != null) signingConfig = signingConfigs.getByName("elsewhere") }
-        release { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
+        release {
+            isMinifyEnabled = true; isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (keystorePath != null) signingConfig = signingConfigs.getByName("elsewhere")
+        }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
