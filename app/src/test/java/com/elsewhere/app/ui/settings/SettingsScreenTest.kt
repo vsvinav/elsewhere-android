@@ -15,6 +15,10 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elsewhere.app.Fakes
+import com.elsewhere.app.account.AccountState
+import com.elsewhere.app.account.Session
+import com.elsewhere.app.account.VaultState
+import com.elsewhere.app.ui.account.AccountEntry
 import com.elsewhere.app.data.Settings
 import com.elsewhere.app.Fx
 import com.elsewhere.app.ask.LlmProvider
@@ -42,13 +46,60 @@ class SettingsScreenTest {
     private val asker = Fakes.Asker()
     private var closed = 0
 
+    private val account = Fakes.Account()
+    private var opened: AccountEntry? = null
+
     private fun show() {
         rule.setContent {
-            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker) }
+            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account) }
             val ui by vm.ui.collectAsStateWithLifecycle()
-            ElsewhereTheme { SettingsScreen(ui, vm, onBack = { closed++ }, sdk = false) }
+            ElsewhereTheme { SettingsScreen(ui, vm, onBack = { closed++ }, sdk = false, onAccount = { opened = it }) }
         }
         rule.waitForIdle()
+    }
+
+    @Test fun `signed out, the Account section offers to log in and saves the service URL`() {
+        show()
+        node("ACCOUNT").assertIsDisplayed()
+        node("LOG IN OR SIGN UP").performClick()
+        assertEquals(AccountEntry.LogIn, opened)
+        rule.onNodeWithText(Settings.DEFAULT_ACCOUNT).performScrollTo().performTextReplacement("https://account.example.org")
+        node("SAVE SERVICE").performClick()
+        rule.waitForIdle()
+        assertEquals("https://account.example.org", maps.cur.value.accountUrl)
+    }
+
+    @Test fun `signed in, the section shows the email, the vault's standing, and a two-tap delete`() {
+        account.account.value = AccountState(session = Session("s", "acct_1", "ana@example.com"), welcomed = true)
+        account.vaultState.value = VaultState.OutOfDate
+        show()
+        node("ana@example.com").assertIsDisplayed()
+        node(VAULT_OUT_OF_DATE).assertIsDisplayed()
+        node("UPDATE").performClick()
+        assertEquals(AccountEntry.Update, opened)
+        account.vaultState.value = VaultState.UpToDate
+        rule.waitForIdle()
+        node(VAULT_UP_TO_DATE).assertIsDisplayed()
+        rule.onAllNodesWithText("UPDATE").assertCountEquals(0)
+
+        node("DELETE ACCOUNT").performClick()
+        node(DELETE_CAPTION).assertIsDisplayed()
+        node("KEEP IT").performClick()
+        assertEquals(0, account.deletes)
+        node("DELETE ACCOUNT").performClick()
+        node("DELETE FOR GOOD").performClick()
+        rule.waitForIdle()
+        assertEquals(1, account.deletes)
+        node("LOG IN OR SIGN UP").assertIsDisplayed()
+    }
+
+    @Test fun `log out drops the session`() {
+        account.account.value = AccountState(session = Session("s", "acct_1", "ana@example.com"), welcomed = true)
+        show()
+        node("LOG OUT").performClick()
+        rule.waitForIdle()
+        assertEquals(1, account.logOuts)
+        node("LOG IN OR SIGN UP").assertIsDisplayed()
     }
 
     /** The page scrolls, so a node is brought into view before it is read or pressed. */

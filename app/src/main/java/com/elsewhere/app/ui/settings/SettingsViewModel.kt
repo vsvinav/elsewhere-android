@@ -2,6 +2,10 @@ package com.elsewhere.app.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.elsewhere.app.account.Accounts
+import com.elsewhere.app.account.Session
+import com.elsewhere.app.account.VaultState
+import com.elsewhere.app.account.userMessage
 import com.elsewhere.app.ask.LlmClient
 import com.elsewhere.app.ask.LlmConfig
 import com.elsewhere.app.ask.LlmProvider
@@ -10,6 +14,7 @@ import com.elsewhere.app.ask.modelOf
 import com.elsewhere.app.data.LlmSettings
 import com.elsewhere.app.data.MapProvider
 import com.elsewhere.app.data.MapsSettings
+import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Settings
 import com.elsewhere.app.data.Units
@@ -42,10 +47,13 @@ sealed interface LlmTest {
     data class Failed(val message: String) : LlmTest
 }
 
+/** The Account section: who is signed in, if anyone, and whether the vault matches this phone. */
+data class AccountUi(val session: Session? = null, val vault: VaultState = VaultState.None, val error: String? = null)
+
 /** Everything the settings page shows; null in the view model until the stores have been read. */
 data class SettingsUi(
     val maps: Settings, val llm: LlmConfig, val units: Units,
-    val keyCheck: KeyCheck = KeyCheck.Idle, val test: LlmTest = LlmTest.Idle,
+    val keyCheck: KeyCheck = KeyCheck.Idle, val test: LlmTest = LlmTest.Idle, val account: AccountUi = AccountUi(),
 )
 
 /** Everything the settings page can do; the view model is the real one, snapshots pass a no-op. */
@@ -56,18 +64,25 @@ interface SettingsActions {
     fun testLlm(c: LlmConfig)
     fun setUnits(u: Units)
     fun setRelayUrl(url: String)
+    fun setAccountUrl(url: String)
+    fun logOut()
+    fun deleteAccount()
 }
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val maps: MapsSettings, private val verifier: KeyVerifier, private val repo: RecordStore,
-    private val llm: LlmSettings, private val client: LlmClient,
+    private val llm: LlmSettings, private val client: LlmClient, private val accounts: Accounts,
 ) : ViewModel(), SettingsActions {
     private val keyCheck = MutableStateFlow<KeyCheck>(KeyCheck.Idle)
     private val test = MutableStateFlow<LlmTest>(LlmTest.Idle)
+    private val accountError = MutableStateFlow<String?>(null)
 
-    val ui: StateFlow<SettingsUi?> = combine(maps.settings, llm.llm, repo.profile, keyCheck, test) { s, c, p, k, t ->
-        SettingsUi(s, c, p?.units ?: Units.KM, k, t)
+    private val account = combine(accounts.account, accounts.vaultState, accountError) { a, v, e -> AccountUi(a?.session, v, e) }
+
+    val ui: StateFlow<SettingsUi?> = combine(maps.settings, llm.llm, repo.profile, keyCheck, test, account) { arr ->
+        @Suppress("UNCHECKED_CAST")
+        SettingsUi(arr[0] as Settings, arr[1] as LlmConfig, (arr[2] as Profile?)?.units ?: Units.KM, arr[3] as KeyCheck, arr[4] as LlmTest, arr[5] as AccountUi)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** A blank key still saves: it clears the stored key and its verdict, keeping the Map ID. */
@@ -102,6 +117,19 @@ class SettingsViewModel @Inject constructor(
 
     override fun setRelayUrl(url: String) {
         viewModelScope.launch { maps.saveSettings(maps.settings.first().copy(relayUrl = url.trim())) }
+    }
+
+    override fun setAccountUrl(url: String) {
+        viewModelScope.launch { maps.saveSettings(maps.settings.first().copy(accountUrl = url.trim())) }
+    }
+
+    override fun logOut() = accountCall { accounts.logOut() }
+
+    override fun deleteAccount() = accountCall { accounts.deleteAccount() }
+
+    private fun accountCall(block: suspend () -> Unit) {
+        accountError.value = null
+        viewModelScope.launch { runCatching { block() }.onFailure { accountError.value = it.userMessage() } }
     }
 
     override fun setUnits(u: Units) {
