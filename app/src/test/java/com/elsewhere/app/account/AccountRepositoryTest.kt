@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -49,7 +50,8 @@ class AccountRepositoryTest {
         override suspend fun saveSalt(salt: String?) = state.update { it.copy(salt = salt) }
         override suspend fun saveVault(at: Long, hash: String?) = state.update { it.copy(vaultAt = at, vaultHash = hash) }
         override suspend fun markWelcomed() = state.update { it.copy(welcomed = true) }
-        override suspend fun clearSession() = state.update { it.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) }
+        /** DataStore really suspends here; a cancelled caller must still get the session off disk. */
+        override suspend fun clearSession() { yield(); state.update { it.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) } }
     }
 
     class FakeIdentity(var keys: DeviceKeys = DeviceKeys.fromSeeds(ByteArray(32) { 1 }, ByteArray(32) { 2 })) : Identity {
@@ -159,12 +161,13 @@ class AccountRepositoryTest {
         assertTrue(runCatching { w.repo.restore("correct horse battery staple") }.exceptionOrNull() is NoVault)
     }
 
-    @Test fun `a 401 on upload signs the phone out`() = runTest {
+    @Test fun `a 401 on the scheduled upload signs the phone out, even though it cancels its own job`() = runTest {
         val w = world()
         w.repo.finish("ada@example.org", "123456"); w.repo.setPassphrase("correct horse battery staple")
         w.api.putFail = AccountException(401, "unauthorized")
         advanceTimeBy(2_001)
         assertNull(w.store.state.value.session)
+        assertNull(w.store.state.value.salt)
         assertEquals(VaultState.None, w.vault())
     }
 

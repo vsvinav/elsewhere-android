@@ -46,5 +46,7 @@ class SettingsStoreTest {
         assertEquals("https://account.elsewhere.app", store.settings.first().accountUrl)
         store.saveSettings(store.settings.first().copy(accountUrl = " https://acct.example.org "))
         assertEquals("https://acct.example.org", store.settings.first().accountUrl)
+        store.saveSettings(store.settings.first().copy(accountUrl = "   "))
+        assertEquals(Settings.DEFAULT_ACCOUNT, store.settings.first().accountUrl)
     }
 }

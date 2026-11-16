@@ -3,7 +3,10 @@ package com.elsewhere.app.ui.account
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.junit4.StateRestorationTester
+import com.elsewhere.app.account.AccountException
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
@@ -73,7 +76,7 @@ class AccountFlowTest {
         rule.onNodeWithText("CONTINUE").performClick()
         rule.onNodeWithTag("account.code").performTextInput("654321")
         rule.waitForIdle()
-        rule.onNodeWithText("WELCOME BACK").assertIsDisplayed()
+        rule.onNodeWithText("ENTER YOUR RECOVERY PASSPHRASE").assertIsDisplayed()
         field("account.passphrase").performTextInput("wrong one")
         rule.onNodeWithText("RESTORE").performClick()
         rule.waitForIdle()
@@ -82,6 +85,33 @@ class AccountFlowTest {
         rule.waitForIdle()
         assertEquals(0, acct.restored.size)
         assertEquals(1, done)
+    }
+
+    /** The Activity comes back after a rotation with the same view model; the page it was on must still be there. */
+    @Test fun `recreating the activity at the Code step stays on the Code step`() {
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct)
+        val restorer = StateRestorationTester(rule)
+        restorer.setContent { ElsewhereTheme { AccountRoute(AccountEntry.LogIn, onDone = { done++ }, onClose = null, vm = vm) } }
+        field("account.email").performTextInput("ana@example.com")
+        rule.onNodeWithText("CONTINUE").performClick()
+        rule.onNodeWithText("We sent a code to ana@example.com").assertIsDisplayed()
+        restorer.emulateSavedInstanceStateRestore()
+        rule.onNodeWithText("We sent a code to ana@example.com").assertIsDisplayed()
+        assertEquals(listOf("ana@example.com"), acct.started)
+    }
+
+    @Test fun `resend is always offered and a refusal prints the rate-limit copy`() {
+        val acct = Fakes.Account()
+        show(acct, AccountEntry.LogIn)
+        field("account.email").performTextInput("ana@example.com")
+        rule.onNodeWithText("CONTINUE").performClick()
+        rule.onNodeWithText("RESEND CODE").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("SENT AGAIN").assertIsEnabled()
+        acct.fail = AccountException(429, "slow down")
+        rule.onNodeWithText("SENT AGAIN").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Too many tries. Give it an hour.").assertIsDisplayed()
     }
 
     @Test fun `cancel closes the flow`() {

@@ -93,7 +93,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
             keyPlaces = p[K.keyPlaces] ?: false, keyTiles = p[K.keyTiles] ?: false, keyCheckedAt = p[K.keyCheckedAt] ?: 0,
             limitedAccepted = p[K.limitedAccepted] ?: false,
             relayUrl = p[K.relayUrl] ?: Settings.DEFAULT_RELAY,
-            accountUrl = p[K.accountUrl] ?: Settings.DEFAULT_ACCOUNT,
+            accountUrl = p[K.accountUrl]?.takeIf { it.isNotBlank() } ?: Settings.DEFAULT_ACCOUNT,
         )
     }
 

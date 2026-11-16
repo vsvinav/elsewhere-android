@@ -97,6 +97,6 @@ class AccountClientTest {
         assertEquals("That code isn't right.", AccountException(401, "wrong code").userMessage())
         assertEquals("That code expired. Send a new one.", AccountException(400, "expired").userMessage())
         assertEquals("Couldn't reach the account service. Check your connection.", IOException("timeout").userMessage())
-        assertEquals("Something went wrong (500). Try again.", AccountException(500, "boom").userMessage())
+        assertEquals("Something went wrong. Try again.", AccountException(500, "boom").userMessage())
     }
 }

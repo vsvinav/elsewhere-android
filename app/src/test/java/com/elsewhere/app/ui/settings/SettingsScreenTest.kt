@@ -67,6 +67,10 @@ class SettingsScreenTest {
         node("SAVE SERVICE").performClick()
         rule.waitForIdle()
         assertEquals("https://account.example.org", maps.cur.value.accountUrl)
+        rule.onNodeWithText("https://account.example.org").performScrollTo().performTextClearance()
+        node("SAVE SERVICE").performClick()
+        rule.waitForIdle()
+        assertEquals(Settings.DEFAULT_ACCOUNT, maps.cur.value.accountUrl)
     }
 
     @Test fun `signed in, the section shows the email, the vault's standing, and a two-tap delete`() {

@@ -102,7 +102,7 @@ private fun CodePage(ui: AccountUi, actions: AccountActions) {
     Text(MAIL_LINK_NOTE, color = Poster.Ink3, style = PosterType.Label)
     Spacer(Modifier.height(36.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        InkButton(if (ui.resent) "Sent again" else "Resend code", { actions.resend() }, quiet = true, enabled = !ui.busy && !ui.resent)
+        InkButton(if (ui.resent) "Sent again" else "Resend code", { actions.resend() }, quiet = true, enabled = !ui.busy)
         CapsText("Change email", Modifier.clickable(onClick = actions::back).padding(8.dp), color = Poster.Ink, size = 11.sp)
     }
 }
@@ -154,10 +154,10 @@ private fun SetPassphrasePage(ui: AccountUi, actions: AccountActions) {
 private fun UnlockPage(ui: AccountUi, actions: AccountActions) {
     var p by rememberSaveable { mutableStateOf("") }
     val update = ui.entry == AccountEntry.Update
-    DisplayText(if (update) "Unlock your vault" else "Welcome back", 56.sp)
+    DisplayText("Enter your recovery passphrase", 48.sp)
     Spacer(Modifier.height(24.dp))
     Text(
-        if (update) "Enter your recovery passphrase to send this phone's record to the vault." else "Enter your recovery passphrase to bring your record to this phone.",
+        if (update) "It sends this phone's record to the vault." else "It brings your record to this phone.",
         color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 18.sp),
     )
     Spacer(Modifier.height(32.dp))

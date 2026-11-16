@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.security.GeneralSecurityException
+import kotlin.coroutines.coroutineContext
 
 /** What Settings prints next to "Recovery vault". */
 enum class VaultState { None, UpToDate, OutOfDate }
@@ -174,7 +175,13 @@ class AccountRepository(
         throw e
     }
 
-    private suspend fun signOutLocally() { key.value = null; pending?.cancel(); store.clearSession() }
+    /** The store first: cancelling `pending` from inside the scheduled upload would otherwise cut this short. */
+    private suspend fun signOutLocally() {
+        key.value = null
+        store.clearSession()
+        val job = pending
+        if (job != null && job !== coroutineContext[Job]) job.cancel()
+    }
 
     private fun plaintext(keys: DeviceKeys, p: Profile, s: Settings): String =
         VaultContents(

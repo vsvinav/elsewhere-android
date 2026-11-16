@@ -120,7 +120,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     override fun setAccountUrl(url: String) {
-        viewModelScope.launch { maps.saveSettings(maps.settings.first().copy(accountUrl = url.trim())) }
+        viewModelScope.launch { maps.saveSettings(maps.settings.first().copy(accountUrl = url.trim().ifBlank { Settings.DEFAULT_ACCOUNT })) }
     }
 
     override fun logOut() = accountCall { accounts.logOut() }

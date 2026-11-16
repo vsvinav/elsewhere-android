@@ -63,6 +63,26 @@ class AccountViewModelTest {
         assertTrue(vm.ui.value.done)
     }
 
+    @Test fun `begin is idempotent for the same entry until the flow is done`() = runTest(dispatcher) {
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct)
+        vm.begin(AccountEntry.LogIn)
+        vm.sendCode("ana@example.com"); advanceUntilIdle()
+        vm.begin(AccountEntry.LogIn)
+        assertEquals(AccountStep.Code, vm.ui.value.step)
+        vm.begin(AccountEntry.Update)                 // a different entry does start afresh
+        assertEquals(AccountStep.Unlock, vm.ui.value.step)
+    }
+
+    @Test fun `a rate-limited finish prints the same copy as a rate-limited start`() = runTest(dispatcher) {
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct)
+        vm.begin(AccountEntry.LogIn)
+        vm.sendCode("ana@example.com"); advanceUntilIdle()
+        acct.fail = AccountException(429, "slow down")
+        vm.submitCode("123456"); advanceUntilIdle()
+        assertEquals("Too many tries. Give it an hour.", vm.ui.value.error)
+        assertEquals(AccountStep.Code, vm.ui.value.step)
+    }
+
     @Test fun `start over keeps the session and leaves the vault alone`() = runTest(dispatcher) {
         val acct = Fakes.Account(hasVault = true); val vm = AccountViewModel(acct)
         vm.begin(AccountEntry.LogIn)

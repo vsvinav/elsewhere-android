@@ -33,7 +33,7 @@ fun Throwable.userMessage(): String = when {
     this is AccountException && error == "slow down" -> "Too many tries. Give it an hour."
     this is AccountException && error == "wrong code" -> "That code isn't right."
     this is AccountException && error == "expired" -> "That code expired. Send a new one."
-    this is AccountException -> "Something went wrong ($code). Try again."
+    this is AccountException -> "Something went wrong. Try again."
     else -> "Couldn't reach the account service. Check your connection."
 }
 

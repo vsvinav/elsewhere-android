@@ -55,7 +55,12 @@ class AccountViewModel @Inject constructor(private val accounts: Accounts) : Vie
     private val _ui = MutableStateFlow(AccountUi())
     val ui: StateFlow<AccountUi> = _ui
 
+    private var begun = false
+
+    /** Idempotent: a recreated Activity calls this again and must not throw the visitor back to the first page. */
     override fun begin(entry: AccountEntry) {
+        if (begun && _ui.value.entry == entry && !_ui.value.done) return
+        begun = true
         _ui.value = AccountUi(entry = entry, step = if (entry == AccountEntry.Update) AccountStep.Unlock else AccountStep.Email)
     }
 
