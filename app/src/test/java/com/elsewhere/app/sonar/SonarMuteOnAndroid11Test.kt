@@ -14,6 +14,7 @@ import com.elsewhere.app.crew.RoomHub
 import com.elsewhere.app.crew.Rooms
 import com.elsewhere.app.crew.ShareLength
 import com.elsewhere.app.data.db.ElsewhereDb
+import com.elsewhere.app.data.SecretBox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,7 +46,7 @@ class SonarMuteOnAndroid11Test {
     @Test fun `mute for today and share until tonight both end at local midnight`() = runTest {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
-        val store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") })
+        val store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }, SecretBox.inMemory())
         val rooms = object : Rooms { override suspend fun send(friend: Friend, plaintext: String) = true; override fun forget(deviceId: String) = Unit }
         val publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { null }, scope) { now }
         val hub = RoomHub(store, RelayClient(OkHttpClient(), { "" }, { store.keys() }), scope)

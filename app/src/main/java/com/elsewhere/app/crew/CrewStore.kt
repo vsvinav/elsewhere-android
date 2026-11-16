@@ -5,10 +5,13 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.elsewhere.app.data.SecretBox
+import com.elsewhere.app.data.sealLegacy
 import com.elsewhere.app.sonar.Debounce
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -55,7 +58,7 @@ interface Identity {
 
 /** Everything Crew keeps on the phone: my keys, my friends, the open code, the share window and Sonar's debounce. */
 @Singleton
-class CrewStore @Inject constructor(private val store: DataStore<Preferences>) : Identity {
+class CrewStore @Inject constructor(private val store: DataStore<Preferences>, private val box: SecretBox) : Identity {
     private object K {
         val keys = stringPreferencesKey("crew.keys")
         val friends = stringPreferencesKey("crew.friends")
@@ -65,20 +68,25 @@ class CrewStore @Inject constructor(private val store: DataStore<Preferences>) :
     }
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val keysLock = Mutex()
+    private var sealed = false
+
+    /** Keys and friends written before they were sealed get sealed on the first read of a process. */
+    private suspend fun ready() { if (!sealed) { store.sealLegacy(box, K.keys, K.friends); sealed = true } }
 
     /** This phone's keys, minted on first use and only ever swapped by a vault restore. */
     override suspend fun keys(): DeviceKeys = keysLock.withLock {
-        store.data.first()[K.keys]?.let { runCatching { DeviceKeys.decode(it) }.getOrNull() }
-            ?: DeviceKeys.generate().also { k -> store.edit { it[K.keys] = k.encode() } }
+        ready()
+        store.data.first()[K.keys]?.let { runCatching { DeviceKeys.decode(box.openOrPlain(it)) }.getOrNull() }
+            ?: DeviceKeys.generate().also { k -> store.edit { it[K.keys] = box.seal(k.encode()) } }
     }
 
     /** Become the identity from the vault; the open pair code was registered under the old keys, so it goes. */
     override suspend fun replaceKeys(k: DeviceKeys) = keysLock.withLock {
-        store.edit { it[K.keys] = k.encode(); it.remove(K.code) }
+        store.edit { it[K.keys] = box.seal(k.encode()); it.remove(K.code) }
         Unit
     }
 
-    val friends: Flow<List<Friend>> = store.data.map { p -> decodeFriends(p[K.friends]) }
+    val friends: Flow<List<Friend>> = store.data.onStart { ready() }.map { p -> decodeFriends(p[K.friends]) }
     suspend fun friendsNow(): List<Friend> = friends.first()
     suspend fun friend(deviceId: String): Friend? = friendsNow().firstOrNull { it.deviceId == deviceId }
 
@@ -88,11 +96,11 @@ class CrewStore @Inject constructor(private val store: DataStore<Preferences>) :
     suspend fun mute(deviceId: String, until: Long?) = update { list -> list.map { if (it.deviceId == deviceId) it.copy(mutedUntil = until) else it } }
 
     private suspend fun update(f: (List<Friend>) -> List<Friend>) = store.edit { p ->
-        p[K.friends] = json.encodeToString(ListSerializer(Friend.serializer()), f(decodeFriends(p[K.friends])))
+        p[K.friends] = box.seal(json.encodeToString(ListSerializer(Friend.serializer()), f(decodeFriends(p[K.friends]))))
     }
 
     private fun decodeFriends(s: String?): List<Friend> =
-        s?.let { runCatching { json.decodeFromString(ListSerializer(Friend.serializer()), it) }.getOrNull() } ?: emptyList()
+        s?.let { runCatching { json.decodeFromString(ListSerializer(Friend.serializer()), box.openOrPlain(it)) }.getOrNull() } ?: emptyList()
 
     val code: Flow<ShareCode?> = store.data.map { p -> p[K.code]?.let { runCatching { json.decodeFromString(Stored.serializer(), it) }.getOrNull()?.let { s -> ShareCode(s.code, s.createdAt) } } }
     suspend fun saveCode(code: ShareCode?) = store.edit { p -> if (code == null) p.remove(K.code) else p[K.code] = json.encodeToString(Stored.serializer(), Stored(code.code, code.createdAt)) }

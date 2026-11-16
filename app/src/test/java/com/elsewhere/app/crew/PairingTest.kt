@@ -1,5 +1,6 @@
 package com.elsewhere.app.crew
 
+import com.elsewhere.app.data.SecretBox
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +40,7 @@ class PairingTest {
     @BeforeEach fun setUp() {
         server.start()
         dir = File("build/test-datastore/${UUID.randomUUID()}").apply { mkdirs() }
-        store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") })
+        store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }, SecretBox.inMemory())
         pairing = Pairing(store, RelayClient(OkHttpClient(), { server.url("/").toString() }, { store.keys() }, { now }), { "Me" }, { now })
     }
 

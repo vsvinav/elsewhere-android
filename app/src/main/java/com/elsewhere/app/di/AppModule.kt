@@ -13,6 +13,8 @@ import com.elsewhere.app.data.LandLoader
 import com.elsewhere.app.data.LandSource
 import com.elsewhere.app.data.LlmSettings
 import com.elsewhere.app.data.MapsSettings
+import com.elsewhere.app.data.KeystoreKeySource
+import com.elsewhere.app.data.SecretKeySource
 import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.data.db.ElsewhereDb
 import com.elsewhere.app.data.db.MIGRATIONS
@@ -72,6 +74,8 @@ object AppModule {
 
     @Provides @Singleton fun dataStore(@ApplicationContext ctx: Context): DataStore<Preferences> =
         PreferenceDataStoreFactory.create { ctx.preferencesDataStoreFile("settings") }
+
+    @Provides fun secretKeys(k: KeystoreKeySource): SecretKeySource = k
 
     @Provides @Singleton fun appScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 

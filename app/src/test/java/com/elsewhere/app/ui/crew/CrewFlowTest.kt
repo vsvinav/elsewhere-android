@@ -33,6 +33,7 @@ import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.sonar.SonarAlerts
 import com.elsewhere.app.sonar.SonarEngine
 import com.elsewhere.app.ui.world.ElsewhereTheme
+import com.elsewhere.app.data.SecretBox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -94,8 +95,8 @@ class CrewFlowTest {
         val dir = File("build/test-datastore/${UUID.randomUUID()}").apply { mkdirs() }
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
-        store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") })
-        settings = SettingsStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") })
+        store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }, SecretBox.inMemory())
+        settings = SettingsStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") }, SecretBox.inMemory())
         val relay = RelayClient(OkHttpClient(), { server.url("/").toString() }, { store.keys() })
         val publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { null }, scope)
         val hub = RoomHub(store, relay, scope)

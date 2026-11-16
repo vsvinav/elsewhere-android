@@ -50,7 +50,7 @@ class RecordRepositoryTest {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
         val store = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") }
-        repo = RecordRepository(db, SettingsStore(store), CitiesLoader(ctx), scope, ready)
+        repo = RecordRepository(db, SettingsStore(store, SecretBox.inMemory()), CitiesLoader(ctx), scope, ready)
     }
 
     @After fun tearDown() { scope.cancel(); db.close(); dir.deleteRecursively() }

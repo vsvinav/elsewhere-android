@@ -16,6 +16,7 @@ import com.elsewhere.app.ingest.Kind
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
@@ -49,7 +50,7 @@ data class Recording(val enabled: Boolean = false, val since: Long = 0L, val pau
 data class Counters(val detailsCalls: Int = 0, val photoCalls: Int = 0, val mapLoads: Int = 0, val since: Long = 0)
 
 @Singleton
-class SettingsStore @Inject constructor(private val store: DataStore<Preferences>) : MapsSettings, LlmSettings, CostMeter, AddressBook {
+class SettingsStore @Inject constructor(private val store: DataStore<Preferences>, private val box: SecretBox) : MapsSettings, LlmSettings, CostMeter, AddressBook {
     private object K {
         val profile = stringPreferencesKey("profile")
         val mapsKey = stringPreferencesKey("mapsKey")
@@ -81,14 +82,18 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
     private fun keyOf(kind: Kind) = when (kind) { Kind.DETAILS -> K.detailsCalls; Kind.PHOTOS -> K.photoCalls; Kind.MAPS -> K.mapLoads }
 
     private val json = Json { ignoreUnknownKeys = true }
+    private var sealed = false
+
+    /** API keys written before they were sealed get sealed on the first read of a process. */
+    private suspend fun ready() { if (!sealed) { store.sealLegacy(box, K.mapsKey, K.llmKey); sealed = true } }
 
     val profile: Flow<Profile?> = store.data.map { p ->
         p[K.profile]?.let { runCatching { json.decodeFromString<Profile>(it) }.getOrNull() }
     }
 
-    override val settings: Flow<Settings> = store.data.map { p ->
+    override val settings: Flow<Settings> = store.data.onStart { ready() }.map { p ->
         Settings(
-            mapsKey = p[K.mapsKey] ?: "", mapId = p[K.mapId] ?: "",
+            mapsKey = p[K.mapsKey]?.let(box::openOrPlain) ?: "", mapId = p[K.mapId] ?: "",
             mapProvider = MapProvider.parse(p[K.mapProvider]),
             keyPlaces = p[K.keyPlaces] ?: false, keyTiles = p[K.keyTiles] ?: false, keyCheckedAt = p[K.keyCheckedAt] ?: 0,
             limitedAccepted = p[K.limitedAccepted] ?: false,
@@ -101,12 +106,12 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         Counters(p[K.detailsCalls] ?: 0, p[K.photoCalls] ?: 0, p[K.mapLoads] ?: 0, p[K.usageSince] ?: 0)
     }
 
-    override val llm: Flow<LlmConfig> = store.data.map { p ->
-        LlmConfig(LlmProvider.parse(p[K.llmProvider]), p[K.llmKey] ?: "", p[K.llmModel] ?: "", p[K.llmBaseUrl] ?: "")
+    override val llm: Flow<LlmConfig> = store.data.onStart { ready() }.map { p ->
+        LlmConfig(LlmProvider.parse(p[K.llmProvider]), p[K.llmKey]?.let(box::openOrPlain) ?: "", p[K.llmModel] ?: "", p[K.llmBaseUrl] ?: "")
     }
 
     override suspend fun saveLlm(c: LlmConfig) {
-        store.edit { it[K.llmProvider] = c.provider.wire; it[K.llmKey] = c.key; it[K.llmModel] = c.model; it[K.llmBaseUrl] = c.baseUrl }
+        store.edit { it[K.llmProvider] = c.provider.wire; it[K.llmKey] = box.seal(c.key); it[K.llmModel] = c.model; it[K.llmBaseUrl] = c.baseUrl }
     }
 
     val recording: Flow<Recording> = store.data.map { p ->
@@ -135,7 +140,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
 
     override suspend fun saveSettings(s: Settings) {
         store.edit {
-            it[K.mapsKey] = s.mapsKey; it[K.mapId] = s.mapId
+            it[K.mapsKey] = box.seal(s.mapsKey); it[K.mapId] = s.mapId
             it[K.mapProvider] = s.mapProvider.name
             it[K.keyPlaces] = s.keyPlaces; it[K.keyTiles] = s.keyTiles; it[K.keyCheckedAt] = s.keyCheckedAt; it[K.limitedAccepted] = s.limitedAccepted
             it[K.relayUrl] = s.relayUrl.trim(); it[K.accountUrl] = s.accountUrl.trim()

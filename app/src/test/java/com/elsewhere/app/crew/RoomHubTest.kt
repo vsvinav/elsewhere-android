@@ -1,5 +1,6 @@
 package com.elsewhere.app.crew
 
+import com.elsewhere.app.data.SecretBox
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +28,7 @@ class RoomHubTest {
 
     @BeforeEach fun setUp() {
         dir = File("build/test-datastore/${UUID.randomUUID()}").apply { mkdirs() }
-        val store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") })
+        val store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }, SecretBox.inMemory())
         hub = RoomHub(store, RelayClient(OkHttpClient(), { "" }, { store.keys() }), scope) { now }
     }
 
