@@ -29,7 +29,11 @@ data class Settings(
     val keyPlaces: Boolean = false, val keyTiles: Boolean = false, val keyCheckedAt: Long = 0,
     /** The user has read and accepted "limited maps": free tiles, no place names or photos. */
     val limitedAccepted: Boolean = false,
-)
+    /** Where Crew pairs and talks; empty means no pairing. */
+    val relayUrl: String = DEFAULT_RELAY,
+) {
+    companion object { const val DEFAULT_RELAY = "https://relay.elsewhere.app" }
+}
 
 /** Whether the phone is recording its own location, since when, and whether that is paused for a while. */
 data class Recording(val enabled: Boolean = false, val since: Long = 0L, val pausedUntil: Long = 0L) {
@@ -50,6 +54,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         val keyTiles = booleanPreferencesKey("keyTiles")
         val keyCheckedAt = longPreferencesKey("keyCheckedAt")
         val limitedAccepted = booleanPreferencesKey("limitedAccepted")
+        val relayUrl = stringPreferencesKey("relayUrl")
         val detailsCalls = intPreferencesKey("detailsCalls")
         val photoCalls = intPreferencesKey("photoCalls")
         val mapLoads = intPreferencesKey("mapLoads")
@@ -81,6 +86,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
             mapProvider = MapProvider.parse(p[K.mapProvider]),
             keyPlaces = p[K.keyPlaces] ?: false, keyTiles = p[K.keyTiles] ?: false, keyCheckedAt = p[K.keyCheckedAt] ?: 0,
             limitedAccepted = p[K.limitedAccepted] ?: false,
+            relayUrl = p[K.relayUrl] ?: Settings.DEFAULT_RELAY,
         )
     }
 
@@ -125,6 +131,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
             it[K.mapsKey] = s.mapsKey; it[K.mapId] = s.mapId
             it[K.mapProvider] = s.mapProvider.name
             it[K.keyPlaces] = s.keyPlaces; it[K.keyTiles] = s.keyTiles; it[K.keyCheckedAt] = s.keyCheckedAt; it[K.limitedAccepted] = s.limitedAccepted
+            it[K.relayUrl] = s.relayUrl.trim()
         }
     }
 

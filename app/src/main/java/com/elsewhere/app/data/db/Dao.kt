@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM visits ORDER BY start, id") suspend fun all(): List<VisitEntity>
     @Query("SELECT COUNT(*) FROM visits") suspend fun count(): Int
     @Query("SELECT COUNT(*) FROM visits WHERE source = 'device'") suspend fun countDevice(): Int
+    @Query("SELECT * FROM visits WHERE `end` >= :since ORDER BY start") suspend fun since(since: Long): List<VisitEntity>
     @Query("DELETE FROM visits") suspend fun clear()
     @Query("DELETE FROM visits WHERE source = 'import'") suspend fun clearImported()
 }

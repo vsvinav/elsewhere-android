@@ -44,6 +44,18 @@ import com.elsewhere.app.ingest.KeyCheck
 import com.elsewhere.app.ingest.KeyChecker
 import com.elsewhere.app.ask.HttpLlmClient
 import com.elsewhere.app.ask.LlmClient
+import com.elsewhere.app.crew.CrewPublisher
+import com.elsewhere.app.crew.CrewStore
+import com.elsewhere.app.crew.Pairing
+import com.elsewhere.app.crew.RelayClient
+import com.elsewhere.app.crew.RoomHub
+import com.elsewhere.app.data.CitiesLoader
+import com.elsewhere.app.record.Recorder
+import com.elsewhere.app.sonar.SonarAlerts
+import com.elsewhere.app.sonar.SonarEngine
+import com.elsewhere.app.sonar.SonarNotifier
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import javax.inject.Singleton
 
 @Module
@@ -75,6 +87,17 @@ object AppModule {
     @Provides fun permissionGate(gate: AndroidPermissionGate): PermissionGate = gate
     @Provides fun recordControl(c: RecordController): RecordControl = c
     @Provides fun serviceLink(l: AndroidServiceLink): ServiceLink = l
+
+    @Provides @Singleton fun relay(http: OkHttpClient, settings: SettingsStore, crew: CrewStore): RelayClient =
+        RelayClient(http, { runBlocking { settings.settings.first().relayUrl } }, { crew.keys() })
+    @Provides @Singleton fun roomHub(crew: CrewStore, relay: RelayClient, scope: CoroutineScope): RoomHub = RoomHub(crew, relay, scope)
+    @Provides @Singleton fun pairing(crew: CrewStore, relay: RelayClient, settings: SettingsStore): Pairing =
+        Pairing(crew, relay, { settings.profile.first()?.name?.takeIf { it.isNotBlank() } ?: "Elsewhere" })
+    @Provides @Singleton fun publisher(crew: CrewStore, hub: RoomHub, recorder: Recorder, db: ElsewhereDb, cities: CitiesLoader, scope: CoroutineScope): CrewPublisher =
+        CrewPublisher.forApp(crew, hub, recorder, db, cities, scope)
+    @Provides @Singleton fun sonarAlerts(@ApplicationContext ctx: Context): SonarAlerts = SonarNotifier(ctx)
+    @Provides @Singleton fun sonarEngine(crew: CrewStore, hub: RoomHub, publisher: CrewPublisher, db: ElsewhereDb, alerts: SonarAlerts, scope: CoroutineScope): SonarEngine =
+        SonarEngine(crew, hub, publisher, db, alerts, scope)
 
     @Provides fun visits(db: ElsewhereDb) = db.visits()
     @Provides fun activities(db: ElsewhereDb) = db.activities()
