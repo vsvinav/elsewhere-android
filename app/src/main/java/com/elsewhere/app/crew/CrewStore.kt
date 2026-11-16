@@ -47,9 +47,15 @@ data class ShareSession(val friendIds: Set<String>, val startedAt: Long, val unt
     }
 }
 
+/** This phone's keypair, minted on first use; an account restore swaps it for the one in the vault. */
+interface Identity {
+    suspend fun keys(): DeviceKeys
+    suspend fun replaceKeys(k: DeviceKeys)
+}
+
 /** Everything Crew keeps on the phone: my keys, my friends, the open code, the share window and Sonar's debounce. */
 @Singleton
-class CrewStore @Inject constructor(private val store: DataStore<Preferences>) {
+class CrewStore @Inject constructor(private val store: DataStore<Preferences>) : Identity {
     private object K {
         val keys = stringPreferencesKey("crew.keys")
         val friends = stringPreferencesKey("crew.friends")
@@ -60,10 +66,16 @@ class CrewStore @Inject constructor(private val store: DataStore<Preferences>) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val keysLock = Mutex()
 
-    /** This phone's keys, minted on first use and never rotated. */
-    suspend fun keys(): DeviceKeys = keysLock.withLock {
+    /** This phone's keys, minted on first use and only ever swapped by a vault restore. */
+    override suspend fun keys(): DeviceKeys = keysLock.withLock {
         store.data.first()[K.keys]?.let { runCatching { DeviceKeys.decode(it) }.getOrNull() }
             ?: DeviceKeys.generate().also { k -> store.edit { it[K.keys] = k.encode() } }
+    }
+
+    /** Become the identity from the vault; the open pair code was registered under the old keys, so it goes. */
+    override suspend fun replaceKeys(k: DeviceKeys) = keysLock.withLock {
+        store.edit { it[K.keys] = k.encode(); it.remove(K.code) }
+        Unit
     }
 
     val friends: Flow<List<Friend>> = store.data.map { p -> decodeFriends(p[K.friends]) }

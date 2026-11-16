@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -104,5 +105,15 @@ class CrewStoreTest {
         assertEquals("Sharing city-level with Marta · 42 min", s.copy(friendIds = setOf("A")).line(listOf(a, b), 42 * 60_000L))
         assertNull(s.line(listOf(a, b), 3_600_001L))
         assertNull(s.line(emptyList(), 60_000L))
+    }
+
+    @Test fun `replacing the keys takes the new identity and drops the open code`() = runTest {
+        val before = store.keys()
+        store.saveCode(ShareCode("PT-MRT-7Q4K", 9L))
+        val restored = DeviceKeys.fromSeeds(ByteArray(32) { 7 }, ByteArray(32) { 8 })
+        store.replaceKeys(restored)
+        assertEquals(restored, store.keys())
+        assertNotEquals(before, store.keys())
+        assertNull(store.code.first())
     }
 }
