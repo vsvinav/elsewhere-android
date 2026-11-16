@@ -174,7 +174,7 @@ class RecordService : Service() {
 
     /**
      * Balanced power throughout: low power would hand back kilometre-wide fixes the segmenter can't place.
-     * While still the request is slower and undistanced, so a stay keeps receiving heartbeats.
+     * While still the request is slower and undistanced; Android still withholds fixes from a phone that isn't moving, which the segmenter reads as the stay going on.
      */
     @Suppress("MissingPermission")
     private fun request(still: Boolean) {

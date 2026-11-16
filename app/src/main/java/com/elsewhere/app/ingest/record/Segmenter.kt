@@ -60,9 +60,11 @@ class Segmenter(state: SegmenterState = SegmenterState(), private val tzAt: (Lon
         }
         val out = ArrayList<Emission>(2)
         val last = state.lastTs
-        if (last != null && f.ts - last > GAP_S) {
-            // The phone went dark: whatever was open can't be trusted past the last fix.
-            state.stay?.takeIf { it.confirmed }?.let { out += visitOf(it) }
+        val stay0 = state.stay
+        // Android stops delivering fixes to a phone that isn't moving, so a long silence at the same spot is the stay
+        // going on, not the phone going dark.
+        if (last != null && f.ts - last > GAP_S && !(stay0 != null && metres(stay0.lat, stay0.lng, f.lat, f.lng) <= RADIUS_M)) {
+            stay0?.takeIf { it.confirmed }?.let { out += visitOf(it) }
             state = SegmenterState()
         }
         val stay = state.stay

@@ -206,6 +206,17 @@ class SegmenterTest {
         assertEquals(listOf("visit"), later.map { it.kind })
     }
 
+    @Test fun `a long gap at the same spot keeps the stay going`() {
+        // Phones stop delivering fixes while still, so a night at home arrives as one fix, eight hours of silence, one fix.
+        val s = seg()
+        for (i in 0..10) s.feed(fix(t0 + i * 60, home))
+        assertTrue(s.feed(fix(t0 + 8 * 3600, home)).isEmpty())
+        val out = s.feed(fix(t0 + 8 * 3600 + 60, shop))
+        assertEquals(listOf("visit"), out.map { it.kind })
+        assertEquals(t0, (out[0] as Emission.Visit).visit.start)
+        assertEquals(t0 + 8 * 3600, (out[0] as Emission.Visit).visit.end)
+    }
+
     @Test fun `close emits a confirmed stay and nothing else`() {
         val s = seg()
         for (i in 0..10) s.feed(fix(t0 + i * 60, home))
