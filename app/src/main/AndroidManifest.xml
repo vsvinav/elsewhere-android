@@ -17,11 +17,18 @@
         <meta-data android:name="com.google.android.geo.API_KEY" android:value="${mapsSdkKey}" />
         <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="elsewhere" android:host="pair" />
+            </intent-filter>
         </activity>
         <service android:name=".record.RecordService" android:exported="false" android:foregroundServiceType="location" />
         <receiver android:name=".record.ActivityTransitionReceiver" android:exported="false">
             <intent-filter><action android:name="com.elsewhere.app.record.ACTIVITY_TRANSITION" /></intent-filter>
         </receiver>
+        <receiver android:name=".sonar.SonarMuteReceiver" android:exported="false" />
         <receiver android:name=".record.BootReceiver" android:exported="false">
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
         </receiver>
