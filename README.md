@@ -50,6 +50,14 @@ Kotlin · Jetpack Compose · the same eight tabs, the same poster, the same priv
 | Pull to refresh on the poster and list tabs (Tour, Numbers, Facts, Dates, Flights, Stops; Map and Replay are the map itself) · bar stays while names land | ✅ |
 | **v2 (preview, `v2.0.0-alpha.N` releases):** year wheel · Highlights · Fun Facts hero · Play strip · Passport · Doors · Trip deck · Heat · Live now · Snap a place · Globe share · Settings · Crew · Sonar | ✅ |
 
+## What's new in v3
+
+| Feature | Where |
+| --- | --- |
+| **Accounts** — sign up with an email code, set a recovery passphrase, and your identity and answers travel to your next phone in a vault only you can open | First launch (**Sign up · Log in · Continue without an account**); ▾ → Settings → **Account**. |
+
+Logging in on a new phone asks for your email, the six-digit code it receives, then your recovery passphrase. The vault is sealed on the phone with that passphrase (PBKDF2 + AES-GCM) before it goes to the account service, so the service only ever holds ciphertext and cannot reset the passphrase. Restoring replaces this phone's Crew identity with the one in the vault, so friends keep working without re-pairing; the vault is re-sealed and sent up two seconds after any change while the passphrase is in memory, and Settings says *Recovery vault: out of date · Update* when it is not.
+
 ## What's new in v2 (preview)
 
 Install a `v2.0.0-alpha.N` APK from [Releases](https://github.com/vsvinav/elsewhere-android/releases); it installs over v0.x and keeps your record. Where each addition lives:
