@@ -148,5 +148,6 @@ object Fakes {
         override suspend fun pause(seconds: Long) { recording.value = recording.value.copy(pausedUntil = 1_800_000_000L + seconds) }
         override suspend fun stats() = stats
         override suspend fun latestFix(): RawFixEntity? { reads++; return fix }
+        override suspend fun fixesSince(ts: Long) = stats.fixes
     }
 }

@@ -31,6 +31,8 @@ class RootViewModel @Inject constructor(repo: RecordStore, landLoader: LandSourc
     val readyBar: StateFlow<Ready?> = readyState.ready
     val ready: StateFlow<Boolean> = repo.ready
     val hasImport: StateFlow<Boolean> = repo.hasImport
+    val hasExport: StateFlow<Boolean> = repo.hasExport
+    val recordedDays: StateFlow<Int> = repo.recordedDays
     val profile: StateFlow<Profile?> = repo.profile
     private val _land = MutableStateFlow<FeatureCollection?>(null)
     val land: StateFlow<FeatureCollection?> = _land

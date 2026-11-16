@@ -22,6 +22,7 @@ import com.elsewhere.app.ui.crew.CrewRoute
 import com.elsewhere.app.ui.gate.KeyGate
 import com.elsewhere.app.ui.onboard.OnboardingGraph
 import com.elsewhere.app.ui.onboard.Step
+import com.elsewhere.app.ui.onboard.WaitingRoute
 import com.elsewhere.app.ui.record.RecordRoute
 import com.elsewhere.app.ui.settings.SettingsRoute
 import com.elsewhere.app.ui.world.Poster
@@ -44,9 +45,12 @@ fun Root(
     crewScreen: @Composable (onClose: () -> Unit) -> Unit = { CrewRoute(it) },
     welcome: @Composable (onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit) -> Unit = { s, l, k -> WelcomeScreen(s, l, k) },
     account: @Composable (entry: AccountEntry, onDone: () -> Unit, onClose: () -> Unit) -> Unit = { e, d, c -> AccountRoute(e, d, c) },
+    waiting: @Composable (onSettings: () -> Unit) -> Unit = { WaitingRoute(it) },
 ) {
     val ready by vm.ready.collectAsStateWithLifecycle()
     val hasImport by vm.hasImport.collectAsStateWithLifecycle()
+    val hasExport by vm.hasExport.collectAsStateWithLifecycle()
+    val recordedDays by vm.recordedDays.collectAsStateWithLifecycle()
     val profile by vm.profile.collectAsStateWithLifecycle()
     val land by vm.land.collectAsStateWithLifecycle()
     val gated by vm.gated.collectAsStateWithLifecycle()
@@ -61,6 +65,8 @@ fun Root(
     val pendingCode by PendingCrew.code.collectAsStateWithLifecycle()
     LaunchedEffect(pendingCode) { if (pendingCode != null) crew = true }
     val needsDoor = !hasImport || profile == null || profile!!.homes.isEmpty()
+    // A phone with only its own record waits a week at the door; an export has history to show at once.
+    val waits = !hasExport && recordedDays < 7
     val needsWelcome = profile == null && acct?.session == null && acct?.welcomed == false
     CompositionLocalProvider(LocalLand provides land) {
         when {
@@ -72,6 +78,10 @@ fun Root(
             editing != null -> door(editing!!) { editing = null }
             // The web shows KeyGate once there is a profile and the key is unproven; it lifts itself when the settings change.
             gated == true -> gate(readyBar)
+            waits -> Box {
+                waiting { settings = true }
+                if (settings) settingsScreen { settings = false }
+            }
             // Settings sits over the app rather than replacing it, so Back lands on the tab the visitor left.
             else -> Box {
                 app({ editing = Step.Name }, { settings = true }, { recording = true }, { crew = true })
