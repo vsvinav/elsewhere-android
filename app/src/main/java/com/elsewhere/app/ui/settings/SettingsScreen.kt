@@ -48,6 +48,7 @@ import com.elsewhere.app.map.Sdk
 import com.elsewhere.app.account.VaultState
 import com.elsewhere.app.ui.account.AccountEntry
 import com.elsewhere.app.ui.account.AccountRoute
+import com.elsewhere.app.ui.account.WelcomeScreen
 import com.elsewhere.app.ui.world.CapsText
 import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.InkButton
@@ -64,7 +65,7 @@ val LLM_PROVIDER_LABEL: Map<LlmProvider, String> = mapOf(
 private val MAP_PROVIDER_LABEL: Map<MapProvider, String> = mapOf(MapProvider.AUTO to "Auto", MapProvider.GOOGLE_TILES to "Google", MapProvider.FREE to "OpenStreetMap")
 private val UNITS_LABEL: Map<Units, String> = mapOf(Units.KM to "km", Units.MI to "mi")
 
-/** Settings, and the account flow laid over it when "Log in or sign up" or "Update" is pressed. */
+/** Settings, with Welcome laid over it when "Log in or sign up" is pressed, and the account flow when "Update" is, or Welcome picks a way in. */
 @Composable
 fun SettingsRoute(
     onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel(),
@@ -72,8 +73,13 @@ fun SettingsRoute(
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     var entry by rememberSaveable { mutableStateOf<AccountEntry?>(null) }
-    if (entry != null) account(entry!!, { entry = null }, { entry = null })
-    else SettingsScreen(ui, vm, onBack, onAccount = { entry = it })
+    var welcome by rememberSaveable { mutableStateOf(false) }
+    BackHandler(welcome) { welcome = false }
+    when {
+        entry != null -> account(entry!!, { entry = null }, { entry = null })
+        welcome -> WelcomeScreen({ welcome = false; entry = AccountEntry.SignUp }, { welcome = false; entry = AccountEntry.LogIn }, { welcome = false }, welcomed = true)
+        else -> SettingsScreen(ui, vm, onBack, onAccount = { if (it == AccountEntry.LogIn) welcome = true else entry = it })
+    }
 }
 
 /** The whole settings page over the app; blank stock until the stores have been read. `scroll = false` lays it out at full height for snapshots. */

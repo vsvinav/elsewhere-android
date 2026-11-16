@@ -27,8 +27,12 @@ class AccountSnapshot {
         ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { AccountFlow(ui, NoOp, onClose = if (close) ({}) else null) } }
     }
 
-    @Test fun welcome() = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}) } }
+    @Test fun welcomeStart() = paparazzi.snapshot {
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = false, sketchAt = 0L) } }
+    }
+
+    @Test fun welcomeRest() = paparazzi.snapshot {
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = true, sketchAt = SKETCH_TOTAL) } }
     }
 
     @Test fun email() = shoot(AccountUi(entry = AccountEntry.SignUp, step = AccountStep.Email), close = false)

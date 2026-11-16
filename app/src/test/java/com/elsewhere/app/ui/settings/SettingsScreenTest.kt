@@ -18,7 +18,9 @@ import com.elsewhere.app.Fakes
 import com.elsewhere.app.account.AccountState
 import com.elsewhere.app.account.Session
 import com.elsewhere.app.account.VaultState
+import androidx.compose.material3.Text
 import com.elsewhere.app.ui.account.AccountEntry
+import com.elsewhere.app.ui.account.WELCOME_LINE
 import com.elsewhere.app.data.Settings
 import com.elsewhere.app.Fx
 import com.elsewhere.app.ask.LlmProvider
@@ -56,6 +58,23 @@ class SettingsScreenTest {
             ElsewhereTheme { SettingsScreen(ui, vm, onBack = { closed++ }, sdk = false, onAccount = { opened = it }) }
         }
         rule.waitForIdle()
+    }
+
+    @Test fun `signed out, Log in or sign up opens Welcome, whose Not now comes straight back`() {
+        rule.setContent {
+            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account) }
+            ElsewhereTheme { SettingsRoute(onBack = { closed++ }, vm = vm, account = { entry, _, _ -> Text("FLOW $entry") }) }
+        }
+        node("LOG IN OR SIGN UP").performClick()
+        rule.onNodeWithText(WELCOME_LINE).assertIsDisplayed()
+        rule.onNodeWithText("NOT NOW").performClick()
+        rule.waitForIdle()
+        node("LOG IN OR SIGN UP").assertIsDisplayed()
+        assertEquals(true, account.account.value!!.welcomed)
+        node("LOG IN OR SIGN UP").performClick()
+        rule.onNodeWithText("SIGN UP").performClick()
+        rule.onNodeWithText("FLOW SignUp").assertIsDisplayed()
+        assertEquals(0, closed)
     }
 
     @Test fun `signed out, the Account section offers to log in and saves the service URL`() {

@@ -37,28 +37,31 @@ import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterTextField
 import com.elsewhere.app.ui.world.PosterType
 
-const val WELCOME_LINE = "Keep going. Your record grows with you."
-const val WELCOME_LEDE = "An account keeps your record safe in a vault only you can open, and brings it to your next phone."
+const val WELCOME_LINE = "Your life, mapped as you live it."
 const val PASSPHRASE_NOTE = "Only you know this. We can't reset it."
 const val MAIL_LINK_NOTE = "Opening the link in the mail works too."
 const val START_OVER = "Start over without my vault"
 
-/** The first page a fresh install sees: sign up, log in, or carry on as before. */
+/**
+ * The first page a fresh install sees: the sketch, then sign up, log in, or carry on as before.
+ * Shown again from Settings once `welcomed`, where the third way out is just "Not now".
+ * `sketchAt` pins the panel to one frame for snapshots.
+ */
 @Composable
-fun WelcomeScreen(onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit) {
+fun WelcomeScreen(onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit, welcomed: Boolean = false, sketchAt: Long? = null) {
     OnboardFrame(question = null, onCancel = null) {
         DisplayText("Elsewhere", 72.sp)
         Spacer(Modifier.height(20.dp))
+        if (sketchAt != null) WelcomeSketch(sketchAt) else WelcomeSketch()
+        Spacer(Modifier.height(20.dp))
         Text(WELCOME_LINE, color = Poster.Ink, style = PosterType.Lede.copy(fontSize = 22.sp))
-        Spacer(Modifier.height(16.dp))
-        Text(WELCOME_LEDE, color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 17.sp))
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(32.dp))
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             InkButton("Sign up", onSignUp, Modifier.fillMaxWidth())
             InkButton("Log in", onLogIn, Modifier.fillMaxWidth(), quiet = true)
         }
         Spacer(Modifier.height(28.dp))
-        CapsText("Continue without an account", Modifier.clickable(onClick = onSkip).padding(vertical = 8.dp), color = Poster.Ink, size = 12.sp)
+        CapsText(if (welcomed) "Not now" else "Continue without an account", Modifier.clickable(onClick = onSkip).padding(vertical = 8.dp), color = Poster.Ink, size = 12.sp)
     }
 }
 
