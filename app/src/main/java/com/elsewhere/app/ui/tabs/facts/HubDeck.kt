@@ -51,8 +51,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.elsewhere.app.analytics.Highlight
-import com.elsewhere.app.analytics.HighlightState
 import com.elsewhere.app.analytics.HubFigures
 import com.elsewhere.app.analytics.Kind
 import com.elsewhere.app.analytics.Passport
@@ -61,14 +59,10 @@ import com.elsewhere.app.analytics.compareYears
 import com.elsewhere.app.analytics.cycleYear
 import com.elsewhere.app.analytics.dmy
 import com.elsewhere.app.analytics.fmtSpan
-import com.elsewhere.app.analytics.highlightState
 import com.elsewhere.app.analytics.localToday
 import com.elsewhere.app.analytics.tilt
 import com.elsewhere.app.analytics.todaysFact
 import com.elsewhere.app.data.Units
-import com.elsewhere.app.ui.tabs.highlights.OpenDoor
-import com.elsewhere.app.ui.tabs.highlights.dayMonth
-import com.elsewhere.app.ui.tabs.highlights.headline
 import com.elsewhere.app.ui.world.CapsText
 import com.elsewhere.app.ui.world.Field
 import com.elsewhere.app.ui.world.InkButton
@@ -83,9 +77,9 @@ import com.elsewhere.app.ui.world.u
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-// Port of web/src/tabs/Facts/HubDeck.tsx: six poster cards along the top of the Facts tab, each opening its full pass.
+// Port of web/src/tabs/Facts/HubDeck.tsx: five poster cards in a strip under the Fun Facts hero, each opening its full pass.
 
-internal val HUB_CARDS = listOf("today", "onthisday", "streaks", "passport", "compare", "rhythm")
+internal val HUB_CARDS = listOf("today", "streaks", "passport", "compare", "rhythm")
 private val CARD_W = 290.dp
 private val CARD_H = 400.dp
 
@@ -205,12 +199,10 @@ private fun HeatMini(grid: List<List<Double>>, max: Double) {
 @Composable
 internal fun HubDeck(
     ui: FactsUi, hub: HubFigures, modifier: Modifier = Modifier,
-    onOpen: OpenDoor = { _, _, _ -> }, onOpenKind: (Kind) -> Unit = {}, onOpenPassport: () -> Unit = {}, page: Int = 0,
+    onOpenKind: (Kind) -> Unit = {}, onOpenPassport: () -> Unit = {}, page: Int = 0,
 ) {
     val today = ui.today ?: localToday()
     val fact = remember(ui.all, today) { todaysFact(ui.all, today) }
-    val day = remember(ui.raw, today) { ui.raw?.let { highlightState(it, today) } ?: HighlightState.None }
-    val highlight: Highlight? = when (day) { is HighlightState.Found -> day.highlight; is HighlightState.Short -> day.highlight; else -> null }
     val years = hub.yearList
     val latest = hub.latestPair
     var pairA by rememberSaveable(years) { mutableIntStateOf(latest?.first ?: 0) }
@@ -233,18 +225,6 @@ internal fun HubDeck(
                     Body(fact?.detail ?: "Widen the range, or wait for the record to fill in.")
                     Spacer(Modifier.height(12.dp))
                     CapsText(dmy(today), size = 10.sp)
-                }
-                "onthisday" -> HubCard("onthisday", "On this day", sel, open = highlight?.let { "The map" to "Open on the map" }, onOpen = { highlight?.let { onOpen(it.range, it.playhead, it.placeIds) } }) {
-                    if (highlight != null) {
-                        Headline(highlight.city)
-                        Body("${dmy(highlight.date)} — you ${highlight.verb.text} ${highlight.city}.")
-                        Spacer(Modifier.height(12.dp))
-                        CapsText(if (day is HighlightState.Short) "Your record starts ${dayMonth(day.starts)} — meanwhile, here's your farthest day so far." else headline(highlight), size = 10.sp)
-                    } else {
-                        Headline("Quiet day")
-                        val near = (day as? HighlightState.Quiet)?.nearest
-                        Body(if (near != null) "Nothing on ${dmy(today).dropLast(5)} in earlier years. The nearest thing on record: ${dmy(near.date)}, ${near.city}." else "Nothing on this day in earlier years.")
-                    }
                 }
                 "streaks" -> HubCard("streaks", "Streaks", sel, tone = Tone.INK, open = "Record facts" to "Open record facts", onOpen = { onOpenKind(Kind.RECORD) }) {
                     val s = hub.streaks
