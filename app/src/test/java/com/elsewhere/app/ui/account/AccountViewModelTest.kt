@@ -73,6 +73,20 @@ class AccountViewModelTest {
         assertEquals(AccountStep.Unlock, vm.ui.value.step)
     }
 
+    @Test fun `cancelling resets the flow so the next begin starts at Email without stale state`() = runTest(dispatcher) {
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct)
+        vm.begin(AccountEntry.LogIn)
+        vm.sendCode("ana@example.com"); advanceUntilIdle()
+        acct.fail = AccountException(400, "wrong code")
+        vm.submitCode("000000"); advanceUntilIdle()
+        assertEquals(AccountStep.Code, vm.ui.value.step)
+        vm.reset()
+        vm.begin(AccountEntry.LogIn)
+        assertEquals(AccountStep.Email, vm.ui.value.step)
+        assertNull(vm.ui.value.error)
+        assertEquals("", vm.ui.value.email)
+    }
+
     @Test fun `a rate-limited finish prints the same copy as a rate-limited start`() = runTest(dispatcher) {
         val acct = Fakes.Account(); val vm = AccountViewModel(acct)
         vm.begin(AccountEntry.LogIn)

@@ -20,6 +20,7 @@ class AccountSnapshot {
         override fun unlock(passphrase: String) {}
         override fun startOver() {}
         override fun back() {}
+        override fun reset() {}
     }
 
     private fun shoot(ui: AccountUi, close: Boolean = true) = paparazzi.snapshot {

@@ -41,6 +41,8 @@ interface AccountActions {
     fun unlock(passphrase: String)
     fun startOver()
     fun back()
+    /** Cancel: forget the pages so the next Log in or Sign up starts clean. A rotation does not call this. */
+    fun reset()
 }
 
 const val CODE_LENGTH = 6
@@ -103,6 +105,8 @@ class AccountViewModel @Inject constructor(private val accounts: Accounts) : Vie
     override fun back() {
         _ui.update { when (it.step) { AccountStep.Code -> it.copy(step = AccountStep.Email, error = null, resent = false); else -> it } }
     }
+
+    override fun reset() { begun = false; _ui.value = AccountUi() }
 
     private fun run(after: (AccountUi) -> AccountUi, block: suspend () -> Unit) {
         if (_ui.value.busy) return

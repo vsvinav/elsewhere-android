@@ -12,5 +12,5 @@ fun AccountRoute(entry: AccountEntry, onDone: () -> Unit, onClose: (() -> Unit)?
     val ui by vm.ui.collectAsStateWithLifecycle()
     LaunchedEffect(entry) { vm.begin(entry) }
     LaunchedEffect(ui.done) { if (ui.done) onDone() }
-    AccountFlow(ui, vm, onClose)
+    AccountFlow(ui, vm, onClose?.let { close -> { vm.reset(); close() } })
 }
