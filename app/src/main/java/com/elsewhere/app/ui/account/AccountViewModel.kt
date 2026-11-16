@@ -46,7 +46,8 @@ interface AccountActions {
 }
 
 const val CODE_LENGTH = 6
-const val PASSPHRASE_TOO_SHORT = "At least 8 characters."
+const val PASSPHRASE_TOO_SHORT = "At least 12 characters."
+const val PASSPHRASE_TOO_EASY = "That one's too easy to guess."
 const val PASSPHRASES_DIFFER = "Those don't match."
 const val NOT_AN_EMAIL = "That doesn't look like an email."
 const val WRONG_PASSPHRASE = "That's not it"
@@ -85,7 +86,8 @@ class AccountViewModel @Inject constructor(private val accounts: Accounts) : Vie
     override fun setPassphrase(passphrase: String, confirm: String) {
         val p = passphrase.trim()
         when {
-            p.length < Vault.MIN_PASSPHRASE -> _ui.update { it.copy(error = PASSPHRASE_TOO_SHORT) }
+            Vault.passphraseProblem(p) == "short" -> _ui.update { it.copy(error = PASSPHRASE_TOO_SHORT) }
+            Vault.passphraseProblem(p) == "easy" -> _ui.update { it.copy(error = PASSPHRASE_TOO_EASY) }
             p != confirm.trim() -> _ui.update { it.copy(error = PASSPHRASES_DIFFER) }
             else -> run(after = { it.copy(done = true) }) { accounts.setPassphrase(p) }
         }

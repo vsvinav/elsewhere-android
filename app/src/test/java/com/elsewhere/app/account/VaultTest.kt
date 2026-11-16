@@ -100,4 +100,21 @@ class VaultTest {
         val old = """{"v":1,"signPriv":"aa","kxPriv":"bb","profile":{"name":"Ada","units":"KM","homes":[],"works":[{"lat":1.0,"lng":2.0,"placeId":"ChIJo","from":0,"to":null}]}}"""
         assertEquals(Profile("Ada", Units.KM, emptyList(), listOf(Work(1.0, 2.0, "ChIJo", null, 0, null))), VaultContents.decode(old).profile)
     }
+
+    @Test fun `a new passphrase is refused when short or easy, in that order, and unlocking is not policed`() {
+        assertEquals("short", Vault.passphraseProblem("11 chars ok"))
+        assertEquals("short", Vault.passphraseProblem("   eleven char   "), "spaces around do not count")
+        assertEquals("short", Vault.passphraseProblem("1234567"), "short wins over easy")
+        assertEquals("easy", Vault.passphraseProblem("aaaaaaaaaaaa"))
+        assertEquals("easy", Vault.passphraseProblem("AAAA aaaa AAAA"))
+        assertEquals("easy", Vault.passphraseProblem("123456789012"))
+        assertEquals("easy", Vault.passphraseProblem("1234 5678 9012 3"))
+        assertEquals("easy", Vault.passphraseProblem("Correct Horse Battery Staple"))
+        assertEquals("easy", Vault.passphraseProblem("PASSWORD1234"))
+        assertEquals("easy", Vault.passphraseProblem("elsewhere password"))
+        assertNull(Vault.passphraseProblem("twelve chars"))
+        assertNull(Vault.passphraseProblem("password12346"))
+        assertNull(Vault.passphraseProblem("correct horse battery stapler"))
+        assertNull(Vault.passphraseProblem("aaaaaaaaaaab"))
+    }
 }

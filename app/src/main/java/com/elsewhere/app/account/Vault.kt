@@ -94,8 +94,27 @@ data class VaultContents(
  */
 object Vault {
     const val ITERATIONS = 310_000
-    const val MIN_PASSPHRASE = 8
+    const val MIN_PASSPHRASE = 12
     private val random = SecureRandom()
+    private val EASY = setOf(
+        "password1234", "password12345", "passwordpassword", "mypassword123", "secretpassword", "supersecretpassword", "thisismypassword",
+        "passphrase123", "123456789012", "1234567890123", "qwertyuiop12", "qwertyuiopasdfgh", "qwertyuiopasdfghjkl", "asdfghjkl123",
+        "zxcvbnmasdfghjkl", "1q2w3e4r5t6y", "1qaz2wsx3edc", "abcdefghijkl", "abcdefghijklmnop", "iloveyou1234", "ilovemyfamily",
+        "letmeinletmein", "administrator", "adminpassword", "welcome12345", "changemechangeme", "trustno1trustno1", "rememberme123",
+        "hello12345678", "football12345", "sunshine1234", "princess1234", "correcthorsebatterystaple", "openthevault", "elsewhere1234",
+        "elsewherepassword", "recoverypassphrase",
+    )
+
+    /**
+     * Why [p] won't do as a new passphrase, the same policy as the web: "short" under [MIN_PASSPHRASE] trimmed
+     * characters, "easy" when it is one repeated character, all digits or on the denylist (case and spaces
+     * ignored), else null. Only new passphrases are policed; unlocking takes whatever was set.
+     */
+    fun passphraseProblem(p: String): String? {
+        if (p.trim().length < MIN_PASSPHRASE) return "short"
+        val n = p.lowercase().filterNot { it.isWhitespace() }
+        return if (Regex("""^(.)\1*$""").matches(n) || n.all { it.isDigit() } || n in EASY) "easy" else null
+    }
 
     fun newSalt(): ByteArray = ByteArray(16).also { random.nextBytes(it) }
     private fun newIv(): ByteArray = ByteArray(12).also { random.nextBytes(it) }

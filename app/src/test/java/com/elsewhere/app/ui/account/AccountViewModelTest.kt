@@ -39,13 +39,15 @@ class AccountViewModelTest {
         advanceUntilIdle()
         assertEquals(AccountStep.SetPassphrase, vm.ui.value.step)
 
-        vm.setPassphrase("short", "short")
+        vm.setPassphrase("eleven char", "eleven char")
         assertEquals(PASSPHRASE_TOO_SHORT, vm.ui.value.error)
-        vm.setPassphrase("long enough", "long enuff")
+        vm.setPassphrase("password1234", "password1234")
+        assertEquals(PASSPHRASE_TOO_EASY, vm.ui.value.error)
+        vm.setPassphrase("long enough now", "long enuff now")
         assertEquals(PASSPHRASES_DIFFER, vm.ui.value.error)
-        vm.setPassphrase("long enough", "long enough")
+        vm.setPassphrase("long enough now", "long enough now")
         advanceUntilIdle()
-        assertEquals(listOf("long enough"), acct.passphrasesSet)
+        assertEquals(listOf("long enough now"), acct.passphrasesSet)
         assertTrue(vm.ui.value.done)
     }
 
