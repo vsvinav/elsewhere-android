@@ -1,11 +1,21 @@
 package com.elsewhere.app.account
 
+import com.elsewhere.app.data.Home
 import com.elsewhere.app.data.Profile
+import com.elsewhere.app.data.Units
+import com.elsewhere.app.data.Work
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -32,25 +42,49 @@ data class VaultBody(val v: Int = 1, val salt: String, val iv: String, val ct: S
 @Serializable
 data class VaultSettings(val units: String? = null, val relayUrl: String? = null, val accountUrl: String? = null)
 
-/** The sealed contents: the two private keys as hex, the profile as this platform already prints it, and the settings subset. */
+/** The profile in the vault's canonical shape, shared with the web: lowercase `units`, `place_id` on a work. */
+@Serializable
+private data class VaultWork(val lat: Double, val lng: Double, val place_id: String, val name: String? = null, val from: Long, val to: Long?)
+
+@Serializable
+private data class VaultProfile(val name: String?, val units: String, val homes: List<Home>, val works: List<VaultWork>)
+
+/** Converts the app's Profile at the vault boundary only; the app's own serializer and DataStore are untouched. */
+private object VaultProfileSerializer : KSerializer<Profile> {
+    override val descriptor: SerialDescriptor = VaultProfile.serializer().descriptor
+
+    override fun serialize(encoder: Encoder, value: Profile) = encoder.encodeSerializableValue(
+        VaultProfile.serializer(),
+        VaultProfile(value.name, value.units.name.lowercase(), value.homes, value.works.map { VaultWork(it.lat, it.lng, it.placeId, it.name, it.from, it.to) }),
+    )
+
+    /** Accepts what either client has ever written: `km`/`KM`, `place_id`/`placeId`. */
+    override fun deserialize(decoder: Decoder): Profile {
+        val json = decoder as JsonDecoder
+        val root = json.decodeJsonElement().jsonObject
+        val works = root["works"]?.jsonArray?.map { w ->
+            val o = w.jsonObject
+            if ("place_id" in o || "placeId" !in o) o else JsonObject(o - "placeId" + ("place_id" to o.getValue("placeId")))
+        }
+        val units = root["units"]?.jsonPrimitive?.takeIf { it.isString }?.content?.lowercase()
+        val fixed = JsonObject(root + listOfNotNull(units?.let { "units" to JsonPrimitive(it) }, works?.let { "works" to JsonArray(it) }))
+        val vp = json.json.decodeFromJsonElement(VaultProfile.serializer(), fixed)
+        return Profile(vp.name, Units.valueOf(vp.units.uppercase()), vp.homes, vp.works.map { Work(it.lat, it.lng, it.place_id, it.name, it.from, it.to) })
+    }
+}
+
+/** The sealed contents: the two private keys as hex, the profile in the canonical vault shape, and the settings subset. */
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
-data class VaultContents(@EncodeDefault val v: Int = 1, val signPriv: String, val kxPriv: String, val profile: Profile, val settings: VaultSettings? = null) {
+data class VaultContents(
+    @EncodeDefault val v: Int = 1, val signPriv: String, val kxPriv: String,
+    @Serializable(with = VaultProfileSerializer::class) val profile: Profile, val settings: VaultSettings? = null,
+) {
     fun encode(): String = wire.encodeToString(serializer(), this)
 
     companion object {
         private val wire = Json { ignoreUnknownKeys = true; coerceInputValues = true }
-
-        /** Reads either client's plaintext: the web writes `units` as "km"/"mi", this app as the enum's name. */
-        fun decode(s: String): VaultContents {
-            val root = wire.parseToJsonElement(s).jsonObject
-            val profile = root["profile"]?.jsonObject
-            val units = profile?.get("units")?.jsonPrimitive?.takeIf { it.isString }?.content
-            val fixed = if (profile != null && units != null && units != units.uppercase())
-                JsonObject(root + ("profile" to JsonObject(profile + ("units" to JsonPrimitive(units.uppercase())))))
-            else root
-            return wire.decodeFromJsonElement(serializer(), fixed)
-        }
+        fun decode(s: String): VaultContents = wire.decodeFromString(serializer(), s)
     }
 }
 

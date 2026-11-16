@@ -2,12 +2,15 @@ package com.elsewhere.app.account
 
 import com.elsewhere.app.data.Home
 import com.elsewhere.app.data.Profile
+import com.elsewhere.app.data.Work
 import com.elsewhere.app.data.Units
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -69,14 +72,32 @@ class VaultTest {
         assertNull(c.settings)
     }
 
-    @Test fun `our contents encode with the profile as the app serialises it and the settings subset`() {
-        val p = Profile("Ada", Units.MI, listOf(Home(51.5, -0.12, "London", "GB", 0, null)), emptyList())
-        val c = VaultContents(signPriv = "aa", kxPriv = "bb", profile = p, settings = VaultSettings(units = "mi", relayUrl = "https://relay.example.org", accountUrl = "https://acct.example.org"))
+    @Test fun `our contents seal the profile in the canonical shape with lowercase units and place_id`() {
+        val p = Profile("Ada", Units.KM, listOf(Home(51.5, -0.12, "London", "GB", 0, null)), listOf(Work(51.52, -0.1, "ChIJx", "The office", 10, null)))
+        val c = VaultContents(signPriv = "aa", kxPriv = "bb", profile = p, settings = VaultSettings(units = "km", relayUrl = "https://relay.example.org", accountUrl = "https://acct.example.org"))
         val json = c.encode()
         assertEquals(
-            """{"v":1,"signPriv":"aa","kxPriv":"bb","profile":{"name":"Ada","units":"MI","homes":[{"lat":51.5,"lng":-0.12,"city":"London","cc":"GB","from":0,"to":null}],"works":[]},"settings":{"units":"mi","relayUrl":"https://relay.example.org","accountUrl":"https://acct.example.org"}}""",
+            """{"v":1,"signPriv":"aa","kxPriv":"bb","profile":{"name":"Ada","units":"km","homes":[{"lat":51.5,"lng":-0.12,"city":"London","cc":"GB","from":0,"to":null}],"works":[{"lat":51.52,"lng":-0.1,"place_id":"ChIJx","name":"The office","from":10,"to":null}]},"settings":{"units":"km","relayUrl":"https://relay.example.org","accountUrl":"https://acct.example.org"}}""",
             json,
         )
+        assertTrue(json.contains(""""place_id""""))
+        assertTrue(json.contains(""""units":"km""""))
+        assertFalse(json.contains("placeId"))
+        assertFalse(json.contains(""""KM""""))
         assertEquals(c, VaultContents.decode(json))
+    }
+
+    @Test fun `a web-shaped plaintext opens into the app's Profile`() {
+        val web = """{"v":1,"signPriv":"aa","kxPriv":"bb","profile":{"name":null,"units":"mi","homes":[{"lat":40.7,"lng":-74.0,"city":"New York","cc":"US","from":5,"to":9,"name":"Loft"}],"works":[{"lat":40.75,"lng":-73.98,"place_id":"ChIJw","name":"Midtown desk","from":6,"to":null}]}}"""
+        val c = VaultContents.decode(web)
+        assertEquals(
+            Profile(null, Units.MI, listOf(Home(40.7, -74.0, "New York", "US", 5, 9, "Loft")), listOf(Work(40.75, -73.98, "ChIJw", "Midtown desk", 6, null))),
+            c.profile,
+        )
+    }
+
+    @Test fun `older Android plaintext with placeId and uppercase units still opens`() {
+        val old = """{"v":1,"signPriv":"aa","kxPriv":"bb","profile":{"name":"Ada","units":"KM","homes":[],"works":[{"lat":1.0,"lng":2.0,"placeId":"ChIJo","from":0,"to":null}]}}"""
+        assertEquals(Profile("Ada", Units.KM, emptyList(), listOf(Work(1.0, 2.0, "ChIJo", null, 0, null))), VaultContents.decode(old).profile)
     }
 }
