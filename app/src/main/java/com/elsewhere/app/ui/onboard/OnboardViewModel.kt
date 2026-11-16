@@ -24,6 +24,7 @@ import com.elsewhere.app.ingest.PlaceNamer
 import com.elsewhere.app.ingest.Progress
 import com.elsewhere.app.ingest.properName
 import com.elsewhere.app.ingest.KeyReport
+import com.elsewhere.app.record.RecordControl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -47,7 +48,10 @@ import javax.inject.Inject
 
 // Port of web/src/profile/Onboarding.tsx: the state machine behind the front door.
 
-enum class Step { Import, Key, Name, Home, Moves, Work, Units, Done }
+enum class Step { Record, Import, Key, Name, Home, Moves, Work, Units, Done }
+
+/** The door's two openings: start recording, or bring an export. Everything after is editing. */
+val ENTRY = setOf(Step.Record, Step.Import)
 
 /** The key page's three faces: the field, the probes running, the verdict (or the no-key acknowledgement). */
 enum class KeyPhase { Entry, Checking, Result }
@@ -63,6 +67,8 @@ data class Candidate(
     val label: String, val address: String?, val score: Double, val share: Double, val memberIds: List<String>,
     /** True once the label is a real name (shop, flat, park) rather than a city or a street number. */
     val named: Boolean = true,
+    /** The phone's position right now, standing in for a home when the record has no nights yet. */
+    val here: Boolean = false,
 ) {
     val members: Int get() = memberIds.size
     val sure: Sure get() = when { share >= 0.6 -> Sure.LIKELY; share >= 0.3 -> Sure.MAYBE; else -> Sure.STAYED }
@@ -70,8 +76,10 @@ data class Candidate(
 }
 
 data class OnboardState(
-    val step: Step = Step.Import,
+    val step: Step = Step.Record,
     val editing: Boolean = false,
+    /** Whether the phone is recording; the import can be skipped only then. */
+    val recording: Boolean = false,
     val importing: Float? = null,
     val importError: String? = null,
     val report: ImportReport? = null,
@@ -124,7 +132,7 @@ fun monthOf(ts: Long): YearMonth = YearMonth.from(LocalDate.ofEpochDay(Math.floo
 @HiltViewModel
 class OnboardViewModel @Inject constructor(
     private val store: RecordStore, private val maps: MapsSettings, private val verifier: KeyVerifier,
-    private val namer: PlaceNamer, private val geocoder: Geocoder, readyState: ReadyState = ReadyState(),
+    private val namer: PlaceNamer, private val geocoder: Geocoder, private val control: RecordControl, readyState: ReadyState = ReadyState(),
 ) : ViewModel(), OnboardActions, KeyActions {
     /** How far the current naming run is, so the readiness bar keeps going while the cards get their names. */
     private val cards = MutableStateFlow<Progress?>(null)
@@ -141,22 +149,41 @@ class OnboardViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { namer.progress.collect { p -> _state.update { it.copy(naming = p) } } }
+        viewModelScope.launch { control.recording.collect { r -> _state.update { it.copy(recording = r.enabled) } } }
         // The web's naming effect is keyed on `mapsKey`: a key verified after import names the cards again.
         viewModelScope.launch {
             maps.settings.map { it.mapsKey to it.keyPlaces }.distinctUntilChanged().collect { (key, places) -> rename(key, places) }
         }
     }
-    /** Open the door at `step`: the import for a new record, a question or the key when editing. Resets what was there. */
+    /**
+     * Open the door at `step`: `Record` for a new record (which becomes `Import` when the phone is already
+     * recording, or the first question when there is already something to rank), a question or the key when editing.
+     */
     fun start(step: Step) {
-        val editing = step != Step.Import
-        val resume = step == Step.Import && store.hasImport.value
+        val editing = step !in ENTRY
+        val resume = !editing && store.hasImport.value
         val p = store.profile.value
-        _state.value = OnboardState(step = if (resume) Step.Name else step, editing = editing, name = p?.name ?: "", homes = p?.homes ?: emptyList(), works = p?.works ?: emptyList(), units = p?.units ?: Units.KM)
+        _state.value = OnboardState(step = if (resume) Step.Name else step, editing = editing, recording = _state.value.recording, name = p?.name ?: "", homes = p?.homes ?: emptyList(), works = p?.works ?: emptyList(), units = p?.units ?: Units.KM)
         viewModelScope.launch {
             val s = maps.settings.first()
-            _state.update { it.copy(key = s.mapsKey, mapId = s.mapId) }
-            if ((editing || resume) && store.hasImport.value) suggest()
+            val on = control.recording.first().enabled
+            _state.update { it.copy(key = s.mapsKey, mapId = s.mapId, recording = on, step = if (it.step == Step.Record && on) Step.Import else it.step) }
+            if (store.hasImport.value) suggest()
         }
+    }
+
+    /** "Start recording": the recorder comes on and the door moves to the export. */
+    fun startRecording() {
+        viewModelScope.launch { control.start(); _state.update { it.copy(step = Step.Import) } }
+    }
+
+    /** "I have a Google Timeline export instead": straight to the export, nothing recording. */
+    fun skipRecord() { _state.update { it.copy(step = Step.Import) } }
+
+    /** "Skip for now" on the export, while recording: the key, then the questions, with the phone's position for a home. */
+    fun skipImport() {
+        _state.update { it.copy(step = if (it.key.isBlank()) Step.Key else Step.Name) }
+        viewModelScope.launch { here() }
     }
 
     fun import(open: () -> InputStream, fileName: String) {
@@ -181,6 +208,15 @@ class OnboardViewModel @Inject constructor(
         }
         val s = maps.settings.first()
         rename(s.mapsKey, s.keyPlaces)
+        if (_state.value.sleep.isEmpty()) here()
+    }
+
+    /** No nights to rank: the phone's latest fix, named by its street, is the one card for home. */
+    private suspend fun here() {
+        val fix = control.latestFix() ?: return
+        val label = attempt { geocoder.address(fix.lat, fix.lng) } ?: "Where you are now"
+        val card = Candidate("here", fix.lat, fix.lng, null, null, label, null, 0.0, 0.0, listOf("here"), here = true)
+        _state.update { if (it.sleep.isEmpty()) it.copy(sleep = listOf(card)) else it }
     }
 
     /** The web's `label(s)`: a Places name, else the stored name, else the city. */
@@ -273,7 +309,8 @@ class OnboardViewModel @Inject constructor(
 
     override fun pickHome(c: Candidate) {
         _state.update { s ->
-            s.copy(homes = listOf(asHome(c, s.range.first)), units = if (s.editing) s.units else if (c.cc in MILES) Units.MI else Units.KM)
+            val from = if (c.here) LocalDate.now(ZoneOffset.UTC).toEpochDay() * 86400L else s.range.first
+            s.copy(homes = listOf(asHome(c, from)), units = if (s.editing) s.units else if (c.cc in MILES) Units.MI else Units.KM)
         }
     }
 

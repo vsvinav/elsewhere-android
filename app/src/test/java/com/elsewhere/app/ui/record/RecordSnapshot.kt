@@ -30,6 +30,12 @@ class RecordSnapshot {
         RecordScreen(ui, RecordActions(), scroll = false)
     }
 
+    /** The door's first page: location allowed, the rest still to grant, battery unrestricted not yet. */
+    @Test fun onboardRecord() = sheet {
+        val ui = RecordUi(rows(PermState.GRANTED, PermState.SETTINGS, PermState.ASK, PermState.ASK), false, Recording(), null, batteryOk = false, now = now)
+        RecordStepScreen(ui, RecordActions(), onImport = {})
+    }
+
     @Test fun off() = sheet {
         val ui = RecordUi(rows(PermState.GRANTED, PermState.GRANTED, PermState.GRANTED, PermState.GRANTED), true, Recording(), RecordStats(1_204, 7, now - 3 * 3600), true, now)
         RecordScreen(ui, RecordActions(), scroll = false)

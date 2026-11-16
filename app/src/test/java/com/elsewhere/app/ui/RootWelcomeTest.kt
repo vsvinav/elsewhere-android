@@ -30,11 +30,11 @@ class RootWelcomeTest {
     private fun show(acct: Fakes.Account) {
         val store = Fakes.Store(Fx.record()); val maps = Fakes.Maps()
         rule.setContent {
-            val root = remember { RootViewModel(store, Fakes.Land, maps, acct) }
+            val root = remember { RootViewModel(store, Fakes.Land, maps, acct, Fakes.Control()) }
             ElsewhereTheme {
                 Root(
                     vm = root,
-                    door = { _, _, _ -> Text("THE DOOR") },
+                    door = { _, _ -> Text("THE DOOR") },
                     account = { entry, done, close ->
                         Column { Text("FLOW $entry"); Text("FINISH", Modifier.clickable(onClick = done)); Text("CLOSE", Modifier.clickable(onClick = close)) }
                     },

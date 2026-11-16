@@ -37,6 +37,7 @@ class RecordViewModelTest {
         override suspend fun pause(seconds: Long) { pauses++; recording.value = recording.value.copy(pausedUntil = 1_800_000_000L + seconds) }
         override suspend fun stats() = stats
         override suspend fun latestFix(): RawFixEntity? = null
+        override suspend fun fixesSince(ts: Long) = 0
     }
 
     private val dispatcher = StandardTestDispatcher()

@@ -28,6 +28,7 @@ class SettingsSnapshot {
         override fun setAccountUrl(url: String) {}
         override fun logOut() {}
         override fun deleteAccount() {}
+        override fun import(open: () -> java.io.InputStream, fileName: String) {}
     }
 
     private fun shoot(ui: SettingsUi) = paparazzi.snapshot {

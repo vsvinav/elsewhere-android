@@ -23,22 +23,26 @@ import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import java.util.Locale
 
-/** The front door's first page: the title, and a pass that takes the Timeline export. */
+/** The system file picker for a Timeline export; the returned function opens it. */
 @Composable
-fun ImportScreen(importing: Float?, error: String?, report: ImportReport?, onRecord: (() -> Unit)? = null, onFile: (Uri, String) -> Unit) {
+fun rememberTimelinePicker(onFile: (Uri, String) -> Unit): () -> Unit {
     val ctx = LocalContext.current
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) onFile(uri, fileName(ctx, uri))
     }
+    return { pick.launch(arrayOf("application/json", "*/*")) }
+}
+
+/** The export page: the title, a pass that takes the Timeline export, and "Skip for now" while the phone is recording. */
+@Composable
+fun ImportScreen(importing: Float?, error: String?, report: ImportReport?, onSkip: (() -> Unit)? = null, onFile: (Uri, String) -> Unit) {
+    val pick = rememberTimelinePicker(onFile)
     OnboardFrame(question = null, onCancel = null) {
-        DisplayText("Elsewhere", 72.sp, misreg = true)
-        Spacer(Modifier.height(28.dp))
-        Text(
-            "Your Google Maps Timeline, printed as a world-tour poster. Every city you slept in, every flight, every drive. It never leaves this phone.",
-            color = Poster.Ink, style = PosterType.Lede.copy(fontSize = 18.sp),
-        )
-        Spacer(Modifier.height(36.dp))
-        Pass(Modifier.fillMaxWidth().clickable(enabled = importing == null) { pick.launch(arrayOf("application/json", "*/*")) }) {
+        DisplayText("Add your Google Timeline export", 56.sp)
+        Spacer(Modifier.height(24.dp))
+        Text("Years of history in one file. Takeout → Location History (Timeline) → Timeline.json.", color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 17.sp))
+        Spacer(Modifier.height(32.dp))
+        Pass(Modifier.fillMaxWidth().clickable(enabled = importing == null, onClick = pick)) {
             if (importing != null) {
                 CapsText("Reading segments…", color = Poster.Ink)
                 Spacer(Modifier.height(16.dp))
@@ -65,9 +69,9 @@ fun ImportScreen(importing: Float?, error: String?, report: ImportReport?, onRec
                 }
             }
         }
-        if (onRecord != null && importing == null) {
+        if (onSkip != null && importing == null) {
             Spacer(Modifier.height(24.dp))
-            CapsText("Skip — record on this phone instead →", Modifier.clickable(onClick = onRecord), color = Poster.Ink2, size = 12.sp)
+            CapsText("Skip for now", Modifier.clickable(onClick = onSkip), color = Poster.Ink2, size = 12.sp)
         }
     }
 }

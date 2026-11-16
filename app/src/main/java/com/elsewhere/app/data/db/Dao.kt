@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM visits ORDER BY start, id") suspend fun all(): List<VisitEntity>
     @Query("SELECT COUNT(*) FROM visits") suspend fun count(): Int
     @Query("SELECT COUNT(*) FROM visits WHERE source = 'device'") suspend fun countDevice(): Int
+    /** How many distinct days the phone has recorded a stay on; `start` is in seconds. */
+    @Query("SELECT COUNT(DISTINCT start / 86400) FROM visits WHERE source = 'device'") suspend fun recordedDays(): Int
     @Query("SELECT * FROM visits WHERE `end` >= :since ORDER BY start") suspend fun since(since: Long): List<VisitEntity>
     @Query("DELETE FROM visits") suspend fun clear()
     @Query("DELETE FROM visits WHERE source = 'import'") suspend fun clearImported()
@@ -36,6 +38,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM raw_fixes WHERE ts >= :ts ORDER BY ts") suspend fun since(ts: Long): List<RawFixEntity>
     @Query("SELECT * FROM raw_fixes ORDER BY ts DESC LIMIT 1") suspend fun latest(): RawFixEntity?
     @Query("SELECT COUNT(*) FROM raw_fixes") suspend fun countAll(): Int
+    @Query("SELECT COUNT(*) FROM raw_fixes WHERE ts >= :ts") suspend fun countSince(ts: Long): Int
     @Query("DELETE FROM raw_fixes WHERE ts < :ts") suspend fun pruneBefore(ts: Long)
     @Query("DELETE FROM raw_fixes") suspend fun clear()
 }

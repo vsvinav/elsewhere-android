@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -57,12 +58,12 @@ object PosterType {
 @Composable
 fun DisplayText(
     text: String, size: TextUnit, modifier: Modifier = Modifier, color: Color = Poster.Ink, misreg: Boolean = false,
-    textAlign: TextAlign? = null, maxLines: Int = Int.MAX_VALUE,
+    textAlign: TextAlign? = null, maxLines: Int = Int.MAX_VALUE, misregBy: Dp = 2.dp,
 ) {
     val style = PosterType.Display.copy(fontSize = size)
     val caps = text.uppercase()
     Box(modifier) {
-        if (misreg) Text(caps, Modifier.offset(2.dp, 2.dp), color = Poster.Red, style = style, textAlign = textAlign, maxLines = maxLines)
+        if (misreg) Text(caps, Modifier.offset(misregBy, misregBy), color = Poster.Red, style = style, textAlign = textAlign, maxLines = maxLines)
         Text(caps, color = color, style = style, textAlign = textAlign, maxLines = maxLines)
     }
 }

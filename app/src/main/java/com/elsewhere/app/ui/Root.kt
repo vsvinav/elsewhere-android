@@ -22,6 +22,7 @@ import com.elsewhere.app.ui.crew.CrewRoute
 import com.elsewhere.app.ui.gate.KeyGate
 import com.elsewhere.app.ui.onboard.OnboardingGraph
 import com.elsewhere.app.ui.onboard.Step
+import com.elsewhere.app.ui.onboard.WaitingRoute
 import com.elsewhere.app.ui.record.RecordRoute
 import com.elsewhere.app.ui.settings.SettingsRoute
 import com.elsewhere.app.ui.world.Poster
@@ -36,7 +37,7 @@ import com.elsewhere.app.ui.world.figures.LocalLand
 @Composable
 fun Root(
     vm: RootViewModel = hiltViewModel(),
-    door: @Composable (startStep: Step, onClose: (() -> Unit)?, onRecord: () -> Unit) -> Unit = { s, close, r -> OnboardingGraph(s, close, onRecord = r) },
+    door: @Composable (startStep: Step, onClose: (() -> Unit)?) -> Unit = { s, close -> OnboardingGraph(s, close) },
     app: @Composable (onChangeAnswers: () -> Unit, onSettings: () -> Unit, onRecord: () -> Unit, onCrew: () -> Unit) -> Unit = { a, s, r, c -> AppScaffold(a, s, r, onCrew = c) },
     gate: @Composable (ready: Ready?) -> Unit = { r -> KeyGate(ready = r) },
     recordScreen: @Composable (onClose: () -> Unit) -> Unit = { RecordRoute(it) },
@@ -44,9 +45,13 @@ fun Root(
     crewScreen: @Composable (onClose: () -> Unit) -> Unit = { CrewRoute(it) },
     welcome: @Composable (onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit) -> Unit = { s, l, k -> WelcomeScreen(s, l, k) },
     account: @Composable (entry: AccountEntry, onDone: () -> Unit, onClose: () -> Unit) -> Unit = { e, d, c -> AccountRoute(e, d, c) },
+    waiting: @Composable (onSettings: () -> Unit) -> Unit = { WaitingRoute(it) },
 ) {
     val ready by vm.ready.collectAsStateWithLifecycle()
     val hasImport by vm.hasImport.collectAsStateWithLifecycle()
+    val hasExport by vm.hasExport.collectAsStateWithLifecycle()
+    val recordedDays by vm.recordedDays.collectAsStateWithLifecycle()
+    val recordingOn by vm.recording.collectAsStateWithLifecycle()
     val profile by vm.profile.collectAsStateWithLifecycle()
     val land by vm.land.collectAsStateWithLifecycle()
     val gated by vm.gated.collectAsStateWithLifecycle()
@@ -60,7 +65,10 @@ fun Root(
     // A pair link opens Crew with the code filled in; the screen takes the code itself.
     val pendingCode by PendingCrew.code.collectAsStateWithLifecycle()
     LaunchedEffect(pendingCode) { if (pendingCode != null) crew = true }
-    val needsDoor = !hasImport || profile == null || profile!!.homes.isEmpty()
+    // A phone that has just started recording has no closed stay yet; the recorder being on is enough to pass the door.
+    val needsDoor = profile == null || profile!!.homes.isEmpty() || (!hasImport && !recordingOn)
+    // A phone with only its own record waits a week at the door; an export has history to show at once.
+    val waits = !hasExport && recordedDays < 7
     val needsWelcome = profile == null && acct?.session == null && acct?.welcomed == false
     CompositionLocalProvider(LocalLand provides land) {
         when {
@@ -68,10 +76,14 @@ fun Root(
             entry != null -> account(entry!!, { entry = null; vm.welcome() }, { entry = null })
             needsWelcome -> welcome({ entry = AccountEntry.SignUp }, { entry = AccountEntry.LogIn }, { vm.welcome() })
             recording -> recordScreen { recording = false }
-            needsDoor -> door(Step.Import, null) { recording = true }
-            editing != null -> door(editing!!, { editing = null }) { recording = true }
+            needsDoor -> door(Step.Record, null)
+            editing != null -> door(editing!!) { editing = null }
             // The web shows KeyGate once there is a profile and the key is unproven; it lifts itself when the settings change.
             gated == true -> gate(readyBar)
+            waits -> Box {
+                waiting { settings = true }
+                if (settings) settingsScreen { settings = false }
+            }
             // Settings sits over the app rather than replacing it, so Back lands on the tab the visitor left.
             else -> Box {
                 app({ editing = Step.Name }, { settings = true }, { recording = true }, { crew = true })

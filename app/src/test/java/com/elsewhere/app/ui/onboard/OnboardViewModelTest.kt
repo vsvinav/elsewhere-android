@@ -1,6 +1,7 @@
 package com.elsewhere.app.ui.onboard
 
 import com.elsewhere.app.Fakes
+import com.elsewhere.app.ingest.Geocoder
 import com.elsewhere.app.data.Settings
 import com.elsewhere.app.Fx
 import com.elsewhere.app.data.Home
@@ -8,6 +9,8 @@ import com.elsewhere.app.data.ImportReport
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.data.Recording
+import com.elsewhere.app.data.db.RawFixEntity
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.ingest.PlaceNamer
 import kotlinx.coroutines.CompletableDeferred
@@ -55,13 +58,96 @@ class OnboardViewModelTest {
     private val checker = Fakes.Checker()
     private val namer = Fakes.Namer(mapOf("austin" to "Barton Hills Bungalow"))
     private val geo = Fakes.Geo(mapOf((30.27 to -97.74) to "Mary St, Bouldin Creek"))
+    private val control = Fakes.Control()
 
     private fun imported(): Triple<OnboardViewModel, Fakes.Store, Fakes.Maps> {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
-        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo)
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo, control)
         vm.start(Step.Import); run()
         vm.import({ ByteArrayInputStream("{}".toByteArray()) }, "Timeline.json"); run()
         return Triple(vm, store, maps)
+    }
+
+    @Test fun `a fresh phone opens on the record step, one already recording at the import`() = runTest(dispatcher) {
+        val store = Fakes.Store(record()); val maps = Fakes.Maps()
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo, control)
+        vm.start(Step.Record); run()
+        assertEquals(Step.Record, vm.state.value.step)
+        assertEquals(false, vm.state.value.editing)
+        assertEquals(false, vm.state.value.recording)
+
+        control.recording.value = Recording(true, 1_800_000_000L, 0L); run()
+        assertEquals(true, vm.state.value.recording)
+        vm.start(Step.Record); run()
+        assertEquals(Step.Import, vm.state.value.step)
+    }
+
+    @Test fun `start recording turns the recorder on and moves to the import, the other link just moves on`() = runTest(dispatcher) {
+        val store = Fakes.Store(record()); val maps = Fakes.Maps()
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo, control)
+        vm.start(Step.Record); run()
+        vm.skipRecord()
+        assertEquals(Step.Import, vm.state.value.step)
+        assertEquals(false, control.recording.value.enabled)
+
+        vm.start(Step.Record); run()
+        vm.startRecording(); run()
+        assertEquals(true, control.recording.value.enabled)
+        assertEquals(Step.Import, vm.state.value.step)
+        assertEquals(true, vm.state.value.recording)
+    }
+
+    @Test fun `skipping the import while recording goes on to the key, with nothing to rank`() = runTest(dispatcher) {
+        val store = Fakes.Store(record()); val maps = Fakes.Maps()
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo, control)
+        vm.start(Step.Record); run()
+        vm.startRecording(); run()
+        vm.skipImport(); run()
+        assertEquals(Step.Key, vm.state.value.step)
+        assertTrue(vm.state.value.sleep.isEmpty())
+    }
+
+    @Test fun `with no overnight stays, the phone's latest fix stands in as the one home card`() = runTest(dispatcher) {
+        val store = Fakes.Store(Fx.record()); val maps = Fakes.Maps()
+        control.fix = RawFixEntity(ts = 1_800_000_000L, lat = 51.5, lng = -0.12, accuracyM = 10f, speedMps = null, altitude = null, activity = null, batteryPct = null)
+        val here = Fakes.Geo(mapOf((51.5 to -0.12) to "Strand, Covent Garden"))
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, here, control)
+        vm.start(Step.Record); run()
+        vm.startRecording(); run()
+        vm.skipImport(); run()
+        val card = vm.state.value.sleep.single()
+        assertEquals("Strand, Covent Garden", card.label)
+        assertEquals(51.5 to -0.12, card.lat to card.lng)
+        assertTrue(card.here)
+        vm.pickHome(card)
+        val home = vm.state.value.homes.single()
+        assertEquals(51.5, home.lat)
+        assertEquals(java.time.LocalDate.now(java.time.ZoneOffset.UTC).toEpochDay() * 86400L, home.from)
+    }
+
+    @Test fun `without a street for the fix the card says where you are now, without a fix there is no card`() = runTest(dispatcher) {
+        val store = Fakes.Store(Fx.record()); val maps = Fakes.Maps()
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, Fakes.Geo(), control)
+        vm.start(Step.Record); run()
+        vm.skipRecord(); vm.skipImport(); run()
+        assertTrue(vm.state.value.sleep.isEmpty())
+
+        control.fix = RawFixEntity(ts = 1_800_000_000L, lat = 51.5, lng = -0.12, accuracyM = 10f, speedMps = null, altitude = null, activity = null, batteryPct = null)
+        vm.start(Step.Record); run()
+        vm.skipRecord(); vm.skipImport(); run()
+        assertEquals("Where you are now", vm.state.value.sleep.single().label)
+    }
+
+    @Test fun `Skip for now moves on at once, the home card filling in whenever the street comes back`() = runTest(dispatcher) {
+        val store = Fakes.Store(Fx.record()); val maps = Fakes.Maps()
+        control.fix = RawFixEntity(ts = 1_800_000_000L, lat = 51.5, lng = -0.12, accuracyM = 10f, speedMps = null, altitude = null, activity = null, batteryPct = null)
+        val slow = object : Geocoder { override suspend fun address(lat: Double, lng: Double): String? = kotlinx.coroutines.awaitCancellation() }
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, slow, control)
+        vm.start(Step.Record); run()
+        vm.startRecording(); run()
+        vm.skipImport(); run()
+        assertEquals(Step.Key, vm.state.value.step)
+        assertTrue(vm.state.value.sleep.isEmpty())
     }
 
     @Test fun `import lands on the key step, then the questions`() = runTest(dispatcher) {
@@ -81,7 +167,7 @@ class OnboardViewModelTest {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
         maps.cur.value = Settings(mapsKey = "k", keyPlaces = true, keyTiles = true)
         store.hasImport.value = true
-        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo)
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo, control)
         vm.start(Step.Name); run()
         assertEquals(listOf("The flat", "Barton Hills Bungalow"), vm.state.value.sleep.map { it.label })
         assertEquals(listOf(listOf("austin")), namer.asked) // the flat already has a proper name
@@ -119,7 +205,7 @@ class OnboardViewModelTest {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
         maps.cur.value = Settings(mapsKey = "k", keyPlaces = true, keyTiles = true)
         store.hasImport.value = true
-        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), slow, geo)
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), slow, geo, control)
         vm.start(Step.Name); run()
         assertEquals(true, vm.state.value.asking)
         assertEquals("Austin", vm.state.value.sleep[1].label)
@@ -137,7 +223,7 @@ class OnboardViewModelTest {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
         maps.cur.value = Settings(mapsKey = "k", keyPlaces = true, keyTiles = true)
         store.hasImport.value = true
-        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), slow, geo)
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), slow, geo, control)
         vm.start(Step.Name); run()
         val todo = (vm.state.value.sleep + vm.state.value.weekday).filter { !it.named }.distinctBy { it.placeId }.size
         assertEquals("Naming places 0/$todo", vm.ready.value?.label)
@@ -150,7 +236,7 @@ class OnboardViewModelTest {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
         maps.cur.value = Settings(mapsKey = "k", keyPlaces = true, keyTiles = true)
         store.hasImport.value = true
-        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), Fakes.Namer(), geo)
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), Fakes.Namer(), geo, control)
         vm.start(Step.Name); run()
         val austin = vm.state.value.sleep[1]
         assertEquals("Austin", austin.label)
@@ -227,7 +313,7 @@ class OnboardViewModelTest {
     @Test fun `editing the key from settings re-checks and closes the door`() = runTest(dispatcher) {
         val store = Fakes.Store(record()); val maps = Fakes.Maps()
         maps.cur.value = Settings(mapsKey = "old", keyPlaces = true, keyTiles = true, keyCheckedAt = 5)
-        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo)
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, geo, control)
         vm.start(Step.Key); run()
         assertEquals(KeyPhase.Entry, vm.state.value.keyPhase)
         vm.recheckKey(); run()

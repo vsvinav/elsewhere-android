@@ -8,6 +8,10 @@ interface RecordStore {
     /** False until both the import state and the profile have been read once; the door can't be chosen before. */
     val ready: StateFlow<Boolean>
     val hasImport: StateFlow<Boolean>
+    /** True only once a Timeline export has been read; the phone's own stays do not count. */
+    val hasExport: StateFlow<Boolean>
+    /** Distinct days the phone has recorded a stay on. */
+    val recordedDays: StateFlow<Int>
     val profile: StateFlow<Profile?>
     suspend fun import(open: () -> InputStream, fileName: String, onProgress: (Float) -> Unit = {}): ImportReport
     /** The record derived before any home is known, for ranking home and work candidates. */

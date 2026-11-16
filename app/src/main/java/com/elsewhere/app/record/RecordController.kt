@@ -20,6 +20,8 @@ interface RecordControl {
     suspend fun stats(): RecordStats
     /** The newest raw fix, for the live stamp. */
     suspend fun latestFix(): RawFixEntity?
+    /** Raw fixes written at or after `ts` (epoch seconds). */
+    suspend fun fixesSince(ts: Long): Int
 }
 
 /** The platform side of recording (service and worker), behind a seam so the controller is testable. */
@@ -50,6 +52,7 @@ class RecordController @Inject constructor(
 
     override suspend fun stats() = recorder.stats()
     override suspend fun latestFix() = recorder.latestFix()
+    override suspend fun fixesSince(ts: Long) = recorder.fixesSince(ts)
 
     override suspend fun start() {
         val cur = settings.recording.first()
