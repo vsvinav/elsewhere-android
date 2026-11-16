@@ -96,6 +96,11 @@ class CrewPublisher(
         publish(fix, session, now)
     }
 
+    /** A test hit goes straight to the friend's room, share or not, and never with a position: nothing is placed or recorded. */
+    suspend fun carryTest(friend: Friend, hit: Ping.Hit) = lock.withLock {
+        hub.send(friend, Ping(t = clock() / 1000, grade = Grade.sonar, hit = hit, test = true).encode())
+    }
+
     /** Removing a friend tells them so, then forgets them here. */
     suspend fun revoke(friend: Friend) {
         hub.send(friend, REVOKE_JSON)

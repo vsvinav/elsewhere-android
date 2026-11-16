@@ -21,6 +21,7 @@ import com.elsewhere.app.crew.Crypto
 import com.elsewhere.app.crew.DeviceKeys
 import com.elsewhere.app.crew.Friend
 import com.elsewhere.app.crew.Grants
+import com.elsewhere.app.crew.Ping
 import com.elsewhere.app.crew.Pairing
 import com.elsewhere.app.crew.REVOKE_JSON
 import com.elsewhere.app.crew.RelayClient
@@ -98,7 +99,7 @@ class CrewFlowTest {
         val relay = RelayClient(OkHttpClient(), { server.url("/").toString() }, { store.keys() })
         val publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { null }, scope)
         val hub = RoomHub(store, relay, scope)
-        val engine = SonarEngine(store, hub, publisher, db, object : SonarAlerts { override fun nearby(friend: Friend) = Unit }, scope)
+        val engine = SonarEngine(store, hub, publisher, db, object : SonarAlerts { override fun nearby(friend: Friend, test: Boolean, sent: Boolean) = Unit }, scope)
         vm = CrewViewModel(store, Pairing(store, relay, { "Me" }), publisher, hub, engine, settings, Fakes.Control(Recording(enabled = true)))
         vm.pollMs = 60_000L
     }
@@ -141,6 +142,27 @@ class CrewFlowTest {
         node("REMOVE").performClick()
         await { vm.ui.value?.friends?.isEmpty() == true }
         assertEquals(listOf(marta.deviceId to REVOKE_JSON), rooms.sent)
+    }
+
+    @Test fun `test sonar shows only with sonar on, sends one test ping with a hit, and rings here`() {
+        val marta = Friend("M", "Marta", Crypto.hex(ByteArray(32) { 1 }), Crypto.hex(ByteArray(32) { 2 }), "PAIRM", Crypto.b64(ByteArray(32)), 0L, Grants(liveCity = true))
+        runBlocking { store.addFriend(marta) }
+        setContent()
+        await { vm.ui.value?.friends?.size == 1 }
+        node("MARTA").performClick()
+        rule.onNodeWithText("TEST SONAR").assertDoesNotExist()
+        rule.onNodeWithText(TEST_SONAR_COPY).assertDoesNotExist()
+        node("Sonar").performClick()
+        await { vm.ui.value?.friends?.single()?.grants?.sonar == true }
+        node(TEST_SONAR_COPY).assertIsDisplayed()
+        node("TEST SONAR").performClick()
+        await { rooms.sent.size == 1 && vm.hits.value.contains("M") }
+        val (to, plain) = rooms.sent.single()
+        assertEquals("M", to)
+        val p = Ping.decode(plain)
+        assertTrue(p.test)
+        assertTrue(p.hit!!.id.matches(Regex("[0-9a-f]{8}")))
+        assertTrue(runBlocking { store.debounce(listOf("PAIRM")) }.lastHitByPair.isEmpty())
     }
 
     @Test fun `without a relay the code bill tells you where to set one`() {

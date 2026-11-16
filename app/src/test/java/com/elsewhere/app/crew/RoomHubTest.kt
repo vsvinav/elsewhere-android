@@ -73,4 +73,14 @@ class RoomHubTest {
         hub.receive(marta, sealed("""{"type":"ping","t":"now","grade":"city","lat":1,"lng":2}"""))
         assertNull(fix)
     }
+
+    @Test fun `a test ping is never placed, even when it carries a position`() = runTest {
+        val t = now / 1000
+        hub.receive(marta, sealed("""{"type":"ping","t":$t,"grade":"sonar","lat":38.72,"lng":-9.14,"hit":{"id":"ab12cd34","t":$t},"test":true}"""))
+        assertNull(fix)
+        hub.receive(marta, sealed("""{"type":"ping","t":${t + 1},"grade":"sonar","lat":null,"lng":null,"hit":{"id":"ab12cd35","t":$t},"test":true}"""))
+        assertNull(fix)
+        hub.receive(marta, pingAt(t + 2))
+        assertEquals(t + 2, fix!!.t)
+    }
 }

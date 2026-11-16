@@ -52,6 +52,7 @@ import com.elsewhere.app.ui.world.TickRow
 import com.elsewhere.app.ui.world.date
 
 const val CREW_LEDE = "People who can see your year. Nothing is shared until you turn it on, per person."
+const val TEST_SONAR_COPY = "Fires on both phones now, ignoring distance. Nothing is recorded."
 const val SONAR_COPY = "Ping us both when we're within a mile and neither of us is usually there."
 const val CODE_CAPTION = "A code pairs two devices; it never carries your location or your record. Both confirm before anything is shared."
 const val NO_RELAY = "Set a relay in Settings to pair"
@@ -75,10 +76,10 @@ fun CrewRoute(onBack: () -> Unit, vm: CrewViewModel = hiltViewModel()) {
 @Composable
 fun CrewScreen(
     ui: CrewUi?, actions: CrewActions, onBack: () -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true,
-    onScan: (() -> Unit)? = null, onShareCode: ((String) -> Unit)? = null, shareOpen: Boolean = false,
+    onScan: (() -> Unit)? = null, onShareCode: ((String) -> Unit)? = null, shareOpen: Boolean = false, openFriend: String? = null,
 ) {
     BackHandler { onBack() }
-    var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    var selected by rememberSaveable { mutableStateOf(openFriend) }
     var qr by rememberSaveable { mutableStateOf(false) }
     var sheet by rememberSaveable { mutableStateOf(shareOpen) }
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()) else Modifier)) {
@@ -188,14 +189,17 @@ private fun FriendDetail(ui: CrewUi, f: Friend, actions: CrewActions) {
         TickRow(f.grants.sonar, { actions.setGrants(f.deviceId, if (it) f.grants.copy(sonar = true, liveCity = true) else f.grants.copy(sonar = false)) }, "Sonar")
         Text(SONAR_COPY, Modifier.padding(start = 34.dp), color = Poster.Ink3, style = PosterType.Label)
         Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (f.grants.sonar) {
+        val testable = f.grants.sonar && ui.relaySet
+        if (f.grants.sonar) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (muted) Chip("Muted for today · unmute") { actions.unmute(f.deviceId) }
                 else Chip("Mute Sonar for today") { actions.muteToday(f.deviceId) }
+                if (testable) Chip("Test Sonar") { actions.testSonar(f.deviceId) }
             }
-            Spacer(Modifier.weight(1f))
-            InkButton("Remove", { actions.remove(f.deviceId) }, quiet = true, red = true)
+            if (testable) { Spacer(Modifier.height(6.dp)); Text(TEST_SONAR_COPY, color = Poster.Ink3, style = PosterType.Label) }
+            Spacer(Modifier.height(12.dp))
         }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { InkButton("Remove", { actions.remove(f.deviceId) }, quiet = true, red = true) }
     }
 }
 

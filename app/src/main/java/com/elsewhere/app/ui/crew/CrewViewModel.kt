@@ -71,6 +71,7 @@ interface CrewActions {
     fun remove(deviceId: String)
     fun muteToday(deviceId: String)
     fun unmute(deviceId: String)
+    fun testSonar(deviceId: String)
     fun startShare(friendIds: Set<String>, length: ShareLength)
     fun stopShare()
     fun startRecording()
@@ -186,6 +187,7 @@ class CrewViewModel @Inject constructor(
 
     override fun muteToday(deviceId: String) { viewModelScope.launch { engine.muteToday(deviceId) } }
     override fun unmute(deviceId: String) { viewModelScope.launch { engine.unmute(deviceId) } }
+    override fun testSonar(deviceId: String) { viewModelScope.launch { withContext(io) { engine.testFire(deviceId) } } }
 
     override fun startShare(friendIds: Set<String>, length: ShareLength) {
         viewModelScope.launch { withContext(io) { publisher.startShare(friendIds, length) }; tick.update { clock() } }

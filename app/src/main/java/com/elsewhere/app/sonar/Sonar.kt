@@ -102,6 +102,9 @@ fun decide(me: Side, friend: Side, pairId: String, now: Long, d: Debounce, incom
         else -> Decision.Quiet
     }
 
+/** A test ping: a friend fired on purpose, so it echoes regardless of place, habitat, gap or debounce; a seen id is nothing. */
+fun decideTest(incomingHit: String?): Decision = if (incomingHit != null) Decision.Echo(incomingHit) else Decision.Quiet
+
 /** UTC day string; callers that know the zone can pass their own `localDay` rows, this is for thresholds only. */
 fun localDay(ts: Long): String {
     val d = Math.floorDiv(ts, DAY_MS)

@@ -97,6 +97,8 @@ class SonarTest {
         assertEquals(Decision.Echo("PAIR:1"), decide(me.copy(habitat = true), friend, "PAIR", now, Debounce(), "PAIR:1"))
         assertEquals(Decision.Quiet, decide(me, friend, "PAIR", now, recordHit(Debounce(), "PAIR", now - 1000), "PAIR:1"))
         assertEquals(Decision.Quiet, decide(me.copy(habitat = true), friend, "PAIR", now, Debounce(), null))
+        assertEquals(Decision.Echo("ab12cd34"), decideTest("ab12cd34"), "a test ping echoes whatever the sides say")
+        assertEquals(Decision.Quiet, decideTest(null), "a test ping whose hit was already seen is nothing")
     }
 
     @Test fun `habitat over a hundred thousand rows is quick`() {
