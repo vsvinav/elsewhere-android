@@ -50,6 +50,7 @@ const val SKETCH_HOLD = 400L
 const val SKETCH_LEG = 1200L
 const val SKETCH_TOTAL = 6400L
 private const val STAMP_MS = 260L
+private const val LABEL_MS = 120L
 private val LEGS = POINTS.size - 1
 
 /** Where the pen is at one instant: the leg being drawn (0 during the hold), how much of the route is down, the counter, and the stamps landed. */
@@ -72,6 +73,13 @@ private fun stampScale(n: Int, t: Long): Float {
     if (age >= STAMP_MS || t >= SKETCH_TOTAL) return 1f
     val p = age.toFloat() / STAMP_MS
     return if (p < 0.6f) 1.18f * (p / 0.6f) else 1.18f - 0.18f * ((p - 0.6f) / 0.4f)
+}
+
+/** How far far pin `n`'s name has faded in: nothing until its stamp lands, 120 ms to full; HOME (`n` = 0) is printed from the start. */
+internal fun labelAlpha(n: Int, t: Long): Float {
+    if (n == 0 || t >= SKETCH_TOTAL) return 1f
+    val age = t - (SKETCH_HOLD + SKETCH_LEG * n)
+    return (age.toFloat() / LABEL_MS).coerceIn(0f, 1f)
 }
 
 /** The welcome panel, played once when it appears; the resting frame straight away when animations are off. */
@@ -140,9 +148,12 @@ private fun DrawScope.pins(t: Long, measurer: TextMeasurer) {
         val scale = if (i == 0) 1f else stampScale(i, t)
         if (scale > 0f) drawCircle(if (i == 0) Poster.Red else Poster.Mustard, 14.dp.toPx() * scale, c)
         drawCircle(Poster.Ink, 5.dp.toPx(), c)
+        val alpha = labelAlpha(i, t)
+        if (alpha <= 0f) return@forEachIndexed
+        // Above-left of the dot, as the web sets it: right edge 10dp short of the centre, foot 6dp above.
         val text = measurer.measure(pin.label, label)
-        val x = (c.x - 6.dp.toPx()).coerceIn(4.dp.toPx(), size.width - text.size.width - 4.dp.toPx())
-        drawText(text, topLeft = Offset(x, c.y - 6.dp.toPx() - 5.dp.toPx() - text.size.height))
+        val x = (c.x - 10.dp.toPx() - text.size.width).coerceIn(4.dp.toPx(), size.width - text.size.width - 4.dp.toPx())
+        drawText(text, topLeft = Offset(x, c.y - 6.dp.toPx() - text.size.height), alpha = alpha)
     }
 }
 

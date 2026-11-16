@@ -23,6 +23,14 @@ class SketchTest {
         assertEquals(1, s.stamps); assertEquals(420, s.km)
     }
 
+    @Test fun `a far pin's name fades in over the moment its stamp lands and HOME is named from the start`() {
+        assertEquals(1f, labelAlpha(0, 0))
+        assertEquals(0f, labelAlpha(1, 1599))
+        assertEquals(0.5f, labelAlpha(1, 1660))
+        assertEquals(1f, labelAlpha(1, 1720))
+        assertEquals(1f, labelAlpha(5, SKETCH_TOTAL))
+    }
+
     @Test fun `the end draws the whole route and counts every kilometre`() {
         val s = sketchAt(SKETCH_TOTAL)
         assertEquals(14920, s.km); assertEquals(5, s.stamps); assertEquals(1f, s.fraction)
