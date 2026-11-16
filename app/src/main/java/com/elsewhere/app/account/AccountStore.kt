@@ -6,8 +6,11 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.elsewhere.app.data.SecretBox
+import com.elsewhere.app.data.sealLegacy
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,7 +35,7 @@ interface AccountStorage {
 }
 
 @Singleton
-class AccountStore @Inject constructor(private val store: DataStore<Preferences>) : AccountStorage {
+class AccountStore @Inject constructor(private val store: DataStore<Preferences>, private val box: SecretBox) : AccountStorage {
     private object K {
         val session = stringPreferencesKey("account.session")
         val id = stringPreferencesKey("account.id")
@@ -43,15 +46,20 @@ class AccountStore @Inject constructor(private val store: DataStore<Preferences>
         val welcomed = booleanPreferencesKey("account.welcomed")
     }
 
-    override val state: Flow<AccountState> = store.data.map { p ->
-        val tok = p[K.session]; val id = p[K.id]; val email = p[K.email]
+    private var sealed = false
+
+    /** A token written before it was sealed gets sealed on the first read of a process. */
+    private suspend fun ready() { if (!sealed) { store.sealLegacy(box, K.session); sealed = true } }
+
+    override val state: Flow<AccountState> = store.data.onStart { ready() }.map { p ->
+        val tok = p[K.session]?.let(box::openOrPlain); val id = p[K.id]; val email = p[K.email]
         AccountState(
             session = if (tok != null && id != null && email != null) Session(tok, id, email) else null,
             salt = p[K.salt], vaultAt = p[K.vaultAt] ?: 0L, vaultHash = p[K.vaultHash], welcomed = p[K.welcomed] ?: false,
         )
     }
 
-    override suspend fun saveSession(s: Session) { store.edit { it[K.session] = s.session; it[K.id] = s.id; it[K.email] = s.email } }
+    override suspend fun saveSession(s: Session) { store.edit { it[K.session] = box.seal(s.session); it[K.id] = s.id; it[K.email] = s.email } }
     override suspend fun saveSalt(salt: String?) { store.edit { if (salt == null) it.remove(K.salt) else it[K.salt] = salt } }
     override suspend fun saveVault(at: Long, hash: String?) { store.edit { it[K.vaultAt] = at; if (hash == null) it.remove(K.vaultHash) else it[K.vaultHash] = hash } }
     override suspend fun markWelcomed() { store.edit { it[K.welcomed] = true } }

@@ -1,6 +1,11 @@
 package com.elsewhere.app.account
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import com.elsewhere.app.data.SecretBox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -10,6 +15,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -20,12 +26,15 @@ import java.util.UUID
 class AccountStoreTest {
     private lateinit var dir: File
     private lateinit var scope: CoroutineScope
+    private lateinit var prefs: DataStore<Preferences>
+    private val box = SecretBox.inMemory()
     private lateinit var store: AccountStore
 
     @BeforeEach fun up() {
         dir = File("build/test-datastore/${UUID.randomUUID()}").apply { mkdirs() }
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        store = AccountStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "account.preferences_pb") })
+        prefs = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "account.preferences_pb") }
+        store = AccountStore(prefs, box)
     }
 
     @AfterEach fun down() { scope.cancel(); dir.deleteRecursively() }
@@ -57,5 +66,15 @@ class AccountStoreTest {
         store.saveVault(42L, "h")
         val s = store.state.first()
         assertEquals("c2FsdA==", s.salt); assertEquals(42L, s.vaultAt); assertEquals("h", s.vaultHash)
+    }
+
+    @Test fun `the session token is sealed at rest and a plaintext one is read and sealed`() = runTest {
+        val k = stringPreferencesKey("account.session")
+        store.saveSession(Session("tok", "id", "a@b.co"))
+        val raw = prefs.data.first()[k]!!
+        assertNotEquals("tok", raw); assertEquals("tok", box.open(raw))
+        prefs.edit { it[k] = "legacy_tok" }
+        assertEquals("legacy_tok", store.state.first().session!!.session)
+        assertEquals("legacy_tok", box.open(prefs.data.first()[k]!!))
     }
 }

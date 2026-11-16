@@ -22,6 +22,7 @@ import com.elsewhere.app.crew.ShareSession
 import com.elsewhere.app.data.db.ElsewhereDb
 import com.elsewhere.app.data.db.RawFixEntity
 import com.elsewhere.app.data.db.VisitEntity
+import com.elsewhere.app.data.SecretBox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -73,7 +74,7 @@ class SonarEngineTest {
         dir = File("build/test-datastore/${UUID.randomUUID()}").apply { mkdirs() }
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
-        store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") })
+        store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }, SecretBox.inMemory())
         val publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { null }, scope) { now }
         val hub = RoomHub(store, RelayClient(OkHttpClient(), { "" }, { store.keys() }), scope)
         engine = SonarEngine(store, hub, publisher, db, alerts, scope, { now }, { ZoneId.of("UTC") })

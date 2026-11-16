@@ -1,5 +1,6 @@
 package com.elsewhere.app.crew
 
+import com.elsewhere.app.data.SecretBox
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.File
+import java.security.SecureRandom
 import java.util.UUID
 
 /** The relay is a courier, not a notary: a record whose kx key the signing key never vouched for goes nowhere. */
@@ -38,7 +40,7 @@ class PairingTest {
     @BeforeEach fun setUp() {
         server.start()
         dir = File("build/test-datastore/${UUID.randomUUID()}").apply { mkdirs() }
-        store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") })
+        store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }, SecretBox.inMemory())
         pairing = Pairing(store, RelayClient(OkHttpClient(), { server.url("/").toString() }, { store.keys() }, { now }), { "Me" }, { now })
     }
 
@@ -52,6 +54,11 @@ class PairingTest {
         assertEquals(Crypto.hex(me.signPub), body["signPub"]!!.jsonPrimitive.content)
         assertEquals(Crypto.hex(me.kxPub), body["kxPub"]!!.jsonPrimitive.content)
         assertTrue(Crypto.verifyKxSig(me.signPub, me.kxPub, body["kxSig"]!!.jsonPrimitive.content))
+    }
+
+    @Test fun `codes are minted from a SecureRandom by default`() {
+        val random = Pairing::class.java.getDeclaredField("random").apply { isAccessible = true }.get(pairing)
+        assertTrue(random is SecureRandom, "pair codes must not come from java.util.Random")
     }
 
     @Test fun `a well bound record is claimed and confirmed`() = runTest {

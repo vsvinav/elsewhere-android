@@ -1,6 +1,11 @@
 package com.elsewhere.app.crew
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import com.elsewhere.app.data.SecretBox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,12 +27,15 @@ import java.util.UUID
 class CrewStoreTest {
     private lateinit var dir: File
     private lateinit var scope: CoroutineScope
+    private lateinit var prefs: DataStore<Preferences>
+    private val box = SecretBox.inMemory()
     private lateinit var store: CrewStore
 
     @BeforeEach fun setUp() {
         dir = File("build/test-datastore/${UUID.randomUUID()}").apply { mkdirs() }
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") })
+        prefs = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }
+        store = CrewStore(prefs, box)
     }
 
     @AfterEach fun tearDown() { scope.cancel(); dir.deleteRecursively() }
@@ -115,5 +123,24 @@ class CrewStoreTest {
         assertEquals(restored, store.keys())
         assertNotEquals(before, store.keys())
         assertNull(store.code.first())
+    }
+
+    @Test fun `keys and friends are sealed at rest`() = runTest {
+        val k = store.keys(); store.addFriend(friend("A"))
+        val p = prefs.data.first()
+        val rawKeys = p[stringPreferencesKey("crew.keys")]!!; val rawFriends = p[stringPreferencesKey("crew.friends")]!!
+        assertNotEquals(k.encode(), rawKeys); assertEquals(k.encode(), box.open(rawKeys))
+        assertFalse(rawFriends.contains("PAIRA")); assertTrue(box.open(rawFriends)!!.contains("PAIRA"))
+    }
+
+    @Test fun `plaintext keys and friends from before are read and sealed on first use`() = runTest {
+        val legacy = DeviceKeys.fromSeeds(ByteArray(32) { 7 }, ByteArray(32) { 8 })
+        val friendsJson = """[${kotlinx.serialization.json.Json.encodeToString(Friend.serializer(), friend("A"))}]"""
+        prefs.edit { it[stringPreferencesKey("crew.keys")] = legacy.encode(); it[stringPreferencesKey("crew.friends")] = friendsJson }
+        assertEquals(legacy, store.keys())
+        assertEquals(listOf("A"), store.friendsNow().map { it.deviceId })
+        val p = prefs.data.first()
+        assertEquals(legacy.encode(), box.open(p[stringPreferencesKey("crew.keys")]!!))
+        assertEquals(friendsJson, box.open(p[stringPreferencesKey("crew.friends")]!!))
     }
 }

@@ -22,13 +22,13 @@ jobs:
       - env:
           ELSEWHERE_KEYSTORE_PASSWORD: ${{ secrets.ELSEWHERE_KEYSTORE_PASSWORD }}
           MAPS_SDK_KEY: ${{ secrets.MAPS_SDK_KEY }}
-        run: ./gradlew testDebugUnitTest verifyPaparazziDebug assembleDebug --no-daemon $VERSION_ARG
+        run: ./gradlew testDebugUnitTest verifyPaparazziDebug assembleRelease --no-daemon $VERSION_ARG
       - uses: actions/upload-artifact@v4
-        with: { name: elsewhere-debug.apk, path: app/build/outputs/apk/debug/app-debug.apk }
+        with: { name: elsewhere-release.apk, path: app/build/outputs/apk/release/app-release.apk }
       - if: startsWith(github.ref, 'refs/tags/v')
-        run: cp app/build/outputs/apk/debug/app-debug.apk "elsewhere-$GITHUB_REF_NAME.apk"
+        run: cp app/build/outputs/apk/release/app-release.apk "elsewhere-$GITHUB_REF_NAME.apk"
       - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: elsewhere-*.apk
           generate_release_notes: true

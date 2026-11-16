@@ -10,6 +10,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.data.db.ElsewhereDb
 import com.elsewhere.app.data.db.RawFixEntity
+import com.elsewhere.app.data.SecretBox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,7 +47,7 @@ class PhotoStoreTest {
         db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
         val prefs = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") }
         files = PhotoFiles(ctx)
-        store = PhotoStore(ctx, db, files, SettingsStore(prefs)).apply { clock = { now } }
+        store = PhotoStore(ctx, db, files, SettingsStore(prefs, SecretBox.inMemory())).apply { clock = { now } }
     }
 
     @After fun tearDown() { scope.cancel(); db.close(); files.clear(); dir.deleteRecursively() }

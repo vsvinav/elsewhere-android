@@ -10,6 +10,7 @@ import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.data.db.ElsewhereDb
 import com.elsewhere.app.photos.PhotoFiles
 import com.elsewhere.app.photos.PhotoStore
+import com.elsewhere.app.data.SecretBox
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +53,7 @@ class SnapViewModelTest {
         db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
         val prefs = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") }
         files = PhotoFiles(ctx)
-        store = PhotoStore(ctx, db, files, SettingsStore(prefs))
+        store = PhotoStore(ctx, db, files, SettingsStore(prefs, SecretBox.inMemory()))
         runBlocking { store.markPrivacySeen() }
     }
 

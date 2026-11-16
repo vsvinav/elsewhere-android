@@ -1,6 +1,7 @@
 package com.elsewhere.app.crew
 
 import kotlinx.coroutines.flow.first
+import java.security.SecureRandom
 import java.util.Random
 
 /** The other side of a pairing, shown for confirmation before anything is saved. */
@@ -18,7 +19,7 @@ class Pairing(
     private val relay: RelayClient,
     private val myName: suspend () -> String,
     private val clock: () -> Long = System::currentTimeMillis,
-    private val random: Random = Random(),
+    private val random: Random = SecureRandom(),
 ) {
     private suspend fun me(): PairRecord {
         val k = store.keys()

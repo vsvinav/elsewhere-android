@@ -57,7 +57,7 @@ fun Root(
     var recording by rememberSaveable { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
     var crew by rememberSaveable { mutableStateOf(false) }
-    // A pair link opens Crew with the code already claimed; the screen takes the code itself.
+    // A pair link opens Crew with the code filled in; the screen takes the code itself.
     val pendingCode by PendingCrew.code.collectAsStateWithLifecycle()
     LaunchedEffect(pendingCode) { if (pendingCode != null) crew = true }
     val needsDoor = !hasImport || profile == null || profile!!.homes.isEmpty()

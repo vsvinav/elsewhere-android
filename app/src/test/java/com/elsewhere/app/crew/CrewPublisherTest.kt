@@ -8,6 +8,7 @@ import com.elsewhere.app.data.db.ElsewhereDb
 import com.elsewhere.app.data.db.VisitEntity
 import com.elsewhere.app.ingest.Cities
 import com.elsewhere.app.ingest.record.Fix
+import com.elsewhere.app.data.SecretBox
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,7 +51,7 @@ class CrewPublisherTest {
         dir = File("build/test-datastore/${UUID.randomUUID()}").apply { mkdirs() }
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
-        store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") })
+        store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }, SecretBox.inMemory())
         publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { CityLookup(cities) }, scope) { now }
     }
 

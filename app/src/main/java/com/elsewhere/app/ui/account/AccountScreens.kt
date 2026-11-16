@@ -142,7 +142,7 @@ private fun SetPassphrasePage(ui: AccountUi, actions: AccountActions) {
     Spacer(Modifier.height(24.dp))
     Text("It locks your vault. $PASSPHRASE_NOTE", color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 18.sp))
     Spacer(Modifier.height(32.dp))
-    PosterTextField(p, { p = it }, Modifier.fillMaxWidth().testTag("account.passphrase"), placeholder = "at least 8 characters", label = "Passphrase", hidden = true)
+    PosterTextField(p, { p = it }, Modifier.fillMaxWidth().testTag("account.passphrase"), placeholder = "at least 12 characters", label = "Passphrase", hidden = true)
     Spacer(Modifier.height(24.dp))
     PosterTextField(c, { c = it }, Modifier.fillMaxWidth().testTag("account.confirm"), placeholder = "once more", label = "Confirm", hidden = true)
     ErrorLine(ui.error)
