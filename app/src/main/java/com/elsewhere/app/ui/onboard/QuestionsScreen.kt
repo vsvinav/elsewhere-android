@@ -47,11 +47,15 @@ fun QuestionsScreen(state: OnboardState, actions: OnboardActions, onCancel: (() 
                 Cards {
                     for (c in state.sleep) {
                         val on = state.homes.size == 1 && c.matches(state.homes[0])
+                        if (c.here) { CandidateCard(c, "Guessed", "Your phone's position right now", on, { actions.pickHome(c) }, sticker = true); continue }
                         val city = if (c.city != null && c.label != c.city) "${c.city} · " else ""
                         val merged = if (c.members > 1) " · ${c.members} labels merged" else ""
                         CandidateCard(c, c.sure.label, "$city${nights(c.score)} · ${pct(c.share)}$merged", on, { actions.pickHome(c) }, sticker = c.sure != Sure.STAYED, asking = state.asking)
                     }
-                    if (state.sleep.isEmpty()) Text("No overnight stays found in this record.", color = Poster.Ink2, style = PosterType.Lede)
+                    if (state.sleep.isEmpty()) {
+                        Text("No overnight stays found in this record.", color = Poster.Ink2, style = PosterType.Lede)
+                        Text("Start recording or add an export, then come back.", color = Poster.Ink2, style = PosterType.Lede)
+                    }
                 }
                 NamingStamp(state.naming, Modifier.align(Alignment.End))
                 if (state.homes.isNotEmpty()) {
@@ -68,6 +72,7 @@ fun QuestionsScreen(state: OnboardState, actions: OnboardActions, onCancel: (() 
             ) {
                 Cards {
                     for (c in state.sleep) {
+                        if (c.here) continue
                         // A place already used as a home can come back as a later stint once its earlier one has an "until".
                         val last = state.homes.filter { c.matches(it) }.maxByOrNull { it.from }
                         if (last != null && last.to == null) continue

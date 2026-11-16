@@ -88,6 +88,19 @@ const val DISCLOSURE = "Elsewhere records where your phone goes, on this phone o
 fun RecordRoute(onClose: () -> Unit, vm: RecordViewModel = hiltViewModel()) {
     BackHandler { onClose() }
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val highlights = hiltViewModel<HighlightsViewModel>()
+    val highlightsAt by highlights.at.collectAsStateWithLifecycle()
+    val crew = hiltViewModel<CrewViewModel>()
+    val crewUi by crew.ui.collectAsStateWithLifecycle()
+    RecordScreen(ui, highlightsAt = highlightsAt, onHighlightsAt = highlights::set, banner = { crewUi?.let { SharingBanner(it, onStop = crew::stopShare) } }, actions = recordActions(vm, onClose = onClose))
+}
+
+/**
+ * The launchers and intents behind the permission rows and the buttons, re-reading the gate whenever the
+ * screen comes back from Settings. `onStart` is the view model's own unless the caller has somewhere to go after.
+ */
+@Composable
+fun recordActions(vm: RecordViewModel, onStart: () -> Unit = { vm.start() }, onClose: () -> Unit = {}): RecordActions {
     val ctx = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
@@ -101,11 +114,7 @@ fun RecordRoute(onClose: () -> Unit, vm: RecordViewModel = hiltViewModel()) {
         vm.onResult(p, results[p.permission] == true)
     }
     val settingsIntent = { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-    val highlights = hiltViewModel<HighlightsViewModel>()
-    val highlightsAt by highlights.at.collectAsStateWithLifecycle()
-    val crew = hiltViewModel<CrewViewModel>()
-    val crewUi by crew.ui.collectAsStateWithLifecycle()
-    RecordScreen(ui, highlightsAt = highlightsAt, onHighlightsAt = highlights::set, banner = { crewUi?.let { SharingBanner(it, onStop = crew::stopShare) } }, actions = RecordActions(
+    return RecordActions(
         onAllow = { p ->
             asked = p
             // Fine and coarse go together: Android 12 lets the user pick, and coarse alone is useless to us.
@@ -117,8 +126,8 @@ fun RecordRoute(onClose: () -> Unit, vm: RecordViewModel = hiltViewModel()) {
                 ctx.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${ctx.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }.onFailure { settingsIntent() }
         },
-        onStart = vm::start, onStop = vm::stop, onPause = vm::pause, onClose = onClose,
-    ))
+        onStart = onStart, onStop = vm::stop, onPause = vm::pause, onClose = onClose,
+    )
 }
 
 /** `scroll = false` lays the whole sheet out at full height, for snapshots. */
@@ -226,18 +235,14 @@ internal fun DetailsBill(ui: RecordUi, actions: RecordActions) {
     }
 }
 
+/** The checklist, one ruled row per permission; `battery` adds the unrestricted-battery switch as one more row. */
 @Composable
-internal fun PermissionRows(ui: RecordUi, actions: RecordActions) {
+fun PermissionRows(ui: RecordUi, actions: RecordActions, battery: Boolean = false) {
     Column(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth()) {
             Box(Modifier.fillMaxWidth().height(Rule).background(Poster.Ink))
             for (row in ui.rows) {
-                Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(row.perm.title.uppercase(), style = PosterType.Display.copy(fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em))
-                        Text(row.perm.note, color = LocalMuted.current, style = PosterType.Label.copy(fontSize = 13.sp))
-                    }
-                    Spacer(Modifier.width(16.dp))
+                PermLine(row.perm.title, row.perm.note) {
                     when (row.state) {
                         PermState.GRANTED -> DisplayText("✓", 28.sp, color = Poster.Red)
                         PermState.ASK -> InkButton("Allow", { actions.onAllow(row.perm) }, quiet = true)
@@ -245,12 +250,25 @@ internal fun PermissionRows(ui: RecordUi, actions: RecordActions) {
                         PermState.LOCKED -> CapsText("After location", size = 11.sp)
                     }
                 }
-                Box(Modifier.fillMaxWidth().height(2.dp).background(Poster.Ink))
             }
+            if (battery) PermLine("Battery", "unrestricted, so Android doesn't put the record to sleep") { InkButton("Allow", actions.onBattery, quiet = true) }
         }
         Spacer(Modifier.height(16.dp))
         Text("“All the time” is the one that matters: Android 11 and later sends you to Settings for it, where you pick “Allow all the time”.", color = LocalMuted.current, style = PosterType.Label.copy(fontSize = 13.sp))
     }
+}
+
+@Composable
+private fun PermLine(title: String, note: String, trailing: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title.uppercase(), style = PosterType.Display.copy(fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 1.em))
+            Text(note, color = LocalMuted.current, style = PosterType.Label.copy(fontSize = 13.sp))
+        }
+        Spacer(Modifier.width(16.dp))
+        trailing()
+    }
+    Box(Modifier.fillMaxWidth().height(2.dp).background(Poster.Ink))
 }
 
 @Composable

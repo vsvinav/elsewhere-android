@@ -45,7 +45,7 @@ class RootFlowTest {
     @Test fun `through the door, into the app, and back in through Change answers`() {
         val store = Fakes.Store(record); val maps = Fakes.Maps()
         // One onboarding view model for the whole activity, as Hilt scopes it.
-        val onboard = OnboardViewModel(store, maps, KeyVerifier(maps, Fakes.Checker()), Fakes.Namer(), Fakes.Geo())
+        val onboard = OnboardViewModel(store, maps, KeyVerifier(maps, Fakes.Checker()), Fakes.Namer(), Fakes.Geo(), Fakes.Control())
         rule.setContent {
             val root = remember { RootViewModel(store, Fakes.Land, maps, Fakes.Account()) }
             val shell = remember { ShellViewModel(store, Fakes.Source(record), maps, Fakes.lookups(maps, CoroutineScope(Dispatchers.Main)), DoorNav(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main)), CoroutineScope(Dispatchers.Main))) }
@@ -53,7 +53,7 @@ class RootFlowTest {
             ElsewhereTheme {
                 Root(
                     vm = root,
-                    door = { step, close, _ -> OnboardingGraph(step, close, vm = onboard) },
+                    door = { step, close -> OnboardingGraph(step, close, vm = onboard) },
                     app = { answers, key, _, _ -> AppScaffold(answers, key, {}, shell, range, content = { t, _, _ -> Placeholder(t) }) },
                 )
             }

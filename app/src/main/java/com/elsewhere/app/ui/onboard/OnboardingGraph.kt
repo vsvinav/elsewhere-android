@@ -21,14 +21,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.elsewhere.app.ui.record.RecordStepRoute
 import com.elsewhere.app.ui.world.ReadyBar
 
 /**
- * The front door, one page per step. `startStep` is `Import` for a new record, `Name` to change
- * answers, `Key` to change just the key; `onClose` returns to the app when editing.
+ * The front door, one page per step. `startStep` is `Record` for a new record, `Name` to change
+ * answers, `Key` to change just the key; `onClose` returns to the app when editing. `record` is a slot
+ * so a test can stand in for the permission checklist.
  */
 @Composable
-fun OnboardingGraph(startStep: Step, onClose: (() -> Unit)?, vm: OnboardViewModel = hiltViewModel(), onRecord: (() -> Unit)? = null) {
+fun OnboardingGraph(
+    startStep: Step, onClose: (() -> Unit)?, vm: OnboardViewModel = hiltViewModel(),
+    record: @Composable (onStart: () -> Unit, onImport: () -> Unit) -> Unit = { s, i -> RecordStepRoute(s, i) },
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val ready by vm.ready.collectAsStateWithLifecycle()
     val app = LocalContext.current.applicationContext
@@ -52,7 +57,8 @@ fun OnboardingGraph(startStep: Step, onClose: (() -> Unit)?, vm: OnboardViewMode
         label = "onboard",
     ) { step ->
         when (step) {
-            Step.Import -> ImportScreen(state.importing, state.importError, state.report, onRecord = onRecord) { uri, name ->
+            Step.Record -> record(vm::startRecording, vm::skipRecord)
+            Step.Import -> ImportScreen(state.importing, state.importError, state.report, onSkip = if (state.recording) vm::skipImport else null) { uri, name ->
                 vm.import({ app.contentResolver.openInputStream(uri) ?: throw IllegalStateException("Couldn't open that file") }, name)
             }
             Step.Key -> KeyScreen(state, vm, onCancel = onClose)

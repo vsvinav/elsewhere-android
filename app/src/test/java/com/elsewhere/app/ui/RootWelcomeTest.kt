@@ -34,7 +34,7 @@ class RootWelcomeTest {
             ElsewhereTheme {
                 Root(
                     vm = root,
-                    door = { _, _, _ -> Text("THE DOOR") },
+                    door = { _, _ -> Text("THE DOOR") },
                     account = { entry, done, close ->
                         Column { Text("FLOW $entry"); Text("FINISH", Modifier.clickable(onClick = done)); Text("CLOSE", Modifier.clickable(onClick = close)) }
                     },

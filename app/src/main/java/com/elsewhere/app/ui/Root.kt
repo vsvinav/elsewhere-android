@@ -36,7 +36,7 @@ import com.elsewhere.app.ui.world.figures.LocalLand
 @Composable
 fun Root(
     vm: RootViewModel = hiltViewModel(),
-    door: @Composable (startStep: Step, onClose: (() -> Unit)?, onRecord: () -> Unit) -> Unit = { s, close, r -> OnboardingGraph(s, close, onRecord = r) },
+    door: @Composable (startStep: Step, onClose: (() -> Unit)?) -> Unit = { s, close -> OnboardingGraph(s, close) },
     app: @Composable (onChangeAnswers: () -> Unit, onSettings: () -> Unit, onRecord: () -> Unit, onCrew: () -> Unit) -> Unit = { a, s, r, c -> AppScaffold(a, s, r, onCrew = c) },
     gate: @Composable (ready: Ready?) -> Unit = { r -> KeyGate(ready = r) },
     recordScreen: @Composable (onClose: () -> Unit) -> Unit = { RecordRoute(it) },
@@ -68,8 +68,8 @@ fun Root(
             entry != null -> account(entry!!, { entry = null; vm.welcome() }, { entry = null })
             needsWelcome -> welcome({ entry = AccountEntry.SignUp }, { entry = AccountEntry.LogIn }, { vm.welcome() })
             recording -> recordScreen { recording = false }
-            needsDoor -> door(Step.Import, null) { recording = true }
-            editing != null -> door(editing!!, { editing = null }) { recording = true }
+            needsDoor -> door(Step.Record, null)
+            editing != null -> door(editing!!) { editing = null }
             // The web shows KeyGate once there is a profile and the key is unproven; it lifts itself when the settings change.
             gated == true -> gate(readyBar)
             // Settings sits over the app rather than replacing it, so Back lands on the tab the visitor left.
