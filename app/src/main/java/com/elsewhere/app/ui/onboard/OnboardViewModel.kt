@@ -182,10 +182,8 @@ class OnboardViewModel @Inject constructor(
 
     /** "Skip for now" on the export, while recording: the key, then the questions, with the phone's position for a home. */
     fun skipImport() {
-        viewModelScope.launch {
-            here()
-            _state.update { it.copy(step = if (it.key.isBlank()) Step.Key else Step.Name) }
-        }
+        _state.update { it.copy(step = if (it.key.isBlank()) Step.Key else Step.Name) }
+        viewModelScope.launch { here() }
     }
 
     fun import(open: () -> InputStream, fileName: String) {

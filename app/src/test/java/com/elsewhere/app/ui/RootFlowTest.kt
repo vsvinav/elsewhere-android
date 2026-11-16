@@ -65,10 +65,11 @@ class RootFlowTest {
     @Test fun `through the door, into the app, and back in through Change answers`() {
         val store = Fakes.Store(record); val maps = Fakes.Maps()
         // One onboarding view model for the whole activity, as Hilt scopes it.
-        val onboard = OnboardViewModel(store, maps, KeyVerifier(maps, Fakes.Checker()), Fakes.Namer(), Fakes.Geo(), Fakes.Control())
+        val control = Fakes.Control()
+        val onboard = OnboardViewModel(store, maps, KeyVerifier(maps, Fakes.Checker()), Fakes.Namer(), Fakes.Geo(), control)
         val recordUi = RecordUi(Perm.entries.map { PermRow(it, PermState.ASK) }, false, Recording(), null, true, 1_800_000_000L)
         rule.setContent {
-            val root = remember { RootViewModel(store, Fakes.Land, maps, Fakes.Account()) }
+            val root = remember { RootViewModel(store, Fakes.Land, maps, Fakes.Account(), control) }
             val shell = remember { ShellViewModel(store, Fakes.Source(record), maps, Fakes.lookups(maps, CoroutineScope(Dispatchers.Main)), DoorNav(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main)), CoroutineScope(Dispatchers.Main))) }
             val range = remember { RangeViewModel(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main))) }
             ElsewhereTheme {
@@ -106,13 +107,13 @@ class RootFlowTest {
     }
 
     /** A phone that has recorded for a few days, answered the questions, and never brought an export. */
-    private fun waiting(days: Int, export: Boolean, control: Fakes.Control = Fakes.Control(Recording(true, 1_800_000_000L, 0L))): Fakes.Store {
+    private fun waiting(days: Int, export: Boolean, control: Fakes.Control = Fakes.Control(Recording(true, 1_800_000_000L, 0L)), stays: Boolean = true): Fakes.Store {
         val store = Fakes.Store(record)
-        store.hasImport.value = true; store.hasExport.value = export; store.recordedDays.value = days
+        store.hasImport.value = stays; store.hasExport.value = export; store.recordedDays.value = days
         store.profile.value = Profile("Ana", Units.KM, listOf(Home(42.36, -71.06, "Boston", "US", 0, null)), emptyList())
         val maps = Fakes.Maps().apply { cur.value = com.elsewhere.app.data.Settings(limitedAccepted = true) }
         rule.setContent {
-            val root = remember { RootViewModel(store, Fakes.Land, maps, Fakes.Account()) }
+            val root = remember { RootViewModel(store, Fakes.Land, maps, Fakes.Account(), control) }
             val vm = remember { WaitingViewModel(store, control) }
             ElsewhereTheme {
                 Root(vm = root, door = { _, _ -> androidx.compose.material3.Text("THE DOOR") }, app = { _, _, _, _ -> androidx.compose.material3.Text("THE APP") }, waiting = { WaitingRoute(it, vm) })
@@ -150,5 +151,12 @@ class RootFlowTest {
         store.hasExport.value = true
         rule.waitForIdle()
         rule.onNodeWithText("THE APP").assertIsDisplayed()
+    }
+
+    @Test fun `a fresh recording with no stay closed yet still leaves the onboarding door for the wait`() {
+        waiting(days = 0, export = false, stays = false)
+        rule.onAllNodesWithText("DAY 1").onFirst().assertIsDisplayed()
+        rule.onNodeWithText("THE DOOR").assertDoesNotExist()
+        rule.onNodeWithText("THE APP").assertDoesNotExist()
     }
 }

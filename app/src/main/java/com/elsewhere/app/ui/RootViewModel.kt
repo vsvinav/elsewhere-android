@@ -12,6 +12,7 @@ import com.elsewhere.app.data.ReadyState
 import com.elsewhere.app.ingest.keyGated
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.RecordStore
+import com.elsewhere.app.record.RecordControl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,7 +24,7 @@ import javax.inject.Inject
 
 /** Which door the visitor is at: the front door until there is an import and a home. */
 @HiltViewModel
-class RootViewModel @Inject constructor(repo: RecordStore, landLoader: LandSource, maps: MapsSettings, private val accounts: Accounts, readyState: ReadyState = ReadyState()) : ViewModel() {
+class RootViewModel @Inject constructor(repo: RecordStore, landLoader: LandSource, maps: MapsSettings, private val accounts: Accounts, control: RecordControl, readyState: ReadyState = ReadyState()) : ViewModel() {
     /** Session and the welcome flag; null until read. */
     val account: StateFlow<AccountState?> = accounts.account
     /** A returning visitor with an unproven key waits at the gate; null until the settings have been read. */
@@ -33,6 +34,7 @@ class RootViewModel @Inject constructor(repo: RecordStore, landLoader: LandSourc
     val hasImport: StateFlow<Boolean> = repo.hasImport
     val hasExport: StateFlow<Boolean> = repo.hasExport
     val recordedDays: StateFlow<Int> = repo.recordedDays
+    val recording: StateFlow<Boolean> = control.recording.map { it.enabled }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val profile: StateFlow<Profile?> = repo.profile
     private val _land = MutableStateFlow<FeatureCollection?>(null)
     val land: StateFlow<FeatureCollection?> = _land

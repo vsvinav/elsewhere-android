@@ -35,6 +35,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.InputStream
 import javax.inject.Inject
@@ -53,7 +55,14 @@ class WaitingViewModel @Inject constructor(private val store: RecordStore, priva
         WaitingState(d, r.enabled, f, i, e)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, WaitingState())
 
-    init { viewModelScope.launch { fixes.value = control.fixesSince(LocalDate.now(ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toEpochSecond()) } }
+    init {
+        viewModelScope.launch {
+            while (isActive) {
+                fixes.value = control.fixesSince(LocalDate.now(ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toEpochSecond())
+                delay(60_000)
+            }
+        }
+    }
 
     fun resume() { viewModelScope.launch { control.start() } }
 

@@ -1,6 +1,7 @@
 package com.elsewhere.app.ui.onboard
 
 import com.elsewhere.app.Fakes
+import com.elsewhere.app.ingest.Geocoder
 import com.elsewhere.app.data.Settings
 import com.elsewhere.app.Fx
 import com.elsewhere.app.data.Home
@@ -135,6 +136,18 @@ class OnboardViewModelTest {
         vm.start(Step.Record); run()
         vm.skipRecord(); vm.skipImport(); run()
         assertEquals("Where you are now", vm.state.value.sleep.single().label)
+    }
+
+    @Test fun `Skip for now moves on at once, the home card filling in whenever the street comes back`() = runTest(dispatcher) {
+        val store = Fakes.Store(Fx.record()); val maps = Fakes.Maps()
+        control.fix = RawFixEntity(ts = 1_800_000_000L, lat = 51.5, lng = -0.12, accuracyM = 10f, speedMps = null, altitude = null, activity = null, batteryPct = null)
+        val slow = object : Geocoder { override suspend fun address(lat: Double, lng: Double): String? = kotlinx.coroutines.awaitCancellation() }
+        val vm = OnboardViewModel(store, maps, KeyVerifier(maps, checker), namer, slow, control)
+        vm.start(Step.Record); run()
+        vm.startRecording(); run()
+        vm.skipImport(); run()
+        assertEquals(Step.Key, vm.state.value.step)
+        assertTrue(vm.state.value.sleep.isEmpty())
     }
 
     @Test fun `import lands on the key step, then the questions`() = runTest(dispatcher) {
