@@ -14,6 +14,7 @@ import com.elsewhere.app.crew.Grade
 import com.elsewhere.app.crew.Grants
 import com.elsewhere.app.crew.Message
 import com.elsewhere.app.crew.Ping
+import com.elsewhere.app.crew.PublishPlanner
 import com.elsewhere.app.crew.RelayClient
 import com.elsewhere.app.crew.RoomHub
 import com.elsewhere.app.crew.Rooms
@@ -47,7 +48,10 @@ import java.util.UUID
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class SonarEngineTest {
-    private class Rec : SonarAlerts { val names = ArrayList<String>(); override fun nearby(friend: Friend) { names += friend.name } }
+    private class Rec : SonarAlerts {
+        val names = ArrayList<String>(); val tests = ArrayList<Pair<Boolean, Boolean>>()
+        override fun nearby(friend: Friend, test: Boolean, sent: Boolean) { names += friend.name; tests += test to sent }
+    }
     private class FakeRooms : Rooms {
         val sent = ArrayList<Pair<String, String>>()
         override suspend fun send(friend: Friend, plaintext: String): Boolean { sent += friend.deviceId to plaintext; return true }
@@ -81,8 +85,43 @@ class SonarEngineTest {
 
     @After fun tearDown() { scope.cancel(); db.close(); dir.deleteRecursively() }
 
-    private fun ping(grade: Grade = Grade.sonar, lat: Double = 38.7230, lng: Double = -9.1400, hit: Ping.Hit? = null, habitat: Boolean = false, absence: Int? = 200, t: Long = now / 1000) =
-        Message.Pinged("M", Ping(t = t, grade = grade, lat = lat, lng = lng, city = "Lisbon", habitat = habitat, absenceDays = absence, hit = hit))
+    private fun ping(grade: Grade = Grade.sonar, lat: Double? = 38.7230, lng: Double? = -9.1400, hit: Ping.Hit? = null, habitat: Boolean = false, absence: Int? = 200, t: Long = now / 1000, test: Boolean = false) =
+        Message.Pinged("M", Ping(t = t, grade = grade, lat = lat, lng = lng, city = "Lisbon", habitat = habitat, absenceDays = absence, hit = hit, test = test))
+
+    @Test fun `a test ping echoes past every gate, records no debounce, and is not echoed twice`() = runTest {
+        store.recordHit("PAIRM", now - 1000)
+        store.stopShare()
+        val far = ping(lat = null, lng = null, hit = Ping.Hit("ab12cd34", now / 1000), habitat = true, absence = 0, test = true)
+        assertEquals(Decision.Echo("ab12cd34"), engine.evaluate(far))
+        assertEquals(listOf("Marta"), alerts.names)
+        assertEquals(listOf(true to false), alerts.tests)
+        assertEquals(0, rooms.sent.size)
+        assertEquals(mapOf("PAIRM" to (now - 1000)), store.debounce(listOf("PAIRM")).lastHitByPair)
+        assertEquals(Decision.Quiet, engine.evaluate(far))
+        assertEquals("a test ping without a hit is nothing", Decision.Quiet, engine.evaluate(ping(test = true)))
+        assertEquals(1, alerts.names.size)
+    }
+
+    @Test fun `a test fire rings here, sends one test ping with a hit, and leaves the debounce alone`() = runTest {
+        val id = engine.testFire("M")!!
+        assertTrue(id.matches(Regex("[0-9a-f]{8}")))
+        assertEquals(listOf(true to true), alerts.tests)
+        assertEquals(1, rooms.sent.size)
+        val p = Ping.decode(rooms.sent[0].second)
+        assertTrue(p.test)
+        assertEquals(id, p.hit!!.id)
+        assertEquals(Grade.sonar, p.grade)
+        assertEquals(PublishPlanner.cellCentre(38.7223, -9.1393).first, p.lat)
+        assertTrue(store.debounce(listOf("PAIRM")).lastHitByPair.isEmpty())
+        assertEquals("my own id reflected is nothing", Decision.Quiet, engine.evaluate(ping(hit = Ping.Hit(id, now / 1000), test = true)))
+        store.setGrants("M", Grants(liveCity = true))
+        assertEquals(null, engine.testFire("M"))
+        assertEquals(1, rooms.sent.size)
+    }
+
+    @Test fun `a real ping without a position is quiet`() = runTest {
+        assertEquals(Decision.Quiet, engine.evaluate(ping(lat = null, lng = null)))
+    }
 
     @Test fun `a fresh near newcomer fires, alerts, sends the hit and debounces`() = runTest {
         val d = engine.evaluate(ping())

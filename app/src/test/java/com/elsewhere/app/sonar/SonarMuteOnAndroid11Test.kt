@@ -49,7 +49,7 @@ class SonarMuteOnAndroid11Test {
         val rooms = object : Rooms { override suspend fun send(friend: Friend, plaintext: String) = true; override fun forget(deviceId: String) = Unit }
         val publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { null }, scope) { now }
         val hub = RoomHub(store, RelayClient(OkHttpClient(), { "" }, { store.keys() }), scope)
-        val engine = SonarEngine(store, hub, publisher, db, object : SonarAlerts { override fun nearby(friend: Friend) = Unit }, scope, { now }, { lisbon })
+        val engine = SonarEngine(store, hub, publisher, db, object : SonarAlerts { override fun nearby(friend: Friend, test: Boolean, sent: Boolean) = Unit }, scope, { now }, { lisbon })
         store.addFriend(Friend("M", "Marta", Crypto.hex(ByteArray(32)), Crypto.hex(ByteArray(32)), "PAIRM", Crypto.b64(ByteArray(32)), 0L, Grants(sonar = true)))
 
         engine.muteToday("M")

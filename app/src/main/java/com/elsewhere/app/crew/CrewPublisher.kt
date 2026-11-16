@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.elsewhere.app.crew.PublishPlanner.Companion.cellCentre
 import com.elsewhere.app.ingest.record.Fix as RecordFix
 
 /**
@@ -94,6 +95,16 @@ class CrewPublisher(
         val now = clock()
         val session = store.shareNow()?.takeIf { it.active(now) } ?: return@withLock
         publish(fix, session, now)
+    }
+
+    /**
+     * A test hit goes straight to the friend's room, share or not, at Sonar's cell-level precision when a fix is known
+     * and with no position at all when none is. It never touches the cadence or the debounce.
+     */
+    suspend fun carryTest(friend: Friend, hit: Ping.Hit) = lock.withLock {
+        val fix = lastFix ?: db.rawFixes().latest()?.let { RecordFix(it.ts, it.lat, it.lng, it.accuracyM) }
+        val (lat, lng) = fix?.let { cellCentre(it.lat, it.lng) } ?: (null to null)
+        hub.send(friend, Ping(t = clock() / 1000, grade = Grade.sonar, lat = lat, lng = lng, hit = hit, test = true).encode())
     }
 
     /** Removing a friend tells them so, then forgets them here. */

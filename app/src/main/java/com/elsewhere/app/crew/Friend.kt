@@ -4,7 +4,9 @@ import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
 
 @Serializable
@@ -34,20 +36,26 @@ data class Friend(
 
 enum class Grade { city, sonar, precise }
 
-/** What one phone tells a friend; `hit` carries the Sonar id when the sender has just fired. */
+/**
+ * What one phone tells a friend; `hit` carries the Sonar id when the sender has just fired. A `test` ping is a hit fired
+ * on purpose from the Crew screen: it may have no position, and the other side echoes it without weighing anything.
+ */
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class Ping(
     val type: String = "ping",
     val t: Long,
     val grade: Grade,
-    val lat: Double,
-    val lng: Double,
+    val lat: Double? = null,
+    val lng: Double? = null,
     val city: String? = null,
     val habitat: Boolean = false,
     val absenceDays: Int? = null,
     @EncodeDefault val hit: Hit? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val test: Boolean = false,
 ) {
+    val placed: Boolean get() = lat != null && lng != null
+
     @Serializable data class Hit(val id: String, val t: Long)
 
     fun encode(): String = json.encodeToString(serializer(), this)
@@ -56,9 +64,12 @@ data class Ping(
         val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = true }
         /** `t` must be a bare integer on the wire; a quoted or fractional time is refused rather than coerced. */
         fun decode(s: String): Ping {
-            val t = json.parseToJsonElement(s).jsonObject["t"] as? JsonPrimitive
+            val o = json.parseToJsonElement(s).jsonObject
+            val t = o["t"] as? JsonPrimitive
             require(t != null && !t.isString && t.content.toLongOrNull() != null) { "t" }
-            return json.decodeFromString(serializer(), s)
+            // `test` is only ever a bare boolean; a string, number or anything else reads as false.
+            val test = (o["test"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull ?: false
+            return json.decodeFromJsonElement(serializer(), JsonObject(o - "test" + ("test" to JsonPrimitive(test))))
         }
     }
 }

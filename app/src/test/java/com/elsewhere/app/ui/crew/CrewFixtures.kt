@@ -50,6 +50,7 @@ object CrewFixtures {
         override fun remove(deviceId: String) {}
         override fun muteToday(deviceId: String) {}
         override fun unmute(deviceId: String) {}
+        override fun testSonar(deviceId: String) {}
         override fun startShare(friendIds: Set<String>, length: ShareLength) {}
         override fun stopShare() {}
         override fun startRecording() {}

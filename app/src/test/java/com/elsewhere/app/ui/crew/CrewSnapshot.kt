@@ -36,6 +36,10 @@ class CrewSnapshot {
 
     @Test fun crew() = shoot { CrewScreen(CrewFixtures.ui(share = CrewFixtures.share), CrewFixtures.NoOp, onBack = {}, scroll = false, onScan = {}, onShareCode = {}) }
 
+    @Test fun friendDetail() = shoot {
+        CrewScreen(CrewFixtures.ui(), CrewFixtures.NoOp, onBack = {}, scroll = false, onScan = {}, onShareCode = {}, openFriend = CrewFixtures.marta.deviceId)
+    }
+
     @Test fun confirm() = shoot {
         ConfirmPairBody("Marta", Pending("PT-LIS-7Q4K", PairRecord(CrewFixtures.marta.signPub, CrewFixtures.marta.kxPub, "Marta")).fingerprint, {}, {})
     }

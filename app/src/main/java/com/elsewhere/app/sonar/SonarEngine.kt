@@ -18,17 +18,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.security.SecureRandom
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
 
 /** Where the engine hands off to the phone: a heads-up for the person. */
 interface SonarAlerts {
-    fun nearby(friend: Friend)
+    /** [test] marks a hit fired on purpose; [sent] when it was this phone that fired it. */
+    fun nearby(friend: Friend, test: Boolean = false, sent: Boolean = false)
 }
 
-/** A hit as the Map wants it: who, and when it landed on this phone (ms). */
-data class SonarHit(val friend: Friend, val hitId: String, val at: Long)
+/** A hit as the Map wants it: who, when it landed on this phone (ms), and whether it was fired on purpose. */
+data class SonarHit(val friend: Friend, val hitId: String, val at: Long, val test: Boolean = false)
 
 /**
  * Listens to the rooms and runs [decide] once per incoming ping — never on a timer, never per frame.
@@ -71,6 +73,8 @@ class SonarEngine(
         val friend = store.friend(m.from) ?: return Decision.Quiet
         if (!friend.grants.sonar) return Decision.Quiet
         val now = clock()
+        if (p.test) return decideTest(incomingHit).also { if (it is Decision.Echo) land(friend, it.hitId, now, test = true) }
+        if (p.lat == null || p.lng == null) return Decision.Quiet
         val share = store.shareNow()?.takeIf { it.active(now) && m.from in it.friendIds } ?: return Decision.Quiet
         val mine = db.rawFixes().latest()?.toSonarFix() ?: return Decision.Quiet
         val friendFix = Fix(p.t * 1000, p.lat, p.lng)
@@ -94,9 +98,20 @@ class SonarEngine(
         return decision
     }
 
-    private suspend fun land(friend: Friend, hitId: String, now: Long) {
-        hitsFlow.emit(SonarHit(friend, hitId, now))
-        if (!friend.muted(now)) alerts.nearby(friend)
+    private suspend fun land(friend: Friend, hitId: String, now: Long, test: Boolean = false, sent: Boolean = false) {
+        hitsFlow.emit(SonarHit(friend, hitId, now, test))
+        if (!friend.muted(now)) alerts.nearby(friend, test, sent)
+    }
+
+    /** Fire on purpose: ring here as if [decide] had fired, and send the hit to the friend, who echoes it the same way. */
+    suspend fun testFire(deviceId: String): String? {
+        val friend = store.friend(deviceId)?.takeIf { it.grants.sonar } ?: return null
+        val now = clock()
+        val id = ByteArray(4).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+        seenLock.withLock { seenHits[id] = Unit }
+        land(friend, id, now, test = true, sent = true)
+        publisher.carryTest(friend, Ping.Hit(id, now / 1000))
+        return id
     }
 
     /** Quiet until local midnight. */

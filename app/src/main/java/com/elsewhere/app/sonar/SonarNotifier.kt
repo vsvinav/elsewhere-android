@@ -46,7 +46,7 @@ object PendingCrew {
 
 /** The Sonar notification: high importance, its own sound and buzz, and deliberately vague about place. */
 class SonarNotifier(private val ctx: Context) : SonarAlerts {
-    override fun nearby(friend: Friend) {
+    override fun nearby(friend: Friend, test: Boolean, sent: Boolean) {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(channel(ctx))
@@ -60,8 +60,8 @@ class SonarNotifier(private val ctx: Context) : SonarAlerts {
         )
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_record_pin)
-            .setContentTitle(title(friend.name)).setContentText(BODY)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(BODY))
+            .setContentTitle(if (test) testTitle(friend.name, sent) else title(friend.name)).setContentText(if (test) TEST_BODY else BODY)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(if (test) TEST_BODY else BODY))
             .setPriority(NotificationCompat.PRIORITY_HIGH).setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setSound(soundUri(ctx)).setVibrate(VIBRATION)
             .setContentIntent(open).setAutoCancel(true)
@@ -77,7 +77,9 @@ class SonarNotifier(private val ctx: Context) : SonarAlerts {
         const val BODY = "Within a mile of you, and neither of you is usually around here. Say hi?"
         val VIBRATION = longArrayOf(0, 40, 120, 60)
 
+        const val TEST_BODY = "Fired on purpose to check Sonar works. Nothing is recorded."
         fun title(name: String) = "Sonar · $name is nearby"
+        fun testTitle(name: String, sent: Boolean) = if (sent) "Sonar · Test ping to $name" else "Sonar · Test ping from $name"
         fun soundUri(ctx: Context): Uri = Uri.parse("android.resource://${ctx.packageName}/raw/sonar")
 
         fun channel(ctx: Context) = NotificationChannel(CHANNEL, "Sonar", NotificationManager.IMPORTANCE_HIGH).apply {

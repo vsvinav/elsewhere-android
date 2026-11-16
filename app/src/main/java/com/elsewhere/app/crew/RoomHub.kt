@@ -124,7 +124,7 @@ class RoomHub(
             is Message.Pinged -> {
                 val p = m.ping
                 if (!accept(friend.deviceId, p.t)) return
-                fixesFlow.update { it + (friend.deviceId to FriendFix(friend.deviceId, friend.name, p.lat, p.lng, p.city, p.grade, p.t, clock())) }
+                if (p.lat != null && p.lng != null) fixesFlow.update { it + (friend.deviceId to FriendFix(friend.deviceId, friend.name, p.lat, p.lng, p.city, p.grade, p.t, clock())) }
                 messagesFlow.emit(m)
             }
             is Message.Stopped -> { fixesFlow.update { it - friend.deviceId }; messagesFlow.emit(m) }

@@ -58,12 +58,12 @@ class PublishPlannerTest {
         assertEquals(Grade.precise, out["P"]!!.grade)
         val s = out["S"]!!
         assertEquals(Grade.sonar, s.grade)
-        assertEquals(geohash(38.7250, -9.1400, 7), geohash(s.lat, s.lng, 7), "cell centre stays in the cell")
+        assertEquals(geohash(38.7250, -9.1400, 7), geohash(s.lat!!, s.lng!!, 7), "cell centre stays in the cell")
         assertNotEquals(38.7250, s.lat)
         val c = out["C"]!!
         assertEquals(Grade.city, c.grade)
         assertEquals("Lisbon", c.city)
-        val km = haversineKm(38.7223, -9.1393, c.lat, c.lng)
+        val km = haversineKm(38.7223, -9.1393, c.lat!!, c.lng!!)
         assertTrue(km <= 7.1 && km > 0.0, "jitter $km km from the centroid")
         assertEquals(1_763_222_520L, c.t); assertEquals(212, c.absenceDays); assertEquals(false, c.habitat)
     }
