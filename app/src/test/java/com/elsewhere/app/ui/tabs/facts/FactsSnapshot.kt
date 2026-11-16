@@ -19,22 +19,22 @@ import org.junit.Test
 
 class FactsSnapshot {
     @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, theme = "android:Theme.Material.Light.NoActionBar")
-    // A fixed today, so the deck's "Today" and "On this day" cards stay the same print.
+    // A fixed today, so the deck's "Today" card stays the same print.
     private val ui = factsUi(SampleRecord.record, SampleRecord.record, SampleRecord.profile, today = "2025-05-20")
 
     @Test fun hero() = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { FactsHero(ui) } }
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { FactsHero(ui, null, {}, {}) } }
     }
 
     @Test fun streaks() = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { Box(Modifier.background(Poster.Stock).padding(12.dp)) { HubDeck(ui, ui.hub!!, page = 2) } } }
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { Box(Modifier.background(Poster.Stock)) { PlayStrip(ui, ui.hub!!, page = 1) } } }
     }
 
     @Test fun list() = paparazzi.snapshot {
         ElsewhereTheme {
             CompositionLocalProvider(LocalMotion provides false) {
                 Column(Modifier.fillMaxWidth().background(Poster.Stock).padding(12.dp)) {
-                    ui.all.take(2).forEachIndexed { i, f -> FactPass(f, i + 1, ui.all.size) }
+                    ui.rest.take(2).forEachIndexed { i, f -> FactPass(f, i + 1, ui.rest.size) }
                 }
             }
         }
