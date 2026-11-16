@@ -45,6 +45,9 @@ import com.elsewhere.app.data.Settings
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ingest.Probe
 import com.elsewhere.app.map.Sdk
+import com.elsewhere.app.account.VaultState
+import com.elsewhere.app.ui.account.AccountEntry
+import com.elsewhere.app.ui.account.AccountRoute
 import com.elsewhere.app.ui.world.CapsText
 import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.InkButton
@@ -61,15 +64,24 @@ val LLM_PROVIDER_LABEL: Map<LlmProvider, String> = mapOf(
 private val MAP_PROVIDER_LABEL: Map<MapProvider, String> = mapOf(MapProvider.AUTO to "Auto", MapProvider.GOOGLE_TILES to "Google", MapProvider.FREE to "OpenStreetMap")
 private val UNITS_LABEL: Map<Units, String> = mapOf(Units.KM to "km", Units.MI to "mi")
 
+/** Settings, and the account flow laid over it when "Log in or sign up" or "Update" is pressed. */
 @Composable
-fun SettingsRoute(onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
+fun SettingsRoute(
+    onBack: () -> Unit, vm: SettingsViewModel = hiltViewModel(),
+    account: @Composable (entry: AccountEntry, onDone: () -> Unit, onClose: () -> Unit) -> Unit = { e, d, c -> AccountRoute(e, d, c) },
+) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    SettingsScreen(ui, vm, onBack)
+    var entry by rememberSaveable { mutableStateOf<AccountEntry?>(null) }
+    if (entry != null) account(entry!!, { entry = null }, { entry = null })
+    else SettingsScreen(ui, vm, onBack, onAccount = { entry = it })
 }
 
 /** The whole settings page over the app; blank stock until the stores have been read. `scroll = false` lays it out at full height for snapshots. */
 @Composable
-fun SettingsScreen(ui: SettingsUi?, actions: SettingsActions, onBack: () -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true, sdk: Boolean = Sdk.available) {
+fun SettingsScreen(
+    ui: SettingsUi?, actions: SettingsActions, onBack: () -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true, sdk: Boolean = Sdk.available,
+    onAccount: (AccountEntry) -> Unit = {},
+) {
     BackHandler { onBack() }
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()) else Modifier)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -82,6 +94,8 @@ fun SettingsScreen(ui: SettingsUi?, actions: SettingsActions, onBack: () -> Unit
             DisplayText("Settings", 56.sp)
         }
         if (ui != null) Column(Modifier.padding(horizontal = 20.dp)) {
+            AccountSection(ui, actions, onAccount)
+            Spacer(Modifier.height(48.dp))
             GoogleMaps(ui, actions, sdk)
             Spacer(Modifier.height(48.dp))
             AskElsewhere(ui, actions)
@@ -93,6 +107,63 @@ fun SettingsScreen(ui: SettingsUi?, actions: SettingsActions, onBack: () -> Unit
         }
     }
 }
+
+/** Signed out: one button into the flow. Signed in: the email, the vault's standing, Log out and a two-tap Delete. Always: the service URL. */
+@Composable
+private fun AccountSection(ui: SettingsUi, actions: SettingsActions, onAccount: (AccountEntry) -> Unit) {
+    val a = ui.account
+    var url by rememberSaveable(ui.maps.accountUrl) { mutableStateOf(ui.maps.accountUrl) }
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    H2("Account")
+    if (a.session == null) {
+        Text(ACCOUNT_CAPTION, color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 16.sp))
+        Spacer(Modifier.height(20.dp))
+        InkButton("Log in or sign up", { onAccount(AccountEntry.LogIn) })
+    } else {
+        CapsText("Signed in as", size = 10.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(a.session.email, color = Poster.Ink, style = PosterType.Lede.copy(fontSize = 17.sp))
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                when (a.vault) { VaultState.UpToDate -> VAULT_UP_TO_DATE; VaultState.OutOfDate -> VAULT_OUT_OF_DATE; VaultState.None -> VAULT_NONE },
+                color = if (a.vault == VaultState.OutOfDate) Poster.Red else Poster.Ink2, style = PosterType.Lede.copy(fontSize = 15.sp),
+            )
+            if (a.vault == VaultState.OutOfDate) {
+                Spacer(Modifier.width(12.dp))
+                CapsText("Update", Modifier.clickable { onAccount(AccountEntry.Update) }.padding(8.dp), color = Poster.Ink, size = 11.sp)
+            }
+        }
+        if (a.error != null) {
+            Spacer(Modifier.height(12.dp))
+            Text(a.error, color = Poster.Red, style = PosterType.Lede.copy(fontSize = 15.sp))
+        }
+        Spacer(Modifier.height(24.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            InkButton("Log out", { actions.logOut() }, quiet = true)
+            if (!confirmDelete) InkButton("Delete account", { confirmDelete = true }, quiet = true)
+        }
+        if (confirmDelete) {
+            Spacer(Modifier.height(20.dp))
+            Text(DELETE_CAPTION, color = Poster.Ink, style = PosterType.Lede.copy(fontSize = 15.sp))
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                InkButton("Delete for good", { confirmDelete = false; actions.deleteAccount() }, red = true)
+                InkButton("Keep it", { confirmDelete = false }, quiet = true)
+            }
+        }
+    }
+    Spacer(Modifier.height(32.dp))
+    PosterTextField(url, { url = it }, Modifier.fillMaxWidth(), placeholder = Settings.DEFAULT_ACCOUNT, label = "Account service URL", mono = true)
+    Spacer(Modifier.height(24.dp))
+    InkButton("Save service", { actions.setAccountUrl(url) }, enabled = url.trim() != ui.maps.accountUrl)
+}
+
+const val ACCOUNT_CAPTION = "An account keeps your record in a vault only your passphrase opens, and brings it to your next phone."
+const val VAULT_UP_TO_DATE = "Recovery vault: up to date"
+const val VAULT_OUT_OF_DATE = "Recovery vault: out of date"
+const val VAULT_NONE = "Recovery vault: nothing to keep yet"
+const val DELETE_CAPTION = "This removes your account and its vault from the service. Your record stays on this phone."
 
 @Composable
 private fun CrewSection(ui: SettingsUi, actions: SettingsActions) {

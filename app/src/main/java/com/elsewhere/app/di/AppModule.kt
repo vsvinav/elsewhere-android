@@ -44,7 +44,13 @@ import com.elsewhere.app.ingest.KeyCheck
 import com.elsewhere.app.ingest.KeyChecker
 import com.elsewhere.app.ask.HttpLlmClient
 import com.elsewhere.app.ask.LlmClient
+import com.elsewhere.app.account.AccountApi
+import com.elsewhere.app.account.AccountClient
+import com.elsewhere.app.account.AccountRepository
+import com.elsewhere.app.account.AccountStore
+import com.elsewhere.app.account.Accounts
 import com.elsewhere.app.crew.CrewPublisher
+import com.elsewhere.app.crew.Identity
 import com.elsewhere.app.crew.CrewStore
 import com.elsewhere.app.crew.Pairing
 import com.elsewhere.app.crew.RelayClient
@@ -98,6 +104,13 @@ object AppModule {
     @Provides @Singleton fun sonarAlerts(@ApplicationContext ctx: Context): SonarAlerts = SonarNotifier(ctx)
     @Provides @Singleton fun sonarEngine(crew: CrewStore, hub: RoomHub, publisher: CrewPublisher, db: ElsewhereDb, alerts: SonarAlerts, scope: CoroutineScope): SonarEngine =
         SonarEngine(crew, hub, publisher, db, alerts, scope)
+
+    @Provides @Singleton fun accountApi(http: OkHttpClient, settings: SettingsStore): AccountApi =
+        AccountClient(http, { runBlocking { settings.settings.first().accountUrl } })
+    @Provides fun identity(crew: CrewStore): Identity = crew
+    @Provides @Singleton fun accountRepository(api: AccountApi, store: AccountStore, repo: RecordRepository, settings: SettingsStore, crew: CrewStore, scope: CoroutineScope): AccountRepository =
+        AccountRepository(api, store, repo, settings, crew, scope)
+    @Provides fun accounts(r: AccountRepository): Accounts = r
 
     @Provides fun visits(db: ElsewhereDb) = db.visits()
     @Provides fun activities(db: ElsewhereDb) = db.activities()

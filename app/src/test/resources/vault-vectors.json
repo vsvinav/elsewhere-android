@@ -1,0 +1,9 @@
+{
+  "passphrase": "correct horse battery staple",
+  "iterations": 310000,
+  "salt": "ABEiM0RVZneImaq7zN3u/w==",
+  "iv": "Dw4NDAsKCQgHBgUE",
+  "plaintext": "{\"v\":1,\"signPriv\":\"9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60\",\"kxPriv\":\"77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a\",\"profile\":{\"name\":\"Ada\",\"units\":\"km\",\"homes\":[{\"lat\":51.5,\"lng\":-0.12,\"city\":\"London\",\"cc\":\"GB\",\"from\":0,\"to\":null}],\"works\":[]}}",
+  "key_hex": "a11da2f8b3b7c227534f953328fed51ea9f9857d26b283160bbd5f580b0623d3",
+  "ct": "G0e66PVIthGHTpXPjBk29/2Nipg94l6I4g2svjDio63aVp+V75FwyjBB5bHpnGAaalT6NJg1u0iVIw1cjEu5icCq7OazuX42/LjJCofiUnj4Zee9cATMrjMrpmyc8+Px6tVR/gQTetSoCQTlxgO55omihqC4paOZT/8MnvnM21XGPNg4IXxQNuONWehBNaPaJs5OuxAgJdDy47N9BtaypxVRbsHb3kRUL6FecVqb8dMtysjJpEltXD3GD82tdg8o4ohSBDARFyMDHrGQP5W+gKIIIGy6Xh6lmryJS62aQksMiWb5zCzBv4ESjCP4n21CuqEfvQFysfUR7UbYlbeHx0T+N2E0UYEAqFSPWumyNxsGQCA+B7DqZ4LOVhpenlSKsdWmUHn8IyKzOWmNaED5T6jd"
+}

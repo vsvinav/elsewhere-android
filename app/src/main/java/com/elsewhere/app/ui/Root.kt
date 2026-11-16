@@ -15,6 +15,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elsewhere.app.data.Ready
 import com.elsewhere.app.sonar.PendingCrew
+import com.elsewhere.app.ui.account.AccountEntry
+import com.elsewhere.app.ui.account.AccountRoute
+import com.elsewhere.app.ui.account.WelcomeScreen
 import com.elsewhere.app.ui.crew.CrewRoute
 import com.elsewhere.app.ui.gate.KeyGate
 import com.elsewhere.app.ui.onboard.OnboardingGraph
@@ -27,7 +30,8 @@ import com.elsewhere.app.ui.world.figures.LocalLand
 /**
  * The front door until the record is theirs; the app after. Menu items re-open the door at a step or lay Settings over the app.
  * Blank stock until the stores have been read, so a cold start never flashes the wrong door.
- * `door` and `app` are slots so a test can hand in view models.
+ * Before any of that a fresh phone meets Welcome: sign up, log in, or continue without an account, once.
+ * `door`, `app` and `account` are slots so a test can hand in view models.
  */
 @Composable
 fun Root(
@@ -38,6 +42,8 @@ fun Root(
     recordScreen: @Composable (onClose: () -> Unit) -> Unit = { RecordRoute(it) },
     settingsScreen: @Composable (onClose: () -> Unit) -> Unit = { SettingsRoute(it) },
     crewScreen: @Composable (onClose: () -> Unit) -> Unit = { CrewRoute(it) },
+    welcome: @Composable (onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit) -> Unit = { s, l, k -> WelcomeScreen(s, l, k) },
+    account: @Composable (entry: AccountEntry, onDone: () -> Unit, onClose: () -> Unit) -> Unit = { e, d, c -> AccountRoute(e, d, c) },
 ) {
     val ready by vm.ready.collectAsStateWithLifecycle()
     val hasImport by vm.hasImport.collectAsStateWithLifecycle()
@@ -45,6 +51,8 @@ fun Root(
     val land by vm.land.collectAsStateWithLifecycle()
     val gated by vm.gated.collectAsStateWithLifecycle()
     val readyBar by vm.readyBar.collectAsStateWithLifecycle()
+    val acct by vm.account.collectAsStateWithLifecycle()
+    var entry by rememberSaveable { mutableStateOf<AccountEntry?>(null) }
     var editing by rememberSaveable { mutableStateOf<Step?>(null) }
     var recording by rememberSaveable { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
@@ -53,9 +61,12 @@ fun Root(
     val pendingCode by PendingCrew.code.collectAsStateWithLifecycle()
     LaunchedEffect(pendingCode) { if (pendingCode != null) crew = true }
     val needsDoor = !hasImport || profile == null || profile!!.homes.isEmpty()
+    val needsWelcome = profile == null && acct?.session == null && acct?.welcomed == false
     CompositionLocalProvider(LocalLand provides land) {
         when {
-            !ready || gated == null -> Box(Modifier.fillMaxSize().background(Poster.Stock))
+            !ready || gated == null || acct == null -> Box(Modifier.fillMaxSize().background(Poster.Stock))
+            entry != null -> account(entry!!, { entry = null; vm.welcome() }, { entry = null })
+            needsWelcome -> welcome({ entry = AccountEntry.SignUp }, { entry = AccountEntry.LogIn }, { vm.welcome() })
             recording -> recordScreen { recording = false }
             needsDoor -> door(Step.Import, null) { recording = true }
             editing != null -> door(editing!!, { editing = null }) { recording = true }
