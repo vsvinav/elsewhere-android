@@ -219,7 +219,7 @@ private fun PairBill(ui: CrewUi, actions: CrewActions, onShowQr: () -> Unit, onS
     }
     Spacer(Modifier.height(12.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        InkButton("Share code", { code?.let { onShareCode?.invoke(it.code) } }, Modifier.weight(1f), enabled = code != null && onShareCode != null)
+        InkButton("Share", { code?.let { onShareCode?.invoke(it.code) } }, Modifier.weight(1f), enabled = code != null && onShareCode != null)
         InkButton("Show QR", onShowQr, Modifier.weight(1f), quiet = true, enabled = code != null)
         InkButton("Scan", { onScan?.invoke() }, Modifier.weight(1f), quiet = true, enabled = onScan != null)
     }

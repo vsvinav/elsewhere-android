@@ -95,4 +95,14 @@ class CrewStoreTest {
         assertEquals(8, f.fingerprint.length)
         assertTrue(Grants(sonar = true).any); assertFalse(Grants().any)
     }
+
+    @Test fun `the notification line names who hears you and at what grade`() {
+        val a = friend("A").copy(grants = Grants(liveCity = true))
+        val b = friend("B", "Ásta").copy(grants = Grants(livePrecise = true))
+        val s = ShareSession(setOf("A", "B"), startedAt = 0L, until = 3_600_000L)
+        assertEquals("Sharing precise with Marta, Ásta · 42 min", s.line(listOf(a, b), 42 * 60_000L))
+        assertEquals("Sharing city-level with Marta · 42 min", s.copy(friendIds = setOf("A")).line(listOf(a, b), 42 * 60_000L))
+        assertNull(s.line(listOf(a, b), 3_600_001L))
+        assertNull(s.line(emptyList(), 60_000L))
+    }
 }
