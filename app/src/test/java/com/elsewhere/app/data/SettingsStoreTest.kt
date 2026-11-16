@@ -41,4 +41,10 @@ class SettingsStoreTest {
         assertEquals(LlmProvider.GEMINI, store.llm.first().provider)
         assertEquals("", store.llm.first().baseUrl)
     }
+
+    @Test fun `the account service URL defaults and round-trips trimmed`() = runTest {
+        assertEquals("https://account.elsewhere.app", store.settings.first().accountUrl)
+        store.saveSettings(store.settings.first().copy(accountUrl = " https://acct.example.org "))
+        assertEquals("https://acct.example.org", store.settings.first().accountUrl)
+    }
 }

@@ -31,8 +31,13 @@ data class Settings(
     val limitedAccepted: Boolean = false,
     /** Where Crew pairs and talks; empty means no pairing. */
     val relayUrl: String = DEFAULT_RELAY,
+    /** Where accounts and recovery vaults live. */
+    val accountUrl: String = DEFAULT_ACCOUNT,
 ) {
-    companion object { const val DEFAULT_RELAY = "https://relay.elsewhere.app" }
+    companion object {
+        const val DEFAULT_RELAY = "https://relay.elsewhere.app"
+        const val DEFAULT_ACCOUNT = "https://account.elsewhere.app"
+    }
 }
 
 /** Whether the phone is recording its own location, since when, and whether that is paused for a while. */
@@ -55,6 +60,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         val keyCheckedAt = longPreferencesKey("keyCheckedAt")
         val limitedAccepted = booleanPreferencesKey("limitedAccepted")
         val relayUrl = stringPreferencesKey("relayUrl")
+        val accountUrl = stringPreferencesKey("accountUrl")
         val detailsCalls = intPreferencesKey("detailsCalls")
         val photoCalls = intPreferencesKey("photoCalls")
         val mapLoads = intPreferencesKey("mapLoads")
@@ -87,6 +93,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
             keyPlaces = p[K.keyPlaces] ?: false, keyTiles = p[K.keyTiles] ?: false, keyCheckedAt = p[K.keyCheckedAt] ?: 0,
             limitedAccepted = p[K.limitedAccepted] ?: false,
             relayUrl = p[K.relayUrl] ?: Settings.DEFAULT_RELAY,
+            accountUrl = p[K.accountUrl] ?: Settings.DEFAULT_ACCOUNT,
         )
     }
 
@@ -131,7 +138,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
             it[K.mapsKey] = s.mapsKey; it[K.mapId] = s.mapId
             it[K.mapProvider] = s.mapProvider.name
             it[K.keyPlaces] = s.keyPlaces; it[K.keyTiles] = s.keyTiles; it[K.keyCheckedAt] = s.keyCheckedAt; it[K.limitedAccepted] = s.limitedAccepted
-            it[K.relayUrl] = s.relayUrl.trim()
+            it[K.relayUrl] = s.relayUrl.trim(); it[K.accountUrl] = s.accountUrl.trim()
         }
     }
 
