@@ -75,7 +75,7 @@ private fun Entry(k: String, id: String, onKey: (String) -> Unit, onId: (String)
     Spacer(Modifier.height(28.dp))
     Text(
         if (sdk) "A Google Maps key names your stops and finds their photos. Skip and you'll get the map without them."
-        else "A Google Maps key draws the maps and names your stops. Skip and we'll use OpenStreetMap.",
+        else "A Google Maps key draws the maps and names your stops. Skip and we'll use OpenStreetMap for the map and to look up street names for your home and work.",
         color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 18.sp),
     )
     Spacer(Modifier.height(32.dp))
