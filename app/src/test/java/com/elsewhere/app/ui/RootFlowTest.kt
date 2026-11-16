@@ -47,7 +47,7 @@ class RootFlowTest {
         // One onboarding view model for the whole activity, as Hilt scopes it.
         val onboard = OnboardViewModel(store, maps, KeyVerifier(maps, Fakes.Checker()), Fakes.Namer(), Fakes.Geo())
         rule.setContent {
-            val root = remember { RootViewModel(store, Fakes.Land, maps) }
+            val root = remember { RootViewModel(store, Fakes.Land, maps, Fakes.Account()) }
             val shell = remember { ShellViewModel(store, Fakes.Source(record), maps, Fakes.lookups(maps, CoroutineScope(Dispatchers.Main)), DoorNav(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main)), CoroutineScope(Dispatchers.Main))) }
             val range = remember { RangeViewModel(RangeStore(Fakes.Source(record), CoroutineScope(Dispatchers.Main))) }
             ElsewhereTheme {

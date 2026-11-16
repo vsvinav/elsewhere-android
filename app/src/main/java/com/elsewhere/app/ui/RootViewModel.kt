@@ -2,6 +2,8 @@ package com.elsewhere.app.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.elsewhere.app.account.AccountState
+import com.elsewhere.app.account.Accounts
 import com.elsewhere.app.data.FeatureCollection
 import com.elsewhere.app.data.LandSource
 import com.elsewhere.app.data.MapsSettings
@@ -21,7 +23,9 @@ import javax.inject.Inject
 
 /** Which door the visitor is at: the front door until there is an import and a home. */
 @HiltViewModel
-class RootViewModel @Inject constructor(repo: RecordStore, landLoader: LandSource, maps: MapsSettings, readyState: ReadyState = ReadyState()) : ViewModel() {
+class RootViewModel @Inject constructor(repo: RecordStore, landLoader: LandSource, maps: MapsSettings, private val accounts: Accounts, readyState: ReadyState = ReadyState()) : ViewModel() {
+    /** Session and the welcome flag; null until read. */
+    val account: StateFlow<AccountState?> = accounts.account
     /** A returning visitor with an unproven key waits at the gate; null until the settings have been read. */
     val gated: StateFlow<Boolean?> = maps.settings.map(::keyGated).stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val readyBar: StateFlow<Ready?> = readyState.ready
@@ -32,4 +36,7 @@ class RootViewModel @Inject constructor(repo: RecordStore, landLoader: LandSourc
     val land: StateFlow<FeatureCollection?> = _land
 
     init { viewModelScope.launch { _land.value = landLoader.get() } }
+
+    /** "Continue without an account": never show Welcome again on this phone. */
+    fun welcome() { viewModelScope.launch { accounts.welcome() } }
 }
