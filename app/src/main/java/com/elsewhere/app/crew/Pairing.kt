@@ -6,7 +6,7 @@ import java.util.Random
 /** The other side of a pairing, shown for confirmation before anything is saved. */
 data class Pending(val code: String, val record: PairRecord) {
     val name: String get() = record.name
-    val fingerprint: String get() = Crypto.fingerprint(Crypto.b64decode(record.signPub), Crypto.b64decode(record.kxPub))
+    val fingerprint: String get() = Crypto.fingerprint(Crypto.unhex(record.signPub), Crypto.unhex(record.kxPub))
 }
 
 /**
@@ -22,7 +22,7 @@ class Pairing(
 ) {
     private suspend fun me(): PairRecord {
         val k = store.keys()
-        return PairRecord(Crypto.b64(k.signPub), Crypto.b64(k.kxPub), myName(), Crypto.kxSig(k.signPriv, k.kxPub))
+        return PairRecord(Crypto.hex(k.signPub), Crypto.hex(k.kxPub), myName(), Crypto.kxSig(k.signPriv, k.kxPub))
     }
 
     /** The code already open, or a fresh one registered with the relay. */
@@ -48,8 +48,8 @@ class Pairing(
     suspend fun confirm(p: Pending): Friend {
         p.record.requireBound()
         val k = store.keys()
-        val theirSign = Crypto.b64decode(p.record.signPub)
-        val theirKx = Crypto.b64decode(p.record.kxPub)
+        val theirSign = Crypto.unhex(p.record.signPub)
+        val theirKx = Crypto.unhex(p.record.kxPub)
         val pairId = Crypto.pairId(k.signPub, theirSign)
         val pairKey = Crypto.pairKey(k.kxPriv, theirKx, pairId)
         val f = Friend(

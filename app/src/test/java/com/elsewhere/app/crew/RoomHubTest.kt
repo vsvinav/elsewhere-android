@@ -23,7 +23,7 @@ class RoomHubTest {
     private lateinit var hub: RoomHub
     private var now = 1_763_222_520_000L
     private val key = ByteArray(32) { 9 }
-    private val marta = Friend("M", "Marta", Crypto.b64(ByteArray(32)), Crypto.b64(ByteArray(32)), "PAIRM", Crypto.b64(key), 0L, Grants(liveCity = true))
+    private val marta = Friend("M", "Marta", Crypto.hex(ByteArray(32)), Crypto.hex(ByteArray(32)), "PAIRM", Crypto.b64(key), 0L, Grants(liveCity = true))
 
     @BeforeEach fun setUp() {
         dir = File("build/test-datastore/${UUID.randomUUID()}").apply { mkdirs() }

@@ -33,7 +33,7 @@ class PairingTest {
     private val now = 1_763_222_520_000L
 
     private fun record(kxPub: ByteArray = marta.kxPub, sig: String? = Crypto.kxSig(marta.signPriv, marta.kxPub)) =
-        """{"signPub":"${Crypto.b64(marta.signPub)}","kxPub":"${Crypto.b64(kxPub)}","name":"Marta"${if (sig == null) "" else ""","kxSig":"$sig""""}}"""
+        """{"signPub":"${Crypto.hex(marta.signPub)}","kxPub":"${Crypto.hex(kxPub)}","name":"Marta"${if (sig == null) "" else ""","kxSig":"$sig""""}}"""
 
     @BeforeEach fun setUp() {
         server.start()
@@ -49,7 +49,8 @@ class PairingTest {
         pairing.openCode()
         val body = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
         val me = store.keys()
-        assertEquals(Crypto.b64(me.kxPub), body["kxPub"]!!.jsonPrimitive.content)
+        assertEquals(Crypto.hex(me.signPub), body["signPub"]!!.jsonPrimitive.content)
+        assertEquals(Crypto.hex(me.kxPub), body["kxPub"]!!.jsonPrimitive.content)
         assertTrue(Crypto.verifyKxSig(me.signPub, me.kxPub, body["kxSig"]!!.jsonPrimitive.content))
     }
 
@@ -59,7 +60,7 @@ class PairingTest {
         assertEquals(Crypto.fingerprint(marta.signPub, marta.kxPub), p.fingerprint)
         val f = pairing.confirm(p)
         assertEquals(marta.deviceId, f.deviceId)
-        assertEquals(Crypto.b64(marta.kxPub), f.kxPub)
+        assertEquals(Crypto.hex(marta.kxPub), f.kxPub)
     }
 
     @Test fun `a record with a substituted kx key is refused before any key is derived`() = runTest {
@@ -79,7 +80,7 @@ class PairingTest {
     }
 
     @Test fun `confirm itself refuses a tampered pending record`() = runTest {
-        val bad = Pending("PT-MRT-7Q4K", PairRecord(Crypto.b64(marta.signPub), Crypto.b64(mallory.kxPub), "Marta", Crypto.kxSig(marta.signPriv, marta.kxPub)))
+        val bad = Pending("PT-MRT-7Q4K", PairRecord(Crypto.hex(marta.signPub), Crypto.hex(mallory.kxPub), "Marta", Crypto.kxSig(marta.signPriv, marta.kxPub)))
         assertEquals(KEYS_UNBOUND, runCatching { pairing.confirm(bad) }.exceptionOrNull()?.message)
         assertTrue(store.friendsNow().isEmpty())
     }

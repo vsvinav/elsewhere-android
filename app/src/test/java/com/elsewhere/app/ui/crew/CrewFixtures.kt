@@ -14,9 +14,9 @@ import com.elsewhere.app.data.Recording
 object CrewFixtures {
     const val NOW = 1_763_222_520_000L
 
-    private fun key(seed: Int) = Crypto.b64(ByteArray(32) { seed.toByte() })
+    private fun key(seed: Int) = Crypto.hex(ByteArray(32) { seed.toByte() })
     fun friend(id: String, name: String, grants: Grants, addedAt: Long = NOW - 12 * 86_400_000L) =
-        Friend(id, name, key(id.hashCode() and 0x7f), key(1), "PAIR$id", key(2), addedAt, grants)
+        Friend(id, name, key(id.hashCode() and 0x7f), key(1), "PAIR$id", Crypto.b64(ByteArray(32) { 2 }), addedAt, grants)
 
     val marta = friend("M", "Marta", Grants(liveCity = true, sonar = true))
     val kenji = friend("K", "Kenji", Grants())

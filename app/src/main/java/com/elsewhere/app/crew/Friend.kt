@@ -26,7 +26,7 @@ data class Friend(
     val grants: Grants = Grants(),
     val mutedUntil: Long? = null,
 ) {
-    val fingerprint: String get() = Crypto.fingerprint(Crypto.b64decode(signPub), Crypto.b64decode(kxPub))
+    val fingerprint: String get() = Crypto.fingerprint(Crypto.unhex(signPub), Crypto.unhex(kxPub))
     val initial: String get() = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
     fun muted(now: Long) = (mutedUntil ?: 0L) > now
     val key: ByteArray get() = Crypto.b64decode(pairKey)

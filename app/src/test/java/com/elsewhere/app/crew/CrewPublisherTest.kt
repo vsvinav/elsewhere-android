@@ -43,7 +43,7 @@ class CrewPublisherTest {
     private val cities = Cities(doubleArrayOf(38.7223), doubleArrayOf(-9.1393), listOf("Lisbon"), listOf("PT"))
     private lateinit var publisher: CrewPublisher
 
-    private fun friend(id: String, grants: Grants) = Friend(id, id, Crypto.b64(ByteArray(32)), Crypto.b64(ByteArray(32)), "PAIR$id", Crypto.b64(ByteArray(32)), 0L, grants)
+    private fun friend(id: String, grants: Grants) = Friend(id, id, Crypto.hex(ByteArray(32)), Crypto.hex(ByteArray(32)), "PAIR$id", Crypto.b64(ByteArray(32)), 0L, grants)
 
     @Before fun setUp() {
         val ctx = ApplicationProvider.getApplicationContext<Context>()

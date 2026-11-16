@@ -76,8 +76,8 @@ class CrewFlowTest {
     private lateinit var db: ElsewhereDb
     private lateinit var vm: CrewViewModel
     private val martaKeys = DeviceKeys.generate()
-    private val martaSign = Crypto.b64(martaKeys.signPub)
-    private val martaKx = Crypto.b64(martaKeys.kxPub)
+    private val martaSign = Crypto.hex(martaKeys.signPub)
+    private val martaKx = Crypto.hex(martaKeys.kxPub)
     private val martaKxSig = Crypto.kxSig(martaKeys.signPriv, martaKeys.kxPub)
 
     @Before fun setUp() {
@@ -128,7 +128,7 @@ class CrewFlowTest {
         await { vm.ui.value?.friends?.size == 1 }
         val marta = runBlocking { store.friendsNow().single() }
         assertEquals("Marta", marta.name)
-        assertEquals(Crypto.deviceId(Crypto.b64decode(martaSign)), marta.deviceId)
+        assertEquals(Crypto.deviceId(Crypto.unhex(martaSign)), marta.deviceId)
 
         node("MARTA").performClick()
         node("Sonar").performClick()

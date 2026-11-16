@@ -59,7 +59,14 @@ object Crypto {
     private val random = SecureRandom()
 
     fun sha256(b: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(b)
-    fun sha256hex(b: ByteArray): String = sha256(b).joinToString("") { "%02x".format(it) }
+    fun sha256hex(b: ByteArray): String = hex(sha256(b))
+
+    /** Public keys travel and are stored as lowercase hex, the form the relay and the web client use. */
+    fun hex(b: ByteArray): String = b.joinToString("") { "%02x".format(it) }
+    fun unhex(s: String): ByteArray {
+        require(s.length % 2 == 0 && s.all { it in '0'..'9' || it in 'a'..'f' }) { "not lowercase hex" }
+        return ByteArray(s.length / 2) { s.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+    }
 
     fun b64(b: ByteArray): String = Base64.getEncoder().encodeToString(b)
     fun b64decode(s: String): ByteArray = Base64.getDecoder().decode(s)

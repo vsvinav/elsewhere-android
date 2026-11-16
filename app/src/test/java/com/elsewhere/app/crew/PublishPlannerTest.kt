@@ -15,7 +15,7 @@ class PublishPlannerTest {
         name = listOf("Lisbon", "Porto", "Reykjavík"), cc = listOf("PT", "PT", "IS"),
     )
     private val lookup = CityLookup(cities)
-    private fun friend(id: String, grants: Grants) = Friend(id, id, Crypto.b64(ByteArray(32)), Crypto.b64(ByteArray(32)), "PAIR$id", Crypto.b64(ByteArray(32)), 0L, grants)
+    private fun friend(id: String, grants: Grants) = Friend(id, id, Crypto.hex(ByteArray(32)), Crypto.hex(ByteArray(32)), "PAIR$id", Crypto.b64(ByteArray(32)), 0L, grants)
     private val precise = friend("P", Grants(livePrecise = true))
     private val sonar = friend("S", Grants(sonar = true))
     private val city = friend("C", Grants(liveCity = true))

@@ -1,6 +1,8 @@
 package com.elsewhere.app.crew
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -39,6 +41,16 @@ class VectorsTest {
             assertEquals(j["fingerprint"]!!.jsonPrimitive.content, Crypto.fingerprint(k.signPub, k.kxPub))
         }
         assertFalse(Crypto.verifyKxSig(a.signPub, b.kxPub, aj["kxSig"]!!.jsonPrimitive.content))
+    }
+
+    @Test fun `the pair record on the wire is hex keys plus the base64 kx signature`() {
+        val sent = Json.parseToJsonElement(RelayClient.encode(PairRecord(Crypto.hex(a.signPub), Crypto.hex(a.kxPub), "A", Crypto.kxSig(a.signPriv, a.kxPub)))).jsonObject
+        val expected = JsonObject(mapOf("signPub" to aj["signPub"]!!, "kxPub" to aj["kxPub"]!!, "name" to JsonPrimitive("A"), "kxSig" to aj["kxSig"]!!))
+        assertEquals(expected, sent)
+        val theirs = RelayClient.decode("""{"signPub":"${bj["signPub"]!!.jsonPrimitive.content}","kxPub":"${bj["kxPub"]!!.jsonPrimitive.content}","name":"B","kxSig":"${bj["kxSig"]!!.jsonPrimitive.content}"}""")
+        assertTrue(theirs.keysBound)
+        assertEquals(bj["fingerprint"]!!.jsonPrimitive.content, Pending("PT-AAA-0000", theirs).fingerprint)
+        assertFalse(RelayClient.decode(RelayClient.encode(theirs.copy(kxPub = aj["kxPub"]!!.jsonPrimitive.content))).keysBound)
     }
 
     @Test fun `pair id and pair key from either side`() {

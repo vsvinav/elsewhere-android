@@ -22,11 +22,11 @@ import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** The public half of a device, as exchanged through a pair code. */
+/** The public half of a device, as exchanged through a pair code; keys are lowercase hex, kxSig base64. */
 @Serializable
 data class PairRecord(val signPub: String, val kxPub: String, val name: String, val kxSig: String? = null) {
     /** False when the relay, or anyone between, has handed us a kx key the signing key never vouched for. */
-    val keysBound: Boolean get() = runCatching { Crypto.verifyKxSig(Crypto.b64decode(signPub), Crypto.b64decode(kxPub), kxSig) }.getOrDefault(false)
+    val keysBound: Boolean get() = runCatching { Crypto.verifyKxSig(Crypto.unhex(signPub), Crypto.unhex(kxPub), kxSig) }.getOrDefault(false)
 }
 
 class RelayException(val code: Int, message: String) : IOException("$code $message")
@@ -48,21 +48,27 @@ class RelayClient(
     private val keys: suspend () -> DeviceKeys,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
+    private val json get() = wire
+
+    companion object {
+        private val wire = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
+        fun encode(r: PairRecord): String = wire.encodeToString(PairRecord.serializer(), r)
+        fun decode(body: String): PairRecord = wire.decodeFromString(PairRecord.serializer(), body)
+    }
 
     suspend fun createCode(code: String, me: PairRecord) {
-        call("POST", "/pair/$code", json.encodeToString(PairRecord.serializer(), me))
+        call("POST", "/pair/$code", encode(me))
     }
 
     /** The owner's record, so the claimer can confirm before saving anything. */
     suspend fun claimCode(code: String, me: PairRecord): PairRecord =
-        json.decodeFromString(PairRecord.serializer(), call("POST", "/pair/$code/claim", json.encodeToString(PairRecord.serializer(), me)) ?: "")
+        decode(call("POST", "/pair/$code/claim", encode(me)) ?: "")
 
     /** The claimer's record once someone has claimed; null while nobody has. */
     suspend fun pollCode(code: String): PairRecord? {
         val body = call("GET", "/pair/$code", null, allow404 = true) ?: return null
         if (body.isBlank() || body == "null" || body == "{}") return null
-        return runCatching { json.decodeFromString(PairRecord.serializer(), body) }.getOrNull()
+        return runCatching { decode(body) }.getOrNull()
     }
 
     suspend fun last(pairId: String): List<Envelope> {

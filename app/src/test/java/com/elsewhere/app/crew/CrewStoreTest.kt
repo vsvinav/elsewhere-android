@@ -32,7 +32,7 @@ class CrewStoreTest {
     @AfterEach fun tearDown() { scope.cancel(); dir.deleteRecursively() }
 
     private fun friend(id: String, name: String = "Marta") = Friend(
-        deviceId = id, name = name, signPub = Crypto.b64(ByteArray(32) { 1 }), kxPub = Crypto.b64(ByteArray(32) { 2 }),
+        deviceId = id, name = name, signPub = Crypto.hex(ByteArray(32) { 1 }), kxPub = Crypto.hex(ByteArray(32) { 2 }),
         pairId = "PAIR$id", pairKey = Crypto.b64(ByteArray(32) { 3 }), addedAt = 1_000L,
     )
 
