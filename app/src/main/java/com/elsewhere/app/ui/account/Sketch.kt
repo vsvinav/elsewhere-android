@@ -74,7 +74,7 @@ fun sketchAt(t: Long): Sketch {
 private fun stampScale(n: Int, t: Long): Float {
     val age = t - (SKETCH_HOLD + SKETCH_LEG * n)
     if (age < 0) return 0f
-    if (age >= STAMP_MS) return 1f
+    if (age >= STAMP_MS || t >= SKETCH_TOTAL) return 1f
     val p = age.toFloat() / STAMP_MS
     return if (p < 0.6f) 1.18f * (p / 0.6f) else 1.18f - 0.18f * ((p - 0.6f) / 0.4f)
 }
