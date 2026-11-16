@@ -5,15 +5,11 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
@@ -28,7 +24,6 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.elsewhere.app.ui.world.DisplayText
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import com.elsewhere.app.ui.world.motionOn
@@ -94,16 +89,11 @@ fun WelcomeSketch(t: Long, modifier: Modifier = Modifier) {
     val measurer = rememberTextMeasurer()
     val sketch = sketchAt(t)
     val km = remember(sketch.km) { NumberFormat.getIntegerInstance().format(sketch.km) }
-    Box(modifier.fillMaxWidth().aspectRatio(4f / 3f).background(Poster.Stock)) {
-        Canvas(Modifier.matchParentSize()) {
-            grid()
-            route(sketch)
-            pins(t, measurer)
-            counter(km, measurer)
-        }
-        Box(Modifier.align(Alignment.BottomStart).padding(12.dp).size(36.dp).background(Poster.Ink), contentAlignment = Alignment.Center) {
-            DisplayText("E", 18.sp, color = Poster.Stock)
-        }
+    Canvas(modifier.fillMaxWidth().aspectRatio(4f / 3f).background(Poster.Stock)) {
+        grid()
+        route(sketch)
+        pins(t, measurer)
+        counter(km, measurer)
     }
 }
 
