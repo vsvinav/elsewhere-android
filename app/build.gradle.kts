@@ -76,6 +76,7 @@ dependencies {
     implementation(libs.coil.compose); implementation(libs.work.runtime)
     implementation(libs.maplibre.compose); implementation(libs.play.location)
     implementation(libs.play.maps); implementation(libs.maps.compose)
+    implementation(libs.tink.android); implementation(libs.zxing.core); implementation(libs.play.code.scanner)
     testImplementation(libs.junit5.api); testImplementation(libs.junit5.params); testRuntimeOnly(libs.junit5.engine)
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.3")
     testImplementation(libs.coroutines.test); testImplementation(libs.okhttp.mockwebserver)

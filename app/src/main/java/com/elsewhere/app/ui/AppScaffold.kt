@@ -43,6 +43,7 @@ import com.elsewhere.app.ui.shell.dayOf
 import com.elsewhere.app.ui.tabs.dates.DatesTab
 import com.elsewhere.app.ui.tabs.facts.FactsTab
 import com.elsewhere.app.highlights.PendingHighlight
+import com.elsewhere.app.sonar.PendingCrew
 import com.elsewhere.app.ui.tabs.highlights.OpenDoor
 import com.elsewhere.app.ui.tabs.flights.FlightsTab
 import com.elsewhere.app.ui.tabs.map.MapTab
@@ -80,7 +81,7 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}, onMapsKey
 @Composable
 fun AppScaffold(
     onChangeAnswers: () -> Unit, onSettings: () -> Unit, onRecord: () -> Unit = {},
-    shell: ShellViewModel = hiltViewModel(), rangeVm: RangeViewModel = hiltViewModel(),
+    shell: ShellViewModel = hiltViewModel(), rangeVm: RangeViewModel = hiltViewModel(), onCrew: () -> Unit = {},
     content: @Composable (tab: Tab, go: (Tab) -> Unit, onOpen: OpenDoor) -> Unit = { t, g, o -> TabContent(t, g, onRecord, onSettings, o) },
 ) {
     val nav = rememberNavController()
@@ -131,6 +132,9 @@ fun AppScaffold(
     // A notification tap while the app is alive: jump to Facts, where the card takes the pending date.
     val pendingDate by PendingHighlight.date.collectAsStateWithLifecycle()
     LaunchedEffect(pendingDate) { if (pendingDate != null) go(Tab.FACTS) }
+    // "Open Crew Map" on a Sonar notification: the Map tab reads the flag and turns its Friends layer on.
+    val pendingMap by PendingCrew.map.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingMap) { if (pendingMap) go(Tab.MAP) }
 
     // One lambda for the life of the shell, so the bills do not recompose on every tick of the shell's state.
     val tabState = rememberUpdatedState(tab)
@@ -144,7 +148,7 @@ fun AppScaffold(
         topBar = {
             Masthead(
                 name = profile?.name, counters = counters,
-                onHome = { go(Tab.TOUR) }, onChangeAnswers = onChangeAnswers, onSettings = onSettings, onRecord = onRecord,
+                onHome = { go(Tab.TOUR) }, onChangeAnswers = onChangeAnswers, onSettings = onSettings, onRecord = onRecord, onCrew = onCrew,
                 onStartOver = shell::reset,
             )
         },

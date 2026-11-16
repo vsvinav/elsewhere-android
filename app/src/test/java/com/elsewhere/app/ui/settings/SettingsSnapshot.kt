@@ -22,6 +22,7 @@ class SettingsSnapshot {
         override fun setLlm(c: LlmConfig) {}
         override fun testLlm(c: LlmConfig) {}
         override fun setUnits(u: Units) {}
+        override fun setRelayUrl(url: String) {}
     }
 
     private fun shoot(ui: SettingsUi) = paparazzi.snapshot {

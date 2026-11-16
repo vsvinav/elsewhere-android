@@ -9,11 +9,13 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elsewhere.app.Fakes
+import com.elsewhere.app.data.Settings
 import com.elsewhere.app.Fx
 import com.elsewhere.app.ask.LlmProvider
 import com.elsewhere.app.ask.TEST_PROMPT
@@ -60,6 +62,16 @@ class SettingsScreenTest {
         node("UNITS").assertIsDisplayed()
         rule.onAllNodesWithText("DATA").assertCountEquals(0)
         node(LLM_CAPTION).assertIsDisplayed()
+    }
+
+    @Test fun `the Crew section saves a relay URL`() {
+        show()
+        node("CREW").assertIsDisplayed()
+        node("RELAY URL").assertIsDisplayed()
+        rule.onNodeWithText(Settings.DEFAULT_RELAY).performScrollTo().performTextReplacement("https://relay.example.org")
+        node("SAVE RELAY").performClick()
+        rule.waitForIdle()
+        assertEquals("https://relay.example.org", maps.cur.value.relayUrl)
     }
 
     @Test fun `choosing a custom endpoint adds a base URL, makes the key optional and remembers it`() {

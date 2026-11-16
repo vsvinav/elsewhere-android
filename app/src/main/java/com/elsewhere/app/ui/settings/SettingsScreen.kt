@@ -41,6 +41,7 @@ import com.elsewhere.app.ask.DEFAULT_MODEL
 import com.elsewhere.app.ask.LlmConfig
 import com.elsewhere.app.ask.LlmProvider
 import com.elsewhere.app.data.MapProvider
+import com.elsewhere.app.data.Settings
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ingest.Probe
 import com.elsewhere.app.map.Sdk
@@ -86,10 +87,25 @@ fun SettingsScreen(ui: SettingsUi?, actions: SettingsActions, onBack: () -> Unit
             AskElsewhere(ui, actions)
             Spacer(Modifier.height(48.dp))
             UnitsSection(ui, actions)
+            Spacer(Modifier.height(48.dp))
+            CrewSection(ui, actions)
             Spacer(Modifier.height(64.dp))
         }
     }
 }
+
+@Composable
+private fun CrewSection(ui: SettingsUi, actions: SettingsActions) {
+    var url by rememberSaveable(ui.maps.relayUrl) { mutableStateOf(ui.maps.relayUrl) }
+    H2("Crew")
+    PosterTextField(url, { url = it }, Modifier.fillMaxWidth(), placeholder = Settings.DEFAULT_RELAY, label = "Relay URL", mono = true)
+    Spacer(Modifier.height(16.dp))
+    Text(RELAY_CAPTION, color = Poster.Ink3, style = PosterType.Label)
+    Spacer(Modifier.height(24.dp))
+    InkButton("Save relay", { actions.setRelayUrl(url) }, enabled = url.trim() != ui.maps.relayUrl)
+}
+
+private const val RELAY_CAPTION = "Friends pair and swap pings through this relay. It only ever sees sealed envelopes; leave it blank to switch Crew off."
 
 @Composable
 private fun H2(text: String) {

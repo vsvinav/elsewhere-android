@@ -55,6 +55,7 @@ interface SettingsActions {
     fun setLlm(c: LlmConfig)
     fun testLlm(c: LlmConfig)
     fun setUnits(u: Units)
+    fun setRelayUrl(url: String)
 }
 
 @HiltViewModel
@@ -97,6 +98,10 @@ class SettingsViewModel @Inject constructor(
             test.value = runCatching { client.ask(c, TEST_PROMPT) }
                 .fold({ LlmTest.Ok(modelOf(c)) }, { LlmTest.Failed(it.message ?: it.javaClass.simpleName) })
         }
+    }
+
+    override fun setRelayUrl(url: String) {
+        viewModelScope.launch { maps.saveSettings(maps.settings.first().copy(relayUrl = url.trim())) }
     }
 
     override fun setUnits(u: Units) {

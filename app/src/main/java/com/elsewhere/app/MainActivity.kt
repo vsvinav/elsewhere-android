@@ -19,6 +19,8 @@ import javax.inject.Inject
 import com.elsewhere.app.ui.Root
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import com.elsewhere.app.highlights.PendingHighlight
+import com.elsewhere.app.crew.RoomHub
+import com.elsewhere.app.sonar.PendingCrew
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint class MainActivity : ComponentActivity() {
@@ -27,9 +29,14 @@ import dagger.hilt.android.AndroidEntryPoint
         super.onNewIntent(intent)
         setIntent(intent)
         PendingHighlight.take(intent)
+        PendingCrew.take(intent)
     }
 
     @Inject lateinit var meter: CostMeter
+    @Inject lateinit var hub: RoomHub
+
+    override fun onStart() { super.onStart(); hub.foreground(true) }
+    override fun onStop() { hub.foreground(false); super.onStop() }
     @Inject lateinit var wikimedia: Wikimedia
     @Inject lateinit var appScope: CoroutineScope
 
@@ -46,6 +53,7 @@ import dagger.hilt.android.AndroidEntryPoint
         )
         // A tap on the daily highlight lands here with the day; the Facts tab prints that card first.
         PendingHighlight.take(intent)
+        PendingCrew.take(intent)
         setContent { CompositionLocalProvider(LocalPhotoSources provides photos) { ElsewhereTheme { Root() } } }
     }
 }

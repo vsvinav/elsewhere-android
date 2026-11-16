@@ -15,6 +15,8 @@ import com.elsewhere.app.ingest.record.Emission
 import com.elsewhere.app.ingest.record.Fix
 import com.elsewhere.app.ingest.record.Segmenter
 import com.elsewhere.app.ingest.record.SegmenterState
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -40,6 +42,9 @@ class Recorder(
         this(db, repo, settings, cities, { ts -> TimeZone.getDefault().getOffset(ts * 1000) / 60_000 })
 
     private val lock = Mutex()
+    private val fixFlow = MutableSharedFlow<Fix>(extraBufferCapacity = 16)
+    /** Every fix as it lands, for anyone who publishes or judges on live position. */
+    val fixes: SharedFlow<Fix> get() = fixFlow
     private var segmenter: Segmenter? = null
     private var resolver: CityResolver? = null
 
@@ -58,6 +63,7 @@ class Recorder(
         val s = segmenter()
         commit(s.feed(fix))
         persist(s)
+        fixFlow.tryEmit(fix)
     }
 
     /** The periodic sweep: close a stay nobody has added to for an hour, forget raw fixes older than 90 days. */

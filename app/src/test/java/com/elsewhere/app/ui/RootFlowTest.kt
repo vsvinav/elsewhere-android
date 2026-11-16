@@ -54,7 +54,7 @@ class RootFlowTest {
                 Root(
                     vm = root,
                     door = { step, close, _ -> OnboardingGraph(step, close, vm = onboard) },
-                    app = { answers, key, _ -> AppScaffold(answers, key, {}, shell, range, content = { t, _, _ -> Placeholder(t) }) },
+                    app = { answers, key, _, _ -> AppScaffold(answers, key, {}, shell, range, content = { t, _, _ -> Placeholder(t) }) },
                 )
             }
         }

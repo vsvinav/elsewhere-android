@@ -1,0 +1,48 @@
+{
+  "note": "Interop vectors for Friends + Sonar v1. deviceId = base32nopad(sha256(signPub))[0..16). pairId = base32nopad(sha256(sorted signPubA||signPubB))[0..16). pairKey = HKDF-SHA256(ikm = x25519(kxPrivA, kxPubB), salt = utf8(pairId), info = utf8(\"elsewhere/pair/v1\"), 32). Envelope c = ChaCha20-Poly1305(pairKey, nonce, utf8(plaintext), aad = utf8(pairId)) with the 16-byte tag appended. Signed request message = method + \"\\n\" + path + \"\\n\" + ts + \"\\n\" + sha256hex(body). kxSig = base64(ed25519sign(signPriv, utf8(\"elsewhere/kx/v1\") || kxPub)). fingerprint = first 8 Crockford base32 chars (0123456789ABCDEFGHJKMNPQRSTVWXYZ) of sha256(signPub || kxPub).",
+  "a": {
+    "signSeed": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+    "kxSeed": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
+    "signPub": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+    "kxPub": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
+    "signPubSha256": "21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9",
+    "deviceId": "EH7DDX5BKSRGCYTL",
+    "kxSig": "40u0r+WomUqzRAgaMYdtcGlyqRLasNtng8Ber03c10DzdnQBcxkKsHWzY04IkKAdgCYpRSAOMoXBTSgSUykbBg==",
+    "fingerprint": "88Q8VN5R"
+  },
+  "b": {
+    "signSeed": "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb",
+    "kxSeed": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+    "signPub": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+    "kxPub": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+    "signPubSha256": "39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f",
+    "deviceId": "HH3RHUFGIQST6BCS",
+    "kxSig": "6ck1iVkdaqudhrx3/Ey6YQUCjJEK++CQAczySbrqlgMYu1CbPtjRBlqJaNDZitwQp3sAc617XN3AtFyble7dDQ==",
+    "fingerprint": "E7XEKEC1"
+  },
+  "pairId": "YNSO47A5246FH5MO",
+  "pairKey": "4bb5fa55ad0c4da44f14c3f8ce60a3d3a034bdcb1c43e122ad2a7298c4644b78",
+  "envelope": {
+    "nonceHex": "000102030405060708090a0b",
+    "plaintext": "{\"type\":\"ping\",\"t\":1763222520,\"grade\":\"sonar\",\"lat\":38.7223,\"lng\":-9.1393,\"city\":\"Lisbon\",\"habitat\":false,\"absenceDays\":212,\"hit\":null}",
+    "envelope": {
+      "v": 1,
+      "from": "EH7DDX5BKSRGCYTL",
+      "n": "AAECAwQFBgcICQoL",
+      "c": "FjQv3wHtaSW78CqJKW1GNWEXnvgnLPm/Nlhbmj5J0khxcgdUKb/V8GJIhD6S0Kfhfib8vGEEZIIV+5Cy345FKUlEbjqo+gyW/sWtT7dI/2rMRDkhpWywNkjU7qvY9RMWkpKXb7RPH1ZTwb0LJHbyX6cWMI3Xfz1mn6OO/pSCqlLoZieVRtqIDS8EPqSUBjZ2DLFh++JhWQ=="
+    }
+  },
+  "signedRequest": {
+    "method": "GET",
+    "path": "/room/YNSO47A5246FH5MO",
+    "ts": 1763222520,
+    "body": "",
+    "message": "GET\n/room/YNSO47A5246FH5MO\n1763222520\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "headers": {
+      "X-Elsewhere-Id": "EH7DDX5BKSRGCYTL",
+      "X-Elsewhere-Ts": "1763222520",
+      "X-Elsewhere-Sig": "aPiJjmu8O9PeEcaElvXDwThOPpM0rMyIC7aQqHMZNGMS44jb9ANMdmbIah8QJOng+VqClf5s8sZY8O44s4wvDg=="
+    },
+    "signature": "aPiJjmu8O9PeEcaElvXDwThOPpM0rMyIC7aQqHMZNGMS44jb9ANMdmbIah8QJOng+VqClf5s8sZY8O44s4wvDg=="
+  }
+}
