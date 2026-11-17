@@ -73,6 +73,7 @@ class CrewFlowTest {
 
     private val server = MockWebServer()
     private var claims = 0
+    private var polls = 0
     private val rooms = FakeRooms()
     private lateinit var store: CrewStore
     private lateinit var settings: SettingsStore
@@ -89,6 +90,7 @@ class CrewFlowTest {
             override fun dispatch(request: RecordedRequest): MockResponse = when {
                 request.path!!.endsWith("/claim") -> { claims++; MockResponse().setBody("""{"signPub":"$martaSign","kxPub":"$martaKx","name":"Marta","kxSig":"$martaKxSig"}""") }
                 request.method == "POST" -> MockResponse().setResponseCode(200)
+                request.method == "GET" && request.path!!.startsWith("/pair/") -> { polls++; MockResponse().setResponseCode(404) }
                 else -> MockResponse().setResponseCode(404)
             }
         }
@@ -128,19 +130,21 @@ class CrewFlowTest {
         node("PAIR").performClick()
         await { vm.ui.value?.pair is PairState.Confirm }
         rule.onNodeWithText("PAIR WITH MARTA?").assertIsDisplayed()
+        rule.onNodeWithText(CONFIRM_PAIR_COPY).assertIsDisplayed()
         rule.onNode(hasText("PAIR") and hasAnyAncestor(isDialog())).performClick()
         await { vm.ui.value?.friends?.size == 1 }
         val marta = runBlocking { store.friendsNow().single() }
         assertEquals("Marta", marta.name)
         assertEquals(Crypto.deviceId(Crypto.unhex(martaSign)), marta.deviceId)
+        assertEquals("a new friend starts with city and Sonar on, precise off", Grants(liveCity = true, sonar = true), marta.grants)
 
         node("MARTA").performClick()
         node("Sonar").performClick()
-        await { vm.ui.value?.friends?.single()?.grants?.sonar == true }
-        assertEquals("Sonar implies city-level live", Grants(liveCity = true, sonar = true), runBlocking { store.friend(marta.deviceId)!!.grants })
-        node("Sonar").performClick()
         await { vm.ui.value?.friends?.single()?.grants?.sonar == false }
         assertEquals("turning Sonar off leaves Live · city alone", Grants(liveCity = true), runBlocking { store.friend(marta.deviceId)!!.grants })
+        node("Sonar").performClick()
+        await { vm.ui.value?.friends?.single()?.grants?.sonar == true }
+        assertEquals("Sonar implies city-level live", Grants(liveCity = true, sonar = true), runBlocking { store.friend(marta.deviceId)!!.grants })
 
         node("REMOVE").performClick()
         await { vm.ui.value?.friends?.isEmpty() == true }
@@ -179,6 +183,30 @@ class CrewFlowTest {
         node("PAIR").performClick()
         await { vm.ui.value?.pair is PairState.Confirm }
         assertEquals(1, claims)
+    }
+
+    @Test fun `leaving the tab keeps the code, and coming back asks the relay once straight away`() {
+        setContent()
+        await { vm.ui.value?.code != null && polls >= 1 }
+        val code = vm.ui.value!!.code
+        val before = polls
+        vm.unwatch()
+        rule.waitForIdle(); Thread.sleep(200); shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(code, vm.ui.value?.code)
+        assertEquals("no polling while the tab is away", before, polls)
+        vm.ensureCode()
+        await { polls == before + 1 }
+        assertEquals(code, vm.ui.value?.code)
+    }
+
+    @Test fun `a relay that is down says so in one voice`() {
+        server.shutdown()
+        setContent()
+        await { vm.ui.value?.relaySet == true }
+        node("PT-XXX-XXXX").performTextInput("PT-MRT-7Q4K")
+        node("PAIR").performClick()
+        await { vm.ui.value?.pair is PairState.Failed }
+        assertEquals(RELAY_DOWN, (vm.ui.value?.pair as PairState.Failed).message)
     }
 
     @Test fun `without a relay the code bill tells you where to set one`() {

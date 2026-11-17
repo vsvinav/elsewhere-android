@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +55,7 @@ import com.elsewhere.app.ui.world.date
 const val CREW_LEDE = "People who can see your year. Nothing is shared until you turn it on, per person."
 const val TEST_SONAR_COPY = "Fires on both phones now, ignoring distance. Nothing is recorded."
 const val SONAR_COPY = "Ping us both when we're within a mile and neither of us is usually there."
+const val CONFIRM_PAIR_COPY = "You'll see each other's city on the map, and Sonar pings you both when you're somewhere new together. Precise location stays off until you turn it on."
 const val CODE_CAPTION = "A code pairs two devices; it never carries your location or your record. Both confirm before anything is shared."
 const val NO_RELAY = "Set a relay in Settings to pair"
 
@@ -64,6 +66,7 @@ fun CrewRoute(onBack: () -> Unit, vm: CrewViewModel = hiltViewModel(), inset: Bo
     val pending by PendingCrew.code.collectAsStateWithLifecycle()
     var prefill by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(ui?.relaySet) { if (ui?.relaySet == true) vm.ensureCode() }
+    DisposableEffect(vm) { onDispose { vm.unwatch() } }
     // A pair link only fills the code in; the visitor still taps Pair, so a stray link can't claim on its own.
     LaunchedEffect(pending) { pending?.let { PendingCrew.code.value = null; prefill = it } }
     CrewScreen(
@@ -261,7 +264,7 @@ fun ConfirmPairBody(name: String, fingerprint: String, onConfirm: () -> Unit, on
         Spacer(Modifier.height(16.dp))
         Text("Their fingerprint is", color = Poster.Ink2, style = PosterType.Lede)
         Text(fingerprint, color = Poster.Ink, style = PosterType.Display.copy(fontSize = 28.sp, fontFamily = FontFamily.Monospace))
-        Text("Check it matches on their screen. Nothing is shared until you turn it on for them.", color = Poster.Ink2, style = PosterType.Lede)
+        Text(CONFIRM_PAIR_COPY, color = Poster.Ink2, style = PosterType.Lede)
         Spacer(Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             InkButton("Pair", onConfirm)

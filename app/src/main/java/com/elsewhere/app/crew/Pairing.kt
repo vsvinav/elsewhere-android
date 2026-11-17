@@ -56,6 +56,8 @@ class Pairing(
         val f = Friend(
             deviceId = Crypto.deviceId(theirSign), name = p.record.name.ifBlank { "Friend" },
             signPub = p.record.signPub, kxPub = p.record.kxPub, pairId = pairId, pairKey = Crypto.b64(pairKey), addedAt = clock(),
+            // A new friend sees your city and gets Sonar from the start; precise waits for a share.
+            grants = Grants(liveCity = true, sonar = true, livePrecise = false),
         )
         store.addFriend(f)
         if (store.code.first()?.code == p.code) store.saveCode(null)

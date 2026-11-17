@@ -9,6 +9,7 @@ import com.elsewhere.app.crew.FriendFix
 import com.elsewhere.app.crew.Grants
 import com.elsewhere.app.crew.Pairing
 import com.elsewhere.app.crew.Pending
+import com.elsewhere.app.crew.RelayException
 import com.elsewhere.app.crew.RoomHub
 import com.elsewhere.app.crew.ShareCode
 import com.elsewhere.app.crew.ShareLength
@@ -142,12 +143,12 @@ class CrewViewModel @Inject constructor(
     override fun newCode() {
         viewModelScope.launch {
             withContext(io) { runCatching { store.saveCode(null); pairing.openCode() } }
-                .onFailure { pair.value = PairState.Failed(it.message ?: "The relay didn't answer") }
+                .onFailure { pair.value = PairState.Failed(it.pairMessage()) }
             tick.value = clock()
         }
     }
 
-    /** Mint a code the first time the bill is shown; later visits reuse the open one. */
+    /** Mint a code the first time the bill is shown; later visits reuse the open one and ask the relay once straight away. */
     fun ensureCode() {
         watching.value = true
         viewModelScope.launch {
@@ -155,12 +156,15 @@ class CrewViewModel @Inject constructor(
         }
     }
 
+    /** The tab has gone: the code stays valid, but nobody is watching for a claim until it is back. */
+    fun unwatch() { watching.value = false }
+
     override fun claim(raw: String) {
         if (ShareCode.parse(raw) == null) { pair.value = PairState.Failed("That's not a pair code"); return }
         pair.value = PairState.Working
         viewModelScope.launch {
             pair.value = withContext(io) { runCatching { pairing.claim(raw) } }
-                .fold({ PairState.Confirm(it) }, { PairState.Failed(it.message ?: "The relay didn't answer") })
+                .fold({ PairState.Confirm(it) }, { PairState.Failed(it.pairMessage()) })
         }
     }
 
@@ -196,4 +200,14 @@ class CrewViewModel @Inject constructor(
     override fun stopShare() { viewModelScope.launch { withContext(io) { publisher.stopShare() } } }
 
     override fun startRecording() { viewModelScope.launch { record.start() } }
+}
+
+/** What the bill says when the relay cannot be reached at all. */
+const val RELAY_DOWN = "Couldn't reach the relay. Check your connection, or the Relay URL in Settings."
+
+/** A network failure of any kind reads as the relay being down; the relay's own answers and our own checks keep their words. */
+private fun Throwable.pairMessage(): String = when {
+    this is RelayException && code > 0 -> message ?: RELAY_DOWN
+    this is java.io.IOException -> RELAY_DOWN
+    else -> message ?: RELAY_DOWN
 }
