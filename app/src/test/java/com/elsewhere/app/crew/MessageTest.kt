@@ -15,9 +15,11 @@ class MessageTest {
         assertEquals(p, Ping.decode(vectorPlain))
     }
 
-    @Test fun `a hit rides along`() {
+    @Test fun `a hit rides along, saying whether it was a rehearsal, and an older hit without the word reads as real`() {
         val p = Ping(t = 1, grade = Grade.precise, lat = 0.0, lng = 0.0, hit = Ping.Hit("PAIR:1", 1))
-        assertEquals(""""hit":{"id":"PAIR:1","t":1}}""", p.encode().substringAfter("\"absenceDays\":null,"))
+        assertEquals(""""hit":{"id":"PAIR:1","t":1,"rehearsal":false}}""", p.encode().substringAfter("\"absenceDays\":null,"))
+        assertEquals(""""hit":{"id":"PAIR:1","t":1,"rehearsal":true}}""", p.copy(hit = Ping.Hit("PAIR:1", 1, rehearsal = true)).encode().substringAfter("\"absenceDays\":null,"))
+        assertEquals(p, Ping.decode("""{"type":"ping","t":1,"grade":"precise","lat":0.0,"lng":0.0,"hit":{"id":"PAIR:1","t":1}}"""))
     }
 
     @Test fun `messages are typed by their type field`() {
@@ -30,7 +32,7 @@ class MessageTest {
 
     @Test fun `a test ping says so only when true, may have no position, and anything but a bare boolean reads as false`() {
         val p = Ping(t = 1, grade = Grade.sonar, hit = Ping.Hit("ab12cd34", 1), test = true)
-        assertEquals("""{"type":"ping","t":1,"grade":"sonar","lat":null,"lng":null,"city":null,"habitat":false,"absenceDays":null,"hit":{"id":"ab12cd34","t":1},"test":true}""", p.encode())
+        assertEquals("""{"type":"ping","t":1,"grade":"sonar","lat":null,"lng":null,"city":null,"habitat":false,"absenceDays":null,"hit":{"id":"ab12cd34","t":1,"rehearsal":false},"test":true}""", p.encode())
         assertEquals(p, Ping.decode(p.encode()))
         assertFalse(p.placed)
         assertFalse(Ping.decode(vectorPlain).test)

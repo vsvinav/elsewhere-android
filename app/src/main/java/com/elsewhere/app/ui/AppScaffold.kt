@@ -85,6 +85,8 @@ fun AppScaffold(
     onChangeAnswers: () -> Unit, onSettings: () -> Unit, onRecord: () -> Unit = {},
     shell: ShellViewModel = hiltViewModel(), rangeVm: RangeViewModel = hiltViewModel(),
     content: @Composable (tab: Tab, go: (Tab) -> Unit, onOpen: OpenDoor) -> Unit = { t, g, o -> TabContent(t, g, onRecord, onSettings, o) },
+    /** The Sonar sheet, over every tab; Root hands in the real host, tests a stand-in or nothing. */
+    sheet: @Composable () -> Unit = {},
 ) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -186,6 +188,7 @@ fun AppScaffold(
     // Along the very top edge, over the masthead, as the web fixes `.ready` at top 0.
     ReadyBar(ready, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars))
     }
+    sheet()
     }
 
     val p = picking

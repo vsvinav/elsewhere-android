@@ -76,6 +76,7 @@ import com.elsewhere.app.data.CitiesLoader
 import com.elsewhere.app.record.Recorder
 import com.elsewhere.app.sonar.SonarAlerts
 import com.elsewhere.app.sonar.SonarEngine
+import com.elsewhere.app.sonar.SonarSheets
 import com.elsewhere.app.sonar.SonarNotifier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -118,6 +119,7 @@ object AppModule {
         RelayClient(http, { runBlocking { settings.settings.first().relayUrl } }, { crew.keys() })
     @Provides @Singleton fun roomHub(crew: CrewStore, relay: RelayClient, scope: CoroutineScope): RoomHub = RoomHub(crew, relay, scope)
     @Provides fun crewPresence(hub: RoomHub): CrewPresence = hub
+    @Provides fun sonarSheets(engine: SonarEngine): SonarSheets = engine
     @Provides @Singleton fun pairing(crew: CrewStore, relay: RelayClient, settings: SettingsStore): Pairing =
         Pairing(crew, relay, { settings.profile.first()?.name?.takeIf { it.isNotBlank() } ?: "Elsewhere" })
     @Provides @Singleton fun publisher(crew: CrewStore, hub: RoomHub, recorder: Recorder, db: ElsewhereDb, cities: CitiesLoader, scope: CoroutineScope): CrewPublisher =

@@ -16,6 +16,7 @@ import com.elsewhere.app.data.Ready
 import com.elsewhere.app.ui.account.AccountEntry
 import com.elsewhere.app.ui.account.AccountRoute
 import com.elsewhere.app.ui.account.WelcomeScreen
+import com.elsewhere.app.ui.crew.SonarSheetHost
 import com.elsewhere.app.ui.gate.KeyGate
 import com.elsewhere.app.ui.onboard.OnboardingGraph
 import com.elsewhere.app.ui.onboard.Step
@@ -35,7 +36,8 @@ import com.elsewhere.app.ui.world.figures.LocalLand
 fun Root(
     vm: RootViewModel = hiltViewModel(),
     door: @Composable (startStep: Step, onClose: (() -> Unit)?) -> Unit = { s, close -> OnboardingGraph(s, close) },
-    app: @Composable (onChangeAnswers: () -> Unit, onSettings: () -> Unit, onRecord: () -> Unit) -> Unit = { a, s, r -> AppScaffold(a, s, r) },
+    // The Sonar sheet belongs to the app, not the doors: a hit never interrupts Welcome, onboarding or signing in.
+    app: @Composable (onChangeAnswers: () -> Unit, onSettings: () -> Unit, onRecord: () -> Unit) -> Unit = { a, s, r -> AppScaffold(a, s, r, sheet = { SonarSheetHost() }) },
     gate: @Composable (ready: Ready?) -> Unit = { r -> KeyGate(ready = r) },
     recordScreen: @Composable (onClose: () -> Unit) -> Unit = { RecordRoute(it) },
     settingsScreen: @Composable (onClose: () -> Unit) -> Unit = { SettingsRoute(it) },
