@@ -71,6 +71,8 @@ interface SettingsActions {
     fun testLlm(c: LlmConfig)
     fun setUnits(u: Units)
     fun setRelayUrl(url: String)
+    /** Sonar rehearsal for a day from now, or off. */
+    fun setRehearsal(on: Boolean)
     fun setAccountUrl(url: String)
     fun logOut()
     /** `activity` must be the foreground Activity: Drive may ask for consent over it. */
@@ -143,6 +145,12 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { maps.saveSettings(maps.settings.first().copy(relayUrl = url.trim())) }
     }
 
+    var clock: () -> Long = System::currentTimeMillis
+
+    override fun setRehearsal(on: Boolean) {
+        viewModelScope.launch { maps.saveSettings(maps.settings.first().copy(rehearsalUntil = if (on) clock() + REHEARSAL_MS else 0L)) }
+    }
+
     override fun setAccountUrl(url: String) {
         viewModelScope.launch { maps.saveSettings(maps.settings.first().copy(accountUrl = url.trim().ifBlank { Settings.DEFAULT_ACCOUNT })) }
     }
@@ -165,3 +173,6 @@ class SettingsViewModel @Inject constructor(
         if (p.units != u) viewModelScope.launch { repo.saveProfile(p.copy(units = u)) }
     }
 }
+
+/** How long a Sonar rehearsal lasts before it turns itself off. */
+const val REHEARSAL_MS = 24 * 3_600_000L

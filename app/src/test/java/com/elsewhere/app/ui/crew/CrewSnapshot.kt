@@ -18,6 +18,7 @@ import com.elsewhere.app.crew.Pending
 import com.elsewhere.app.map.PinLayers
 import com.elsewhere.app.map.PinOpts
 import com.elsewhere.app.record.NowStamp
+import com.elsewhere.app.sonar.SonarHit
 import com.elsewhere.app.ui.tabs.map.MapActions
 import com.elsewhere.app.ui.tabs.map.MapScreen
 import com.elsewhere.app.ui.world.ElsewhereTheme
@@ -35,6 +36,10 @@ class CrewSnapshot {
     }
 
     @Test fun crew() = shoot { CrewScreen(CrewFixtures.ui(share = CrewFixtures.share), CrewFixtures.NoOp, onBack = {}, scroll = false, onScan = {}, onShareCode = {}) }
+
+    @Test fun crewRehearsal() = shoot { CrewScreen(CrewFixtures.ui(rehearsal = true), CrewFixtures.NoOp, onBack = {}, scroll = false, onScan = {}, onShareCode = {}) }
+
+    @Test fun sonarSheet() = shoot { SonarSheetBody(SonarHit(CrewFixtures.marta, "h1", CrewFixtures.NOW), NowStamp(38.72, -9.14, "19:04", "Lisbon", "just now"), onDismiss = {}) }
 
     @Test fun friendDetail() = shoot {
         CrewScreen(CrewFixtures.ui(), CrewFixtures.NoOp, onBack = {}, scroll = false, onScan = {}, onShareCode = {}, openFriend = CrewFixtures.marta.deviceId)

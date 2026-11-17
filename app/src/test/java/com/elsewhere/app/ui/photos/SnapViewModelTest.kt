@@ -1,9 +1,13 @@
 package com.elsewhere.app.ui.photos
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.core.content.FileProvider
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.elsewhere.app.data.SettingsStore
@@ -27,6 +31,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -44,6 +49,7 @@ class SnapViewModelTest {
     private lateinit var dir: File
     private lateinit var store: PhotoStore
     private lateinit var files: PhotoFiles
+    private val vms = mutableListOf<SnapViewModel>()
 
     @Before fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -57,17 +63,39 @@ class SnapViewModelTest {
         runBlocking { store.markPrivacySeen() }
     }
 
-    @After fun tearDown() { Dispatchers.resetMain(); scope.cancel(); db.close(); dir.deleteRecursively(); resetFileProvider() }
+    // The view model writes Compose state; a compose rule keeps those writes inside a managed snapshot so later screen tests still idle.
+    @get:Rule val rule = createComposeRule()
+
+    @After fun tearDown() { vms.forEach { it.viewModelScope.cancel() }; Dispatchers.resetMain(); scope.cancel(); db.close(); dir.deleteRecursively(); resetFileProvider() }
 
     // FileProvider caches its root strategy per JVM; each Robolectric test gets a fresh cache dir, so drop it around this test.
+    private fun vm(handle: SavedStateHandle) = SnapViewModel(store, files, handle).also { vms += it }
+
     private fun resetFileProvider() {
         FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }.let { (it.get(null) as MutableMap<*, *>).clear() }
+    }
+
+    @Test fun `a caption handed to begin lands on the photo once it is picked`() {
+        val handle = SavedStateHandle()
+        val vm = vm(handle)
+        val launched = CompletableDeferred<Source>()
+        vm.begin(SnapPlace("sonar:h1", "Lisbon", 38.72, -9.14, "Lisbon"), Source.CAMERA, caption = "with Marta") { launched.complete(it) }
+        runBlocking { withTimeout(5_000) { launched.await() } }
+        assertEquals("with Marta", vm(handle).pendingCaption)
+        val f = File(ctx.cacheDir, "pic-${UUID.randomUUID()}.jpg")
+        Bitmap.createBitmap(64, 48, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFFE9B531.toInt()) }.let { b -> f.outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 90, it) } }
+        vm.picked(Uri.fromFile(f))
+        rule.waitUntil(5_000) { vm.open != null }
+        val open = vm.open!!
+        assertEquals("with Marta", open.photo.caption)
+        assertEquals("with Marta", runBlocking { db.photos().get(open.photo.id)!!.caption })
+        assertNull(vm.pendingCaption)
     }
 
     @Test fun `the place and camera file behind an open camera survive the view model being rebuilt`() {
         val handle = SavedStateHandle()
         val place = SnapPlace("lis-chafariz", "Chafariz d'El Rei", 38.713, -9.131, "Lisbon", "Alfama")
-        val first = SnapViewModel(store, files, handle)
+        val first = vm(handle)
         val launched = CompletableDeferred<Source>()
         first.begin(place, Source.CAMERA) { launched.complete(it) }
         assertEquals(Source.CAMERA, runBlocking { withTimeout(5_000) { launched.await() } })
@@ -75,13 +103,13 @@ class SnapViewModelTest {
         assertNotNull(first.cameraFile)
 
         // Process death: a new view model from the same saved state.
-        val second = SnapViewModel(store, files, handle)
+        val second = vm(handle)
         assertEquals(place, second.pending)
         assertEquals(first.cameraFile, second.cameraFile)
         assertEquals(uri.lastPathSegment, second.cameraFile!!.name)
 
         second.picked(null)
         assertNull(second.pending); assertNull(second.cameraFile)
-        assertNull(SnapViewModel(store, files, handle).pending)
+        assertNull(vm(handle).pending)
     }
 }

@@ -19,6 +19,8 @@ import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.data.db.ElsewhereDb
 import com.elsewhere.app.data.db.MIGRATIONS
 import com.elsewhere.app.record.AndroidPermissionGate
+import com.elsewhere.app.record.FreshFix
+import com.elsewhere.app.record.FusedFreshFix
 import com.elsewhere.app.record.PermissionGate
 import com.elsewhere.app.record.RecordControl
 import com.elsewhere.app.record.AndroidServiceLink
@@ -63,6 +65,7 @@ import com.elsewhere.app.sync.SyncEngine
 import com.elsewhere.app.sync.SyncWorker
 import com.elsewhere.app.sync.Syncer
 import com.elsewhere.app.sync.DriveKeys
+import com.elsewhere.app.crew.CrewPresence
 import com.elsewhere.app.crew.CrewPublisher
 import com.elsewhere.app.crew.Identity
 import com.elsewhere.app.crew.CrewStore
@@ -73,6 +76,7 @@ import com.elsewhere.app.data.CitiesLoader
 import com.elsewhere.app.record.Recorder
 import com.elsewhere.app.sonar.SonarAlerts
 import com.elsewhere.app.sonar.SonarEngine
+import com.elsewhere.app.sonar.SonarSheets
 import com.elsewhere.app.sonar.SonarNotifier
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -107,19 +111,22 @@ object AppModule {
     @Provides fun tileService(t: GoogleTiles): TileService = t
     @Provides fun landSource(loader: LandLoader): LandSource = loader
     @Provides fun permissionGate(gate: AndroidPermissionGate): PermissionGate = gate
+    @Provides fun freshFix(f: FusedFreshFix): FreshFix = f
     @Provides fun recordControl(c: RecordController): RecordControl = c
     @Provides fun serviceLink(l: AndroidServiceLink): ServiceLink = l
 
     @Provides @Singleton fun relay(http: OkHttpClient, settings: SettingsStore, crew: CrewStore): RelayClient =
         RelayClient(http, { runBlocking { settings.settings.first().relayUrl } }, { crew.keys() })
     @Provides @Singleton fun roomHub(crew: CrewStore, relay: RelayClient, scope: CoroutineScope): RoomHub = RoomHub(crew, relay, scope)
+    @Provides fun crewPresence(hub: RoomHub): CrewPresence = hub
+    @Provides fun sonarSheets(engine: SonarEngine): SonarSheets = engine
     @Provides @Singleton fun pairing(crew: CrewStore, relay: RelayClient, settings: SettingsStore): Pairing =
         Pairing(crew, relay, { settings.profile.first()?.name?.takeIf { it.isNotBlank() } ?: "Elsewhere" })
     @Provides @Singleton fun publisher(crew: CrewStore, hub: RoomHub, recorder: Recorder, db: ElsewhereDb, cities: CitiesLoader, scope: CoroutineScope): CrewPublisher =
         CrewPublisher.forApp(crew, hub, recorder, db, cities, scope)
     @Provides @Singleton fun sonarAlerts(@ApplicationContext ctx: Context): SonarAlerts = SonarNotifier(ctx)
-    @Provides @Singleton fun sonarEngine(crew: CrewStore, hub: RoomHub, publisher: CrewPublisher, db: ElsewhereDb, alerts: SonarAlerts, scope: CoroutineScope): SonarEngine =
-        SonarEngine(crew, hub, publisher, db, alerts, scope)
+    @Provides @Singleton fun sonarEngine(crew: CrewStore, hub: RoomHub, publisher: CrewPublisher, db: ElsewhereDb, alerts: SonarAlerts, scope: CoroutineScope, settings: SettingsStore): SonarEngine =
+        SonarEngine(crew, hub, publisher, db, alerts, scope, rehearsalUntil = { settings.settings.first().rehearsalUntil })
 
     @Provides @Singleton fun accountClient(http: OkHttpClient, settings: SettingsStore): AccountClient =
         AccountClient(http, { runBlocking { settings.settings.first().accountUrl } })

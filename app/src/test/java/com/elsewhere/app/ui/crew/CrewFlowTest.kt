@@ -48,6 +48,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -73,12 +74,14 @@ class CrewFlowTest {
 
     private val server = MockWebServer()
     private var claims = 0
+    private var polls = 0
     private val rooms = FakeRooms()
     private lateinit var store: CrewStore
     private lateinit var settings: SettingsStore
     private lateinit var scope: CoroutineScope
     private lateinit var db: ElsewhereDb
     private lateinit var vm: CrewViewModel
+    private lateinit var engine: SonarEngine
     private val martaKeys = DeviceKeys.generate()
     private val martaSign = Crypto.hex(martaKeys.signPub)
     private val martaKx = Crypto.hex(martaKeys.kxPub)
@@ -89,6 +92,7 @@ class CrewFlowTest {
             override fun dispatch(request: RecordedRequest): MockResponse = when {
                 request.path!!.endsWith("/claim") -> { claims++; MockResponse().setBody("""{"signPub":"$martaSign","kxPub":"$martaKx","name":"Marta","kxSig":"$martaKxSig"}""") }
                 request.method == "POST" -> MockResponse().setResponseCode(200)
+                request.method == "GET" && request.path!!.startsWith("/pair/") -> { polls++; MockResponse().setResponseCode(404) }
                 else -> MockResponse().setResponseCode(404)
             }
         }
@@ -102,7 +106,7 @@ class CrewFlowTest {
         val relay = RelayClient(OkHttpClient(), { server.url("/").toString() }, { store.keys() })
         val publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { null }, scope)
         val hub = RoomHub(store, relay, scope)
-        val engine = SonarEngine(store, hub, publisher, db, object : SonarAlerts { override fun nearby(friend: Friend, test: Boolean, sent: Boolean) = Unit }, scope)
+        engine = SonarEngine(store, hub, publisher, db, object : SonarAlerts { override fun nearby(friend: Friend, test: Boolean, sent: Boolean) = Unit }, scope, rehearsalUntil = { settings.settings.first().rehearsalUntil })
         vm = CrewViewModel(store, Pairing(store, relay, { "Me" }), publisher, hub, engine, settings, Fakes.Control(Recording(enabled = true)))
         vm.pollMs = 60_000L
     }
@@ -128,19 +132,21 @@ class CrewFlowTest {
         node("PAIR").performClick()
         await { vm.ui.value?.pair is PairState.Confirm }
         rule.onNodeWithText("PAIR WITH MARTA?").assertIsDisplayed()
+        rule.onNodeWithText(CONFIRM_PAIR_COPY).assertIsDisplayed()
         rule.onNode(hasText("PAIR") and hasAnyAncestor(isDialog())).performClick()
         await { vm.ui.value?.friends?.size == 1 }
         val marta = runBlocking { store.friendsNow().single() }
         assertEquals("Marta", marta.name)
         assertEquals(Crypto.deviceId(Crypto.unhex(martaSign)), marta.deviceId)
+        assertEquals("a new friend starts with city and Sonar on, precise off", Grants(liveCity = true, sonar = true), marta.grants)
 
         node("MARTA").performClick()
         node("Sonar").performClick()
-        await { vm.ui.value?.friends?.single()?.grants?.sonar == true }
-        assertEquals("Sonar implies city-level live", Grants(liveCity = true, sonar = true), runBlocking { store.friend(marta.deviceId)!!.grants })
-        node("Sonar").performClick()
         await { vm.ui.value?.friends?.single()?.grants?.sonar == false }
         assertEquals("turning Sonar off leaves Live · city alone", Grants(liveCity = true), runBlocking { store.friend(marta.deviceId)!!.grants })
+        node("Sonar").performClick()
+        await { vm.ui.value?.friends?.single()?.grants?.sonar == true }
+        assertEquals("Sonar implies city-level live", Grants(liveCity = true, sonar = true), runBlocking { store.friend(marta.deviceId)!!.grants })
 
         node("REMOVE").performClick()
         await { vm.ui.value?.friends?.isEmpty() == true }
@@ -179,6 +185,51 @@ class CrewFlowTest {
         node("PAIR").performClick()
         await { vm.ui.value?.pair is PairState.Confirm }
         assertEquals(1, claims)
+    }
+
+    @Test fun `leaving the tab keeps the code, and coming back asks the relay once straight away`() {
+        setContent()
+        await { vm.ui.value?.code != null && polls >= 1 }
+        val code = vm.ui.value!!.code
+        val before = polls
+        vm.unwatch()
+        rule.waitForIdle(); Thread.sleep(200); shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(code, vm.ui.value?.code)
+        assertEquals("no polling while the tab is away", before, polls)
+        vm.ensureCode()
+        await { polls == before + 1 }
+        assertEquals(code, vm.ui.value?.code)
+    }
+
+    @Test fun `a relay that is down says so in one voice`() {
+        server.shutdown()
+        setContent()
+        await { vm.ui.value?.relaySet == true }
+        node("PT-XXX-XXXX").performTextInput("PT-MRT-7Q4K")
+        node("PAIR").performClick()
+        await { vm.ui.value?.pair is PairState.Failed }
+        assertEquals(RELAY_DOWN, (vm.ui.value?.pair as PairState.Failed).message)
+    }
+
+    @Test fun `the header wears a REHEARSAL tag only while rehearsing`() {
+        setContent()
+        await { vm.ui.value != null }
+        rule.onNodeWithText(REHEARSAL_TAG).assertDoesNotExist()
+        runBlocking { settings.saveSettings(settings.settings.first().copy(rehearsalUntil = System.currentTimeMillis() + 3_600_000L)) }
+        await { vm.ui.value?.rehearsal == true }
+        node(REHEARSAL_TAG).assertIsDisplayed()
+    }
+
+    @Test fun `a sonar hit opens the sheet once, and dismissing it remembers the hit`() {
+        val marta = Friend("M", "Marta", Crypto.hex(ByteArray(32) { 1 }), Crypto.hex(ByteArray(32) { 2 }), "PAIRM", Crypto.b64(ByteArray(32)), 0L, Grants(sonar = true))
+        runBlocking { store.addFriend(marta) }
+        await { vm.ui.value?.friends?.size == 1 }
+        assertNull(engine.sheet.value)
+        val id = runBlocking { engine.testFire("M") }!!
+        await { engine.sheet.value?.hitId == id }
+        assertEquals("Marta", engine.sheet.value!!.friend.name)
+        engine.dismissSheet()
+        await { engine.sheet.value == null && runBlocking { store.sheetSeen() }.contains(id) }
     }
 
     @Test fun `without a relay the code bill tells you where to set one`() {

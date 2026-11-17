@@ -33,12 +33,25 @@ class PublishPlannerTest {
         assertNull(p.gradeFor(Grants()))
     }
 
-    @Test fun `only friends in the session with a grant get pings`() {
+    @Test fun `sonar and city friends get pings with or without a share, precise only inside one`() {
         val out = PublishPlanner(lookup).plan(fix(t0), all, session, t0)
         assertEquals(listOf("P", "S", "C"), out.map { it.first.deviceId })
-        assertEquals(emptyList<Pair<Friend, Ping>>(), PublishPlanner(lookup).plan(fix(t0), all, session.copy(friendIds = setOf("N")), t0))
-        assertEquals(emptyList<Pair<Friend, Ping>>(), PublishPlanner(lookup).plan(fix(t0), all, null, t0))
-        assertEquals(emptyList<Pair<Friend, Ping>>(), PublishPlanner(lookup).plan(fix(t0), all, session.copy(until = t0), t0))
+        assertEquals(Grade.precise, out[0].second.grade)
+        for (s in listOf(null, session.copy(friendIds = setOf("N")), session.copy(until = t0))) {
+            val without = PublishPlanner(lookup).plan(fix(t0), all, s, t0)
+            assertEquals(listOf("S", "C"), without.map { it.first.deviceId }, "$s")
+            assertEquals(listOf(Grade.sonar, Grade.city), without.map { it.second.grade }, "$s")
+        }
+        val both = friend("B", Grants(livePrecise = true, sonar = true))
+        assertEquals(Grade.sonar, PublishPlanner(lookup).plan(fix(t0), listOf(both), null, t0).single().second.grade)
+        assertEquals(Grade.precise, PublishPlanner(lookup).plan(fix(t0), listOf(both), session.copy(friendIds = setOf("B")), t0).single().second.grade)
+    }
+
+    @Test fun `a forced plan ignores the cadence`() {
+        val p = PublishPlanner(lookup)
+        p.plan(fix(t0), all, null, t0)
+        assertEquals(emptyList<Pair<Friend, Ping>>(), p.plan(fix(t0 + 1_000), all, null, t0 + 1_000))
+        assertEquals(listOf("S", "C"), p.plan(fix(t0 + 1_000), all, null, t0 + 1_000, force = true).map { it.first.deviceId })
     }
 
     @Test fun `precise and sonar go every 30 s, city every 5 min`() {

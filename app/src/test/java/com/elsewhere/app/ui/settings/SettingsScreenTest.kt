@@ -39,6 +39,8 @@ import java.io.IOException
 import com.elsewhere.app.sync.SyncError
 import com.elsewhere.app.sync.SyncStatus
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.onFirst
 
 @RunWith(RobolectricTestRunner::class)
@@ -248,6 +250,26 @@ class SettingsScreenTest {
         node("TEST").performClick()
         rule.waitForIdle()
         node("HTTP 401").assertIsDisplayed()
+    }
+
+    @Test fun `Sonar rehearsal switches on for a day and off again`() {
+        val t0 = 1_763_222_520_000L
+        rule.setContent {
+            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account, syncer, Fakes.linker(account)).also { it.clock = { t0 } } }
+            val ui by vm.ui.collectAsStateWithLifecycle()
+            ElsewhereTheme { SettingsScreen(ui, vm, onBack = {}, sdk = false, now = { t0 }) }
+        }
+        rule.waitForIdle()
+        node(REHEARSAL_CAPTION).assertIsDisplayed()
+        node("Sonar rehearsal").assertIsOff()
+        node("Sonar rehearsal").performClick()
+        rule.waitForIdle()
+        assertEquals(t0 + 24 * 3_600_000L, maps.cur.value.rehearsalUntil)
+        node("Sonar rehearsal").assertIsOn()
+        node("Sonar rehearsal").performClick()
+        rule.waitForIdle()
+        assertEquals(0L, maps.cur.value.rehearsalUntil)
+        node("Sonar rehearsal").assertIsOff()
     }
 
     @Test fun `the units radio writes to the profile`() {

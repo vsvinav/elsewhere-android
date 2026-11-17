@@ -3,6 +3,10 @@ package com.elsewhere.app.sonar
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
+import android.os.Looper
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import com.elsewhere.app.data.SettingsStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -34,6 +38,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -62,6 +67,7 @@ class SonarEngineTest {
     private lateinit var db: ElsewhereDb
     private lateinit var scope: CoroutineScope
     private lateinit var store: CrewStore
+    private lateinit var settings: SettingsStore
     private lateinit var dir: File
     private val rooms = FakeRooms()
     private val alerts = Rec()
@@ -77,7 +83,8 @@ class SonarEngineTest {
         store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }, SecretBox.inMemory())
         val publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { null }, scope) { now }
         val hub = RoomHub(store, RelayClient(OkHttpClient(), { "" }, { store.keys() }), scope)
-        engine = SonarEngine(store, hub, publisher, db, alerts, scope, { now }, { ZoneId.of("UTC") })
+        settings = SettingsStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") }, SecretBox.inMemory())
+        engine = SonarEngine(store, hub, publisher, db, alerts, scope, { now }, { ZoneId.of("UTC") }, rehearsalUntil = { settings.settings.first().rehearsalUntil })
         store.addFriend(marta)
         store.startShare(ShareSession(setOf("M"), now, ShareLength.UNTIL_STOP.until(now)))
         db.rawFixes().insertAll(listOf(RawFixEntity(ts = now / 1000 - 30, lat = 38.7223, lng = -9.1393, accuracyM = 10f, speedMps = null, altitude = null, activity = null, batteryPct = null)))
@@ -136,20 +143,40 @@ class SonarEngineTest {
         assertEquals(1, alerts.names.size)
     }
 
-    @Test fun `city pings, friends without sonar and no share stay quiet`() = runTest {
+    @Test fun `city pings and friends without sonar stay quiet`() = runTest {
         assertEquals(Decision.Quiet, engine.evaluate(ping(grade = Grade.city)))
         store.setGrants("M", Grants(livePrecise = true))
         assertEquals(Decision.Quiet, engine.evaluate(ping(grade = Grade.precise)))
-        store.setGrants("M", Grants(sonar = true))
-        store.stopShare()
-        assertEquals(Decision.Quiet, engine.evaluate(ping()))
         assertTrue(alerts.names.isEmpty())
+    }
+
+    @Test fun `a sonar friend fires without any share running`() = runTest {
+        store.stopShare()
+        assertTrue(engine.evaluate(ping()) is Decision.Fire)
+        assertEquals(listOf("Marta"), alerts.names)
     }
 
     @Test fun `my own habitat around the friend keeps it quiet`() = runTest {
         val s = now / 1000; val day = 86_400L
         db.visits().insertAll((1..5).map { i -> VisitEntity(i, s - i * day, s - i * day + 3600, 0, "p$i", 38.7230, -9.1400, "stay", 1.0, 1, "Lisbon", "PT", null) })
         assertEquals(Decision.Quiet, engine.evaluate(ping()))
+    }
+
+    @Test fun `rehearsal fires at home, marks the hit, and lapses after its day`() = runTest {
+        val s = now / 1000; val day = 86_400L
+        db.visits().insertAll((1..5).map { i -> VisitEntity(i, s - i * day, s - i * day + 3600, 0, "p$i", 38.7230, -9.1400, "stay", 1.0, 1, "Lisbon", "PT", null) })
+        settings.saveSettings(settings.settings.first().copy(rehearsalUntil = now + 24 * 3_600_000L))
+        val hits = ArrayList<SonarHit>()
+        val job = scope.launch { engine.hits.collect { hits += it } }
+        Thread.sleep(100)
+        assertTrue(engine.evaluate(ping(habitat = true, absence = 0)) is Decision.Fire)
+        assertEquals(listOf("Marta"), alerts.names)
+        shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(100)
+        assertEquals(true, hits.single().rehearsal)
+        job.cancel()
+        now += 25 * 3_600_000L
+        db.rawFixes().insertAll(listOf(RawFixEntity(ts = now / 1000 - 30, lat = 38.7223, lng = -9.1393, accuracyM = 10f, speedMps = null, altitude = null, activity = null, batteryPct = null)))
+        assertEquals(Decision.Quiet, engine.evaluate(ping(habitat = true, absence = 0, t = now / 1000)))
     }
 
     @Test fun `an incoming hit echoes without a sound when muted, and still debounces`() = runTest {
@@ -193,4 +220,66 @@ class SonarEngineTest {
         now += 25 * 3_600_000L
         assertEquals("the oldest id has been forgotten", Decision.Echo("PAIRM:1"), engine.evaluate(ping(hit = Ping.Hit("PAIRM:1", now / 1000), habitat = true)))
     }
+
+    private suspend fun rehearse() = settings.saveSettings(settings.settings.first().copy(rehearsalUntil = now + 24 * 3_600_000L))
+
+    private suspend fun refix() = db.rawFixes().insertAll(listOf(RawFixEntity(ts = now / 1000 - 5, lat = 38.7223, lng = -9.1393, accuracyM = 10f, speedMps = null, altitude = null, activity = null, batteryPct = null)))
+
+    @Test fun `rehearsal fires once per ten minutes, however many pings and echoes arrive`() = runTest {
+        rehearse()
+        assertTrue(engine.evaluate(ping(habitat = true, absence = 0)) is Decision.Fire)
+        assertEquals(1, alerts.names.size); assertEquals(1, rooms.sent.size)
+        assertEquals(true, Ping.decode(rooms.sent[0].second).hit!!.rehearsal)
+        now += 30_000; refix()
+        assertEquals(Decision.Quiet, engine.evaluate(ping(habitat = true, absence = 0)))
+        assertEquals(Decision.Quiet, engine.evaluate(ping(hit = Ping.Hit("PAIRM:echo", now / 1000), habitat = true, absence = 0)))
+        assertEquals("no second heads-up, no second hit", 1, alerts.names.size); assertEquals(1, rooms.sent.size)
+        now += SonarEngine.REHEARSAL_GAP_MS; refix()
+        assertTrue(engine.evaluate(ping(habitat = true, absence = 0)) is Decision.Fire)
+        assertEquals(2, alerts.names.size)
+    }
+
+    @Test fun `the sheet shows the first hit, keeps it over later ones, and stays quiet for a friend just dismissed`() = runTest {
+        assertNull(engine.sheet.value)
+        val first = engine.evaluate(ping()) as Decision.Fire
+        assertEquals(first.hitId, engine.sheet.value!!.hitId)
+        now += 60_000
+        assertEquals(Decision.Echo("t2"), engine.evaluate(ping(hit = Ping.Hit("t2", now / 1000), test = true)))
+        assertEquals("a showing sheet is never replaced", first.hitId, engine.sheet.value!!.hitId)
+        engine.dismissSheet()
+        assertNull(engine.sheet.value)
+        await { store.sheetSeen().contains(first.hitId) }
+        now += 60_000
+        assertEquals(Decision.Echo("t3"), engine.evaluate(ping(hit = Ping.Hit("t3", now / 1000), test = true)))
+        assertNull("quiet for five minutes after a dismiss", engine.sheet.value)
+        now += SonarEngine.SHEET_QUIET_MS
+        assertEquals(Decision.Echo("t4"), engine.evaluate(ping(hit = Ping.Hit("t4", now / 1000), test = true)))
+        assertEquals("t4", engine.sheet.value!!.hitId)
+    }
+
+    @Test fun `snapping from the sheet remembers the hit but leaves the sheet up`() = runTest {
+        val first = engine.evaluate(ping()) as Decision.Fire
+        engine.sheetSnapped()
+        await { store.sheetSeen().contains(first.hitId) }
+        assertEquals(first.hitId, engine.sheet.value!!.hitId)
+    }
+
+    @Test fun `a muted friend raises no sheet`() = runTest {
+        engine.muteToday("M")
+        assertEquals(Decision.Echo("PAIRM:7"), engine.evaluate(ping(hit = Ping.Hit("PAIRM:7", now / 1000), habitat = true)))
+        assertNull(engine.sheet.value)
+    }
+
+    @Test fun `a hit carries whether it was a rehearsal, and the echoing side believes the hit`() = runTest {
+        val hits = ArrayList<SonarHit>()
+        val job = scope.launch { engine.hits.collect { hits += it } }
+        Thread.sleep(100)
+        assertEquals(Decision.Echo("PAIRM:r"), engine.evaluate(ping(hit = Ping.Hit("PAIRM:r", now / 1000, rehearsal = true), habitat = true)))
+        shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(100)
+        assertEquals("rehearsal comes from the hit, not this phone's switch", true, hits.single().rehearsal)
+        assertEquals(true, engine.sheet.value!!.rehearsal)
+        job.cancel()
+    }
+
+    private suspend fun await(cond: suspend () -> Boolean) { repeat(200) { if (cond()) return; kotlinx.coroutines.delay(10) }; assertTrue(cond()) }
 }

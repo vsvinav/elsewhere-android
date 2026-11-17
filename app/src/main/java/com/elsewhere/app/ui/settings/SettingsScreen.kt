@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -48,6 +49,7 @@ import com.elsewhere.app.ingest.Probe
 import com.elsewhere.app.map.Sdk
 import com.elsewhere.app.account.VaultState
 import com.elsewhere.app.record.age
+import com.elsewhere.app.ui.crew.InkSwitch
 import com.elsewhere.app.sync.SyncError
 import com.elsewhere.app.sync.SyncStatus
 import com.elsewhere.app.ui.account.AccountEntry
@@ -120,7 +122,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(48.dp))
             DataSection(ui, onAddExport)
             Spacer(Modifier.height(48.dp))
-            CrewSection(ui, actions)
+            CrewSection(ui, actions, now)
             Spacer(Modifier.height(64.dp))
         }
     }
@@ -229,7 +231,7 @@ const val VAULT_NONE = "Recovery vault: nothing to keep yet"
 const val DELETE_CAPTION = "This removes your account and its vault from the service. Your record stays on this phone."
 
 @Composable
-private fun CrewSection(ui: SettingsUi, actions: SettingsActions) {
+private fun CrewSection(ui: SettingsUi, actions: SettingsActions, now: () -> Long) {
     var url by rememberSaveable(ui.maps.relayUrl) { mutableStateOf(ui.maps.relayUrl) }
     H2("Crew")
     PosterTextField(url, { url = it }, Modifier.fillMaxWidth(), placeholder = Settings.DEFAULT_RELAY, label = "Relay URL", mono = true)
@@ -237,9 +239,21 @@ private fun CrewSection(ui: SettingsUi, actions: SettingsActions) {
     Text(RELAY_CAPTION, color = Poster.Ink3, style = PosterType.Label)
     Spacer(Modifier.height(24.dp))
     InkButton("Save relay", { actions.setRelayUrl(url) }, enabled = url.trim() != ui.maps.relayUrl)
+    Spacer(Modifier.height(24.dp))
+    val rehearsing = ui.maps.rehearsalUntil > now()
+    Row(
+        Modifier.fillMaxWidth().toggleable(value = rehearsing, role = Role.Switch, onValueChange = actions::setRehearsal).padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Sonar rehearsal", Modifier.weight(1f), color = Poster.Ink, style = PosterType.Lede.copy(fontSize = 15.sp))
+        InkSwitch(rehearsing)
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(REHEARSAL_CAPTION, color = Poster.Ink3, style = PosterType.Label)
 }
 
 private const val RELAY_CAPTION = "Friends pair and swap pings through this relay. It only ever sees sealed envelopes; leave it blank to switch Crew off."
+const val REHEARSAL_CAPTION = "Pings fire whenever a friend is within a mile — even at home. Turns itself off after a day."
 
 @Composable
 private fun H2(text: String) {

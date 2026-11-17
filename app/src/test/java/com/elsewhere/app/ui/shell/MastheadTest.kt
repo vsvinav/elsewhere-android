@@ -31,6 +31,7 @@ class MastheadTest {
         rule.onNodeWithText("START OVER").assertIsDisplayed()
         rule.onAllNodesWithText("MAPS KEY").assertCountEquals(0)
         rule.onAllNodesWithText("UNITS: KM").assertCountEquals(0)
+        rule.onAllNodesWithText("CREW").assertCountEquals(0)
         rule.onNodeWithText("SETTINGS").performClick()
         assertEquals(1, settings)
     }

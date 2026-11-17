@@ -44,17 +44,21 @@ class PublishPlanner(private val cities: CityLookup?) {
     /** Queue a Sonar hit to ride on the next ping to this friend, which [plan] then sends at once. */
     fun carryHit(deviceId: String, hit: Ping.Hit) { hitFor = deviceId to hit }
 
-    fun plan(fix: MyFix, friends: List<Friend>, session: ShareSession?, nowMs: Long): List<Pair<Friend, Ping>> {
-        if (session == null || !session.active(nowMs)) return emptyList()
+    /**
+     * Sonar and city pings go to every friend with the grant whenever the recorder has a fix; precise ones only to
+     * friends inside a running share. [force] skips the cadence for a fix asked for on purpose.
+     */
+    fun plan(fix: MyFix, friends: List<Friend>, session: ShareSession?, nowMs: Long, force: Boolean = false): List<Pair<Friend, Ping>> {
+        val live = session?.takeIf { it.active(nowMs) }
         val out = ArrayList<Pair<Friend, Ping>>()
         val place = cities?.at(fix.lat, fix.lng)
         for (f in friends) {
-            if (f.deviceId !in session.friendIds) continue
-            val grade = gradeFor(f.grants) ?: continue
+            val shared = live != null && f.deviceId in live.friendIds
+            val grade = gradeFor(if (shared) f.grants else f.grants.copy(livePrecise = false)) ?: continue
             val hit = hitFor?.takeIf { it.first == f.deviceId }?.second
             val interval = if (grade == Grade.city) CITY_MS else LIVE_MS
             val last = lastSent[f.deviceId]
-            if (hit == null && last != null && nowMs - last < interval) continue
+            if (hit == null && !force && last != null && nowMs - last < interval) continue
             val (lat, lng) = when (grade) {
                 Grade.precise -> fix.lat to fix.lng
                 Grade.sonar -> cellCentre(fix.lat, fix.lng)

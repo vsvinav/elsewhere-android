@@ -39,7 +39,7 @@ class MapSnapTest {
         val snaps = ArrayList<SnapPlace?>()
         val deleted = ArrayList<String>()
         override val photos = mutableStateOf(emptyList<PhotoEntity>())
-        override fun snap(place: SnapPlace?, source: Source) { snaps += place }
+        override fun snap(place: SnapPlace?, source: Source, caption: String?) { snaps += place }
         override fun show(photo: PhotoEntity, place: SnapPlace?) {}
         override fun delete(id: String) { deleted += id; photos.value = photos.value.filter { it.id != id } }
         override fun thumb(photo: PhotoEntity): File? = null

@@ -67,6 +67,14 @@ class CrewStoreTest {
         assertEquals(listOf("B"), store.friendsNow().map { it.deviceId })
     }
 
+    @Test fun `hits whose sheet was shown are remembered, oldest first to go`() = runTest {
+        assertEquals(emptySet<String>(), store.sheetSeen())
+        for (i in 1..70) store.markSheetSeen("h$i")
+        val seen = store.sheetSeen()
+        assertEquals(64, seen.size)
+        assertTrue(seen.contains("h70")); assertTrue(seen.contains("h7")); assertFalse(seen.contains("h6"))
+    }
+
     @Test fun `the open code and the share window persist`() = runTest {
         assertNull(store.code.first())
         store.saveCode(ShareCode("PT-MRT-7Q4K", 9L))

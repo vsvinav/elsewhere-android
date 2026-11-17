@@ -2,6 +2,8 @@ package com.elsewhere.app.ui.crew
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.em
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,36 +57,38 @@ import com.elsewhere.app.ui.world.date
 const val CREW_LEDE = "People who can see your year. Nothing is shared until you turn it on, per person."
 const val TEST_SONAR_COPY = "Fires on both phones now, ignoring distance. Nothing is recorded."
 const val SONAR_COPY = "Ping us both when we're within a mile and neither of us is usually there."
+const val CONFIRM_PAIR_COPY = "You'll see each other's city on the map, and Sonar pings you both when you're somewhere new together. Precise location stays off until you turn it on."
 const val CODE_CAPTION = "A code pairs two devices; it never carries your location or your record. Both confirm before anything is shared."
 const val NO_RELAY = "Set a relay in Settings to pair"
 
 @Composable
-fun CrewRoute(onBack: () -> Unit, vm: CrewViewModel = hiltViewModel()) {
+fun CrewRoute(onBack: () -> Unit, vm: CrewViewModel = hiltViewModel(), inset: Boolean = true) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val pending by PendingCrew.code.collectAsStateWithLifecycle()
     var prefill by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(ui?.relaySet) { if (ui?.relaySet == true) vm.ensureCode() }
+    DisposableEffect(vm) { vm.onVisible(); onDispose { vm.unwatch() } }
     // A pair link only fills the code in; the visitor still taps Pair, so a stray link can't claim on its own.
     LaunchedEffect(pending) { pending?.let { PendingCrew.code.value = null; prefill = it } }
     CrewScreen(
-        ui, vm, onBack, prefill = prefill,
+        ui, vm, onBack, prefill = prefill, inset = inset,
         onScan = { scanPairCode(ctx, vm::claim) { } },
         onShareCode = { sharePairCode(ctx, it) },
     )
 }
 
-/** The whole Crew page over the app; blank stock until the stores have been read. `scroll = false` lays it out at full height for snapshots. */
+/** The whole Crew page; blank stock until the stores have been read. `scroll = false` lays it out at full height for snapshots; `inset = false` when the scaffold already keeps it clear of the bars. */
 @Composable
 fun CrewScreen(
     ui: CrewUi?, actions: CrewActions, onBack: () -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true,
-    onScan: (() -> Unit)? = null, onShareCode: ((String) -> Unit)? = null, shareOpen: Boolean = false, openFriend: String? = null, prefill: String? = null,
+    onScan: (() -> Unit)? = null, onShareCode: ((String) -> Unit)? = null, shareOpen: Boolean = false, openFriend: String? = null, prefill: String? = null, inset: Boolean = true,
 ) {
     BackHandler { onBack() }
     var selected by rememberSaveable { mutableStateOf(openFriend) }
     var qr by rememberSaveable { mutableStateOf(false) }
     var sheet by rememberSaveable { mutableStateOf(shareOpen) }
-    Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()) else Modifier)) {
+    Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().then(if (inset) Modifier.safeDrawingPadding() else Modifier).verticalScroll(rememberScrollState()) else Modifier)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "←",
@@ -94,6 +99,10 @@ fun CrewScreen(
             Column {
                 CapsText("Crew · ${ui?.friends?.size ?: 0} ${if (ui?.friends?.size == 1) "friend" else "friends"}", size = 10.sp)
                 DisplayText("Crew", 56.sp)
+            }
+            if (ui?.rehearsal == true) {
+                Spacer(Modifier.weight(1f))
+                RedTag(REHEARSAL_TAG)
             }
         }
         if (ui != null) {
@@ -261,7 +270,7 @@ fun ConfirmPairBody(name: String, fingerprint: String, onConfirm: () -> Unit, on
         Spacer(Modifier.height(16.dp))
         Text("Their fingerprint is", color = Poster.Ink2, style = PosterType.Lede)
         Text(fingerprint, color = Poster.Ink, style = PosterType.Display.copy(fontSize = 28.sp, fontFamily = FontFamily.Monospace))
-        Text("Check it matches on their screen. Nothing is shared until you turn it on for them.", color = Poster.Ink2, style = PosterType.Lede)
+        Text(CONFIRM_PAIR_COPY, color = Poster.Ink2, style = PosterType.Lede)
         Spacer(Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             InkButton("Pair", onConfirm)
@@ -286,4 +295,16 @@ fun QrSheet(code: ShareCode, now: Long, onClose: () -> Unit, modifier: Modifier 
         Spacer(Modifier.height(20.dp))
         InkButton("Done", onClose, Modifier.fillMaxWidth(), quiet = true)
     }
+}
+
+/** The red caps tag the Crew header wears while Sonar is rehearsing. */
+const val REHEARSAL_TAG = "REHEARSAL"
+
+@Composable
+fun RedTag(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text, color = Poster.Stock, softWrap = false,
+        style = PosterType.Display.copy(fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.03.em, lineHeight = 1.em),
+        modifier = modifier.background(Poster.Red).padding(horizontal = 7.dp, vertical = 4.dp),
+    )
 }

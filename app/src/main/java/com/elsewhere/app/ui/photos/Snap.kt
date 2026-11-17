@@ -82,7 +82,7 @@ import java.io.File
 /** What the entry points talk to; the host below provides the real one, tests a recorder. */
 interface Snapper {
     val photos: State<List<PhotoEntity>>
-    fun snap(place: SnapPlace?, source: Source = Source.CAMERA)
+    fun snap(place: SnapPlace?, source: Source = Source.CAMERA, caption: String? = null)
     fun show(photo: PhotoEntity, place: SnapPlace?)
     fun delete(id: String)
     fun thumb(photo: PhotoEntity): File?
@@ -157,7 +157,7 @@ fun SnapHost(vm: SnapViewModel = hiltViewModel(), content: @Composable () -> Uni
     val snapper = remember(vm) {
         object : Snapper {
             override val photos get() = photos
-            override fun snap(place: SnapPlace?, source: Source) = vm.begin(place, source, launch)
+            override fun snap(place: SnapPlace?, source: Source, caption: String?) = vm.begin(place, source, caption, launch)
             override fun show(photo: PhotoEntity, place: SnapPlace?) = vm.show(photo, place)
             override fun delete(id: String) = vm.delete(id)
             override fun thumb(photo: PhotoEntity) = vm.files.thumb(photo.id)

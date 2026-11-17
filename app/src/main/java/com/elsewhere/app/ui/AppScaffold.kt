@@ -40,6 +40,7 @@ import com.elsewhere.app.ui.shell.RangeViewModel
 import com.elsewhere.app.ui.shell.ShellViewModel
 import com.elsewhere.app.ui.shell.TicketStrip
 import com.elsewhere.app.ui.shell.dayOf
+import com.elsewhere.app.ui.crew.CrewRoute
 import com.elsewhere.app.ui.tabs.dates.DatesTab
 import com.elsewhere.app.ui.tabs.facts.FactsTab
 import com.elsewhere.app.highlights.PendingHighlight
@@ -71,6 +72,7 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}, onMapsKey
     Tab.FLIGHTS -> FlightsTab()
     Tab.MAP -> SnapHost { MapTab() }
     Tab.REPLAY -> ReplayTab()
+    Tab.CREW -> CrewRoute(onBack = { go(Tab.TOUR) }, inset = false)
 }
 
 /**
@@ -81,8 +83,10 @@ fun TabContent(tab: Tab, go: (Tab) -> Unit, onRecord: () -> Unit = {}, onMapsKey
 @Composable
 fun AppScaffold(
     onChangeAnswers: () -> Unit, onSettings: () -> Unit, onRecord: () -> Unit = {},
-    shell: ShellViewModel = hiltViewModel(), rangeVm: RangeViewModel = hiltViewModel(), onCrew: () -> Unit = {},
+    shell: ShellViewModel = hiltViewModel(), rangeVm: RangeViewModel = hiltViewModel(),
     content: @Composable (tab: Tab, go: (Tab) -> Unit, onOpen: OpenDoor) -> Unit = { t, g, o -> TabContent(t, g, onRecord, onSettings, o) },
+    /** The Sonar sheet, over every tab; Root hands in the real host, tests a stand-in or nothing. */
+    sheet: @Composable () -> Unit = {},
 ) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -135,6 +139,10 @@ fun AppScaffold(
     // "Open Crew Map" on a Sonar notification: the Map tab reads the flag and turns its Friends layer on.
     val pendingMap by PendingCrew.map.collectAsStateWithLifecycle()
     LaunchedEffect(pendingMap) { if (pendingMap) go(Tab.MAP) }
+    // A pair link opens the Crew tab with the code filled in; the screen takes the code itself.
+    val pendingCode by PendingCrew.code.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingCode) { if (pendingCode != null) go(Tab.CREW) }
+    val crewLive by shell.crewLive.collectAsStateWithLifecycle()
 
     // One lambda for the life of the shell, so the bills do not recompose on every tick of the shell's state.
     val tabState = rememberUpdatedState(tab)
@@ -148,14 +156,14 @@ fun AppScaffold(
         topBar = {
             Masthead(
                 name = profile?.name, counters = counters,
-                onHome = { go(Tab.TOUR) }, onChangeAnswers = onChangeAnswers, onSettings = onSettings, onRecord = onRecord, onCrew = onCrew,
+                onHome = { go(Tab.TOUR) }, onChangeAnswers = onChangeAnswers, onSettings = onSettings, onRecord = onRecord,
                 onStartOver = shell::reset,
             )
         },
         bottomBar = {
             Column {
                 RangeBar(from, to, years, rangeVm::isPreset, onFrom = { picking = Picking.FROM }, onTo = { picking = Picking.TO }, onPreset = rangeVm::preset)
-                TicketStrip(selected = tab, onSelect = go, onBrand = { go(Tab.TOUR) })
+                TicketStrip(selected = tab, onSelect = go, onBrand = { go(Tab.TOUR) }, dots = if (crewLive) setOf(Tab.CREW) else emptySet())
             }
         },
     ) { pad ->
@@ -180,6 +188,7 @@ fun AppScaffold(
     // Along the very top edge, over the masthead, as the web fixes `.ready` at top 0.
     ReadyBar(ready, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars))
     }
+    sheet()
     }
 
     val p = picking

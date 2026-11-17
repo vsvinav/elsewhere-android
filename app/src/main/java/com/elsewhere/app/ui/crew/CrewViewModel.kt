@@ -9,12 +9,14 @@ import com.elsewhere.app.crew.FriendFix
 import com.elsewhere.app.crew.Grants
 import com.elsewhere.app.crew.Pairing
 import com.elsewhere.app.crew.Pending
+import com.elsewhere.app.crew.RelayException
 import com.elsewhere.app.crew.RoomHub
 import com.elsewhere.app.crew.ShareCode
 import com.elsewhere.app.crew.ShareLength
 import com.elsewhere.app.crew.ShareSession
 import com.elsewhere.app.data.Recording
 import com.elsewhere.app.data.SettingsStore
+import com.elsewhere.app.record.FreshFix
 import com.elsewhere.app.record.RecordControl
 import com.elsewhere.app.sonar.SonarEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -54,6 +56,8 @@ data class CrewUi(
     val recording: Recording,
     val fixes: Map<String, FriendFix>,
     val now: Long,
+    /** Sonar rehearsal is on: pings fire on nearness alone. */
+    val rehearsal: Boolean = false,
 ) {
     val sharing: Boolean get() = share?.active(now) == true
     fun sharingWith(f: Friend) = share?.takeIf { it.active(now) }?.friendIds?.contains(f.deviceId) == true
@@ -86,6 +90,7 @@ class CrewViewModel @Inject constructor(
     private val engine: SonarEngine,
     settings: SettingsStore,
     private val record: RecordControl,
+    private val fresh: FreshFix = FreshFix { null },
 ) : ViewModel(), CrewActions {
     var clock: () -> Long = System::currentTimeMillis
     var io: CoroutineDispatcher = Dispatchers.IO
@@ -106,10 +111,10 @@ class CrewViewModel @Inject constructor(
 
     val ui: StateFlow<CrewUi?> = combine(
         combine(store.friends, store.code, pair) { f, c, p -> Triple(f, c, p) },
-        combine(store.share, settings.settings.map { it.relayUrl.isNotBlank() }, record.recording) { s, r, rec -> Triple(s, r, rec) },
+        combine(store.share, settings.settings, record.recording) { s, r, rec -> Triple(s, r, rec) },
         hub.fixes, tick,
-    ) { (friends, code, p), (share, relay, rec), fixes, now ->
-        CrewUi(friends, code?.takeIf { !it.expired(now) }, p, share, relay, rec, fixes, now)
+    ) { (friends, code, p), (share, prefs, rec), fixes, now ->
+        CrewUi(friends, code?.takeIf { !it.expired(now) }, p, share, prefs.relayUrl.isNotBlank(), rec, fixes, now, rehearsal = prefs.rehearsalUntil > now)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {
@@ -123,6 +128,14 @@ class CrewViewModel @Inject constructor(
                 hitsFlow.update { it + h.friend.deviceId }
                 launch { delay(RING_MS.toLong() + 300); hitsFlow.update { it - h.friend.deviceId } }
             }
+        }
+    }
+
+    /** The Crew or Map tab has come into view: while recording, fetch one fresh fix and publish it at once. */
+    fun onVisible() {
+        viewModelScope.launch {
+            if (!record.recording.first().enabled) return@launch
+            withContext(io) { publisher.demand { fresh.get() } }
         }
     }
 
@@ -142,12 +155,12 @@ class CrewViewModel @Inject constructor(
     override fun newCode() {
         viewModelScope.launch {
             withContext(io) { runCatching { store.saveCode(null); pairing.openCode() } }
-                .onFailure { pair.value = PairState.Failed(it.message ?: "The relay didn't answer") }
+                .onFailure { pair.value = PairState.Failed(it.pairMessage()) }
             tick.value = clock()
         }
     }
 
-    /** Mint a code the first time the bill is shown; later visits reuse the open one. */
+    /** Mint a code the first time the bill is shown; later visits reuse the open one and ask the relay once straight away. */
     fun ensureCode() {
         watching.value = true
         viewModelScope.launch {
@@ -155,12 +168,15 @@ class CrewViewModel @Inject constructor(
         }
     }
 
+    /** The tab has gone: the code stays valid, but nobody is watching for a claim until it is back. */
+    fun unwatch() { watching.value = false }
+
     override fun claim(raw: String) {
         if (ShareCode.parse(raw) == null) { pair.value = PairState.Failed("That's not a pair code"); return }
         pair.value = PairState.Working
         viewModelScope.launch {
             pair.value = withContext(io) { runCatching { pairing.claim(raw) } }
-                .fold({ PairState.Confirm(it) }, { PairState.Failed(it.message ?: "The relay didn't answer") })
+                .fold({ PairState.Confirm(it) }, { PairState.Failed(it.pairMessage()) })
         }
     }
 
@@ -196,4 +212,14 @@ class CrewViewModel @Inject constructor(
     override fun stopShare() { viewModelScope.launch { withContext(io) { publisher.stopShare() } } }
 
     override fun startRecording() { viewModelScope.launch { record.start() } }
+}
+
+/** What the bill says when the relay cannot be reached at all. */
+const val RELAY_DOWN = "Couldn't reach the relay. Check your connection, or the Relay URL in Settings."
+
+/** A network failure of any kind reads as the relay being down; the relay's own answers and our own checks keep their words. */
+private fun Throwable.pairMessage(): String = when {
+    this is RelayException && code > 0 -> message ?: RELAY_DOWN
+    this is java.io.IOException -> RELAY_DOWN
+    else -> message ?: RELAY_DOWN
 }

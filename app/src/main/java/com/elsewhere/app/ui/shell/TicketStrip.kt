@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
@@ -42,9 +46,12 @@ import com.elsewhere.app.ui.Tab
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 
+/** Read out for the dot that marks a stub with someone live behind it. */
+const val LIVE_DOT = "Someone is live"
+
 /** The web's `.ticket`: a perforated strip of stubs along the bottom, one per section. */
 @Composable
-fun TicketStrip(selected: Tab, onSelect: (Tab) -> Unit, onBrand: () -> Unit, modifier: Modifier = Modifier) {
+fun TicketStrip(selected: Tab, onSelect: (Tab) -> Unit, onBrand: () -> Unit, modifier: Modifier = Modifier, dots: Set<Tab> = emptySet()) {
     val scroll = rememberScrollState()
     val density = LocalDensity.current
     var selectedX by remember { mutableFloatStateOf(0f) }
@@ -71,7 +78,10 @@ fun TicketStrip(selected: Tab, onSelect: (Tab) -> Unit, onBrand: () -> Unit, mod
                     selected = on, onClick = { onSelect(t) },
                     modifier = Modifier.onGloballyPositioned { if (on) { selectedX = it.positionInParent().x; selectedW = it.size.width.toFloat() } },
                 ) {
-                    Text(t.label.uppercase(), color = if (on) Poster.Stock else Poster.Ink, style = PosterType.Caps.copy(fontSize = 12.sp, letterSpacing = 0.04.em), maxLines = 1)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(t.label.uppercase(), color = if (on) Poster.Stock else Poster.Ink, style = PosterType.Caps.copy(fontSize = 12.sp, letterSpacing = 0.04.em), maxLines = 1)
+                        if (t in dots) Box(Modifier.padding(start = 5.dp).size(6.dp).clip(CircleShape).background(if (on) Poster.Stock else Poster.Red).semantics { contentDescription = LIVE_DOT })
+                    }
                 }
             }
         }

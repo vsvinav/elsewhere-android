@@ -9,7 +9,9 @@ import com.elsewhere.app.data.db.VisitEntity
 import com.elsewhere.app.ingest.Cities
 import com.elsewhere.app.ingest.record.Fix
 import com.elsewhere.app.data.SecretBox
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -18,6 +20,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,33 +55,68 @@ class CrewPublisherTest {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
         store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }, SecretBox.inMemory())
-        publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { CityLookup(cities) }, scope) { now }
+        publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { CityLookup(cities) }, scope, { now }, sleep = { ms -> waits += ms; release.await() })
     }
+
+    private val waits = ArrayList<Long>()
+    private var release = CompletableDeferred<Unit>()
+
+    /** Let a held send go, as if its wait had passed. */
+    private fun wake(ms: Long) { now += ms; val r = release; release = CompletableDeferred(); r.complete(Unit) }
+
+    private fun await(what: String, cond: () -> Boolean) { repeat(300) { if (cond()) return; Thread.sleep(10) }; assertTrue(what, cond()) }
 
     @After fun tearDown() { scope.cancel(); db.close(); dir.deleteRecursively() }
 
     private fun fix(ms: Long) = Fix(ms / 1000, 38.7250, -9.1400, 10f)
 
-    @Test fun `nothing goes out without a share, pings while it runs, stop when it ends`() = runTest {
+    @Test fun `sonar and city friends get pings from every fix, share or not, and stop goes out when a share ends`() = runTest {
         store.addFriend(friend("A", Grants(liveCity = true, sonar = true)))
         store.addFriend(friend("B", Grants(liveCity = true)))
+        store.addFriend(friend("P", Grants(livePrecise = true)))
+        store.addFriend(friend("N", Grants()))
         publisher.onFix(fix(now))
-        assertEquals(0, rooms.sent.size)
-
-        publisher.startShare(setOf("A"), ShareLength.HOUR)
-        assertEquals(listOf("A"), rooms.sent.map { it.first })
-        val p = Ping.decode(rooms.sent[0].second)
-        assertEquals(Grade.sonar, p.grade); assertEquals("Lisbon", p.city); assertNull(p.absenceDays); assertEquals(false, p.habitat)
+        assertEquals("precise alone still waits for a share", setOf("A", "B"), rooms.sent.map { it.first }.toSet())
+        val byId = rooms.sent.associate { it.first to Ping.decode(it.second) }
+        assertEquals(Grade.sonar, byId["A"]!!.grade); assertEquals("Lisbon", byId["A"]!!.city); assertNull(byId["A"]!!.absenceDays); assertEquals(false, byId["A"]!!.habitat)
+        assertEquals(Grade.city, byId["B"]!!.grade)
+        rooms.sent.clear()
 
         now += 10_000; publisher.onFix(fix(now))
-        assertEquals(1, rooms.sent.size)
+        assertEquals("inside the 30 s cadence", 0, rooms.sent.size)
         now += 20_000; publisher.onFix(fix(now))
-        assertEquals(2, rooms.sent.size)
+        assertEquals(listOf("A"), rooms.sent.map { it.first })
+        rooms.sent.clear()
 
+        publisher.startShare(setOf("P"), ShareLength.HOUR)
+        assertEquals(Grade.precise, Ping.decode(rooms.sent.single { it.first == "P" }.second).grade)
+        rooms.sent.clear()
         now += 3_600_000L; publisher.onFix(fix(now))
-        assertEquals(STOP_JSON, rooms.sent.last().second)
-        assertEquals("A", rooms.sent.last().first)
+        assertEquals(listOf("P" to STOP_JSON), rooms.sent.filter { it.second == STOP_JSON })
         assertNull(store.shareNow())
+        assertEquals("the share ending does not stop sonar pings", setOf("A", "B"), rooms.sent.filter { it.second != STOP_JSON }.map { it.first }.toSet())
+    }
+
+    @Test fun `a fix on demand publishes at once and is asked for at most once a minute`() = runTest {
+        store.addFriend(friend("A", Grants(liveCity = true, sonar = true)))
+        publisher.onFix(fix(now))
+        rooms.sent.clear()
+        var asked = 0
+        val fresh: suspend () -> Fix? = { asked++; fix(now) }
+        now += 5_000
+        publisher.demand(fresh)
+        assertEquals(1, asked)
+        await("the demand ping ignores the cadence, but still waits out the relay's gap") { waits == listOf(5_000L) }
+        wake(5_000)
+        await("sent") { rooms.sent.map { it.first } == listOf("A") }
+        now += 30_000
+        publisher.demand(fresh)
+        assertEquals("debounced", 1, asked)
+        now += 30_000
+        publisher.demand(fresh)
+        assertEquals(2, asked)
+        publisher.demand { asked++; null }
+        assertEquals("a failed fix neither publishes nor counts against the minute", 2, rooms.sent.size)
     }
 
     @Test fun `self judgement comes from visits and recent fixes`() = runTest {
@@ -99,7 +137,7 @@ class CrewPublisherTest {
         publisher.startShare(setOf("A", "B"), ShareLength.UNTIL_STOP)
         publisher.onFix(fix(now))
         rooms.sent.clear()
-        now += 5_000
+        now += 15_000
         publisher.carryHit(a, Ping.Hit("PAIRA:1", now / 1000))
         assertEquals(listOf("A"), rooms.sent.map { it.first })
         assertEquals(Ping.Hit("PAIRA:1", now / 1000), Ping.decode(rooms.sent[0].second).hit)
@@ -115,5 +153,56 @@ class CrewPublisherTest {
         publisher.revoke(a)
         assertEquals(listOf("A" to REVOKE_JSON), rooms.sent)
         assertEquals(emptyList<Friend>(), store.friendsNow())
+    }
+
+    @Test fun `a hit inside the relay's ten seconds waits for them, and rides a ping sent in the meantime`() = runTest {
+        val a = friend("A", Grants(sonar = true))
+        store.addFriend(a)
+        publisher.onFix(fix(now))
+        rooms.sent.clear()
+        now += 3_000
+        publisher.carryHit(a, Ping.Hit("PAIRA:1", now / 1000))
+        assertEquals("too soon for the relay: nothing yet", 0, rooms.sent.size)
+        await("the send is held") { waits == listOf(7_000L) }
+        wake(7_000)
+        await("sent once the gap has passed") { rooms.sent.size == 1 }
+        assertEquals("PAIRA:1", Ping.decode(rooms.sent[0].second).hit!!.id)
+        rooms.sent.clear()
+
+        now += 3_000
+        publisher.carryHit(a, Ping.Hit("PAIRA:2", now / 1000))
+        await("held again") { waits.size == 2 }
+        now += 2_000
+        publisher.demand { fix(now) }
+        assertEquals("a forced ping inside the gap waits too", 0, rooms.sent.size)
+        val at = now / 1000
+        wake(5_000)
+        await("one ping carries both the fix and the hit") { rooms.sent.size == 1 }
+        assertEquals("PAIRA:2", Ping.decode(rooms.sent[0].second).hit!!.id)
+        assertEquals(at, Ping.decode(rooms.sent[0].second).t)
+        Thread.sleep(50)
+        assertEquals("the hit is sent once, with one wait", 1, rooms.sent.size); assertEquals(2, waits.size)
+    }
+
+    @Test fun `two tabs asking for a fix at once fetch it once`() = runTest {
+        store.addFriend(friend("A", Grants(sonar = true)))
+        var asked = 0
+        val gate = CompletableDeferred<Unit>()
+        val fresh: suspend () -> Fix? = { asked++; gate.await(); fix(now) }
+        val first = scope.launch { publisher.demand(fresh) }
+        await("the first fetch is under way") { asked == 1 }
+        publisher.demand(fresh)
+        assertEquals("the second ask returns without fetching", 1, asked)
+        gate.complete(Unit)
+        first.join()
+        assertEquals(1, rooms.sent.size)
+    }
+
+    @Test fun `a fetch that comes back empty leaves the minute open for the next ask`() = runTest {
+        store.addFriend(friend("A", Grants(sonar = true)))
+        publisher.demand { null }
+        var asked = 0
+        publisher.demand { asked++; fix(now) }
+        assertEquals(1, asked)
     }
 }
