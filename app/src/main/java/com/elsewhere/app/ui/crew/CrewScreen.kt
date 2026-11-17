@@ -58,7 +58,7 @@ const val CODE_CAPTION = "A code pairs two devices; it never carries your locati
 const val NO_RELAY = "Set a relay in Settings to pair"
 
 @Composable
-fun CrewRoute(onBack: () -> Unit, vm: CrewViewModel = hiltViewModel()) {
+fun CrewRoute(onBack: () -> Unit, vm: CrewViewModel = hiltViewModel(), inset: Boolean = true) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val pending by PendingCrew.code.collectAsStateWithLifecycle()
@@ -67,23 +67,23 @@ fun CrewRoute(onBack: () -> Unit, vm: CrewViewModel = hiltViewModel()) {
     // A pair link only fills the code in; the visitor still taps Pair, so a stray link can't claim on its own.
     LaunchedEffect(pending) { pending?.let { PendingCrew.code.value = null; prefill = it } }
     CrewScreen(
-        ui, vm, onBack, prefill = prefill,
+        ui, vm, onBack, prefill = prefill, inset = inset,
         onScan = { scanPairCode(ctx, vm::claim) { } },
         onShareCode = { sharePairCode(ctx, it) },
     )
 }
 
-/** The whole Crew page over the app; blank stock until the stores have been read. `scroll = false` lays it out at full height for snapshots. */
+/** The whole Crew page; blank stock until the stores have been read. `scroll = false` lays it out at full height for snapshots; `inset = false` when the scaffold already keeps it clear of the bars. */
 @Composable
 fun CrewScreen(
     ui: CrewUi?, actions: CrewActions, onBack: () -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true,
-    onScan: (() -> Unit)? = null, onShareCode: ((String) -> Unit)? = null, shareOpen: Boolean = false, openFriend: String? = null, prefill: String? = null,
+    onScan: (() -> Unit)? = null, onShareCode: ((String) -> Unit)? = null, shareOpen: Boolean = false, openFriend: String? = null, prefill: String? = null, inset: Boolean = true,
 ) {
     BackHandler { onBack() }
     var selected by rememberSaveable { mutableStateOf(openFriend) }
     var qr by rememberSaveable { mutableStateOf(false) }
     var sheet by rememberSaveable { mutableStateOf(shareOpen) }
-    Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()) else Modifier)) {
+    Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().then(if (inset) Modifier.safeDrawingPadding() else Modifier).verticalScroll(rememberScrollState()) else Modifier)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "←",

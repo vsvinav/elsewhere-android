@@ -63,6 +63,7 @@ import com.elsewhere.app.sync.SyncEngine
 import com.elsewhere.app.sync.SyncWorker
 import com.elsewhere.app.sync.Syncer
 import com.elsewhere.app.sync.DriveKeys
+import com.elsewhere.app.crew.CrewPresence
 import com.elsewhere.app.crew.CrewPublisher
 import com.elsewhere.app.crew.Identity
 import com.elsewhere.app.crew.CrewStore
@@ -113,6 +114,7 @@ object AppModule {
     @Provides @Singleton fun relay(http: OkHttpClient, settings: SettingsStore, crew: CrewStore): RelayClient =
         RelayClient(http, { runBlocking { settings.settings.first().relayUrl } }, { crew.keys() })
     @Provides @Singleton fun roomHub(crew: CrewStore, relay: RelayClient, scope: CoroutineScope): RoomHub = RoomHub(crew, relay, scope)
+    @Provides fun crewPresence(hub: RoomHub): CrewPresence = hub
     @Provides @Singleton fun pairing(crew: CrewStore, relay: RelayClient, settings: SettingsStore): Pairing =
         Pairing(crew, relay, { settings.profile.first()?.name?.takeIf { it.isNotBlank() } ?: "Elsewhere" })
     @Provides @Singleton fun publisher(crew: CrewStore, hub: RoomHub, recorder: Recorder, db: ElsewhereDb, cities: CitiesLoader, scope: CoroutineScope): CrewPublisher =

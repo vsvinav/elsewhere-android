@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import org.junit.jupiter.api.AfterEach
@@ -48,6 +49,14 @@ class RoomHubTest {
         assertEquals(1.0, fix!!.lat, "same time")
         hub.receive(marta, pingAt(t, lat = 4.0))
         assertEquals(4.0, fix!!.lat, "newer")
+    }
+
+    @Test fun `someone is live while a fix is under fifteen minutes old`() = runTest {
+        assertEquals(false, hub.live.first())
+        hub.receive(marta, pingAt(now / 1000 - 60))
+        assertEquals(true, hub.live.first())
+        now += 15 * 60_000L
+        assertEquals(false, hub.live.first())
     }
 
     @Test fun `a ping outside the freshness window is dropped either way`() = runTest {

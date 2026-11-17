@@ -93,7 +93,7 @@ class RootFlowTest {
                 Root(
                     vm = root,
                     door = { step, close -> OnboardingGraph(step, close, vm = onboard, record = { s, i -> RecordStepScreen(recordUi, RecordActions(onStart = s), onImport = i) }) },
-                    app = { answers, key, _, _ -> AppScaffold(answers, key, {}, shell, range, content = { t, _, _ -> Placeholder(t) }) },
+                    app = { answers, key, _ -> AppScaffold(answers, key, {}, shell, range, content = { t, _, _ -> Placeholder(t) }) },
                 )
             }
         }
@@ -133,7 +133,7 @@ class RootFlowTest {
             val root = remember { RootViewModel(store, Fakes.Land, maps, Fakes.Account(), control) }
             val vm = remember { WaitingViewModel(store, control) }
             ElsewhereTheme {
-                Root(vm = root, door = { _, _ -> androidx.compose.material3.Text("THE DOOR") }, app = { _, _, _, _ -> androidx.compose.material3.Text("THE APP") }, waiting = { WaitingRoute(it, vm) })
+                Root(vm = root, door = { _, _ -> androidx.compose.material3.Text("THE DOOR") }, app = { _, _, _ -> androidx.compose.material3.Text("THE APP") }, waiting = { WaitingRoute(it, vm) })
             }
         }
         rule.waitForIdle()
@@ -195,7 +195,7 @@ class RootFlowTest {
             val maps = Fakes.Maps().apply { cur.value = com.elsewhere.app.data.Settings(limitedAccepted = true) }
             rule.setContent {
                 val root = remember { RootViewModel(repo, Fakes.Land, maps, Fakes.Account(), Fakes.Control()) }
-                ElsewhereTheme { Root(vm = root, door = { _, _ -> androidx.compose.material3.Text("THE DOOR") }, app = { _, _, _, _ -> androidx.compose.material3.Text("THE APP") }, waiting = { androidx.compose.material3.Text("THE WAIT") }) }
+                ElsewhereTheme { Root(vm = root, door = { _, _ -> androidx.compose.material3.Text("THE DOOR") }, app = { _, _, _ -> androidx.compose.material3.Text("THE APP") }, waiting = { androidx.compose.material3.Text("THE WAIT") }) }
             }
             rule.waitForIdle()
             rule.onNodeWithText("THE APP").assertIsDisplayed()

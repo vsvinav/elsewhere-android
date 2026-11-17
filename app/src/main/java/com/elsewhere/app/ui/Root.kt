@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,11 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elsewhere.app.data.Ready
-import com.elsewhere.app.sonar.PendingCrew
 import com.elsewhere.app.ui.account.AccountEntry
 import com.elsewhere.app.ui.account.AccountRoute
 import com.elsewhere.app.ui.account.WelcomeScreen
-import com.elsewhere.app.ui.crew.CrewRoute
 import com.elsewhere.app.ui.gate.KeyGate
 import com.elsewhere.app.ui.onboard.OnboardingGraph
 import com.elsewhere.app.ui.onboard.Step
@@ -38,11 +35,10 @@ import com.elsewhere.app.ui.world.figures.LocalLand
 fun Root(
     vm: RootViewModel = hiltViewModel(),
     door: @Composable (startStep: Step, onClose: (() -> Unit)?) -> Unit = { s, close -> OnboardingGraph(s, close) },
-    app: @Composable (onChangeAnswers: () -> Unit, onSettings: () -> Unit, onRecord: () -> Unit, onCrew: () -> Unit) -> Unit = { a, s, r, c -> AppScaffold(a, s, r, onCrew = c) },
+    app: @Composable (onChangeAnswers: () -> Unit, onSettings: () -> Unit, onRecord: () -> Unit) -> Unit = { a, s, r -> AppScaffold(a, s, r) },
     gate: @Composable (ready: Ready?) -> Unit = { r -> KeyGate(ready = r) },
     recordScreen: @Composable (onClose: () -> Unit) -> Unit = { RecordRoute(it) },
     settingsScreen: @Composable (onClose: () -> Unit) -> Unit = { SettingsRoute(it) },
-    crewScreen: @Composable (onClose: () -> Unit) -> Unit = { CrewRoute(it) },
     welcome: @Composable (onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit) -> Unit = { s, l, k -> WelcomeScreen(s, l, k) },
     account: @Composable (entry: AccountEntry, onDone: () -> Unit, onClose: () -> Unit) -> Unit = { e, d, c -> AccountRoute(e, d, c) },
     waiting: @Composable (onSettings: () -> Unit) -> Unit = { WaitingRoute(it) },
@@ -61,10 +57,6 @@ fun Root(
     var editing by rememberSaveable { mutableStateOf<Step?>(null) }
     var recording by rememberSaveable { mutableStateOf(false) }
     var settings by rememberSaveable { mutableStateOf(false) }
-    var crew by rememberSaveable { mutableStateOf(false) }
-    // A pair link opens Crew with the code filled in; the screen takes the code itself.
-    val pendingCode by PendingCrew.code.collectAsStateWithLifecycle()
-    LaunchedEffect(pendingCode) { if (pendingCode != null) crew = true }
     // A phone that has just started recording has no closed stay yet; the recorder being on is enough to pass the door.
     val needsDoor = profile == null || profile!!.homes.isEmpty() || (!hasImport && !recordingOn)
     // A phone with only its own record waits a week at the door; an export or a pulled record has history to show at once.
@@ -86,9 +78,8 @@ fun Root(
             }
             // Settings sits over the app rather than replacing it, so Back lands on the tab the visitor left.
             else -> Box {
-                app({ editing = Step.Name }, { settings = true }, { recording = true }, { crew = true })
+                app({ editing = Step.Name }, { settings = true }, { recording = true })
                 if (settings) settingsScreen { settings = false }
-                if (crew) crewScreen { crew = false }
             }
         }
     }

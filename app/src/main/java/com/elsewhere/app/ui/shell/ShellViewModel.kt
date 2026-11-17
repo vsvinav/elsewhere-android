@@ -2,6 +2,7 @@ package com.elsewhere.app.ui.shell
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.elsewhere.app.crew.CrewPresence
 import com.elsewhere.app.data.Counters
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.MapsSettings
@@ -31,8 +32,10 @@ private const val REFRESH_TIMEOUT_MS = 15_000L
 class ShellViewModel @Inject constructor(
     private val repo: RecordStore, private val source: RecordSource, settings: MapsSettings, private val lookups: PlaceLookups,
     /** Every figure on the posters opens through here. */
-    val doors: DoorNav, readyState: ReadyState = ReadyState(),
+    val doors: DoorNav, readyState: ReadyState = ReadyState(), presence: CrewPresence = CrewPresence.None,
 ) : ViewModel() {
+    /** Someone in the crew has a fresh fix: the Crew stub wears a dot. */
+    val crewLive: StateFlow<Boolean> = presence.live.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     private val _refreshing = MutableStateFlow(false)
     /** True from a pull until the rebuilt record has landed, or the wait has given up. */
     val refreshing: StateFlow<Boolean> = _refreshing

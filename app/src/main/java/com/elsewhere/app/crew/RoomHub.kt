@@ -5,7 +5,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,12 +48,17 @@ class RoomHub(
     private val relay: RelayClient,
     private val scope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
-) : Rooms {
+) : Rooms, CrewPresence {
     private val messagesFlow = MutableSharedFlow<Message>(extraBufferCapacity = 64)
     val messages: SharedFlow<Message> = messagesFlow.asSharedFlow()
 
     private val fixesFlow = MutableStateFlow<Map<String, FriendFix>>(emptyMap())
     val fixes: StateFlow<Map<String, FriendFix>> = fixesFlow.asStateFlow()
+
+    /** True while any friend's fix is under fifteen minutes old; re-checked each minute so it goes out on its own. */
+    override val live: Flow<Boolean> = combine(fixes, minutes()) { m, _ -> m.values.any { !it.stale(clock()) } }
+
+    private fun minutes(): Flow<Unit> = flow { while (true) { emit(Unit); delay(60_000L) } }
 
     private val foregroundFlow = MutableStateFlow(false)
     private val sockets = HashMap<String, Conn>()
