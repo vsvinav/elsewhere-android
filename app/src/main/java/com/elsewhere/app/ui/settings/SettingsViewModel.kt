@@ -2,6 +2,7 @@ package com.elsewhere.app.ui.settings
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
+import com.elsewhere.app.sync.DriveLinker
 import com.elsewhere.app.sync.SyncStatus
 import com.elsewhere.app.sync.Syncer
 import androidx.lifecycle.viewModelScope
@@ -72,7 +73,8 @@ interface SettingsActions {
     fun setRelayUrl(url: String)
     fun setAccountUrl(url: String)
     fun logOut()
-    fun deleteAccount()
+    /** `activity` must be the foreground Activity: Drive may ask for consent over it. */
+    fun deleteAccount(activity: Context)
     fun import(open: () -> InputStream, fileName: String)
     fun syncNow()
     /** `activity` must be the foreground Activity: Drive may ask for consent over it. */
@@ -83,6 +85,7 @@ interface SettingsActions {
 class SettingsViewModel @Inject constructor(
     private val maps: MapsSettings, private val verifier: KeyVerifier, private val repo: RecordStore,
     private val llm: LlmSettings, private val client: LlmClient, private val accounts: Accounts, private val syncer: Syncer,
+    private val drive: DriveLinker,
 ) : ViewModel(), SettingsActions {
     private val keyCheck = MutableStateFlow<KeyCheck>(KeyCheck.Idle)
     private val test = MutableStateFlow<LlmTest>(LlmTest.Idle)
@@ -146,7 +149,7 @@ class SettingsViewModel @Inject constructor(
 
     override fun logOut() = accountCall { accounts.logOut() }
 
-    override fun deleteAccount() = accountCall { accounts.deleteAccount() }
+    override fun deleteAccount(activity: Context) = accountCall { drive.deleteAccount(activity) }
 
     override fun syncNow() = syncer.syncNow()
 

@@ -58,7 +58,7 @@ class SettingsScreenTest {
 
     private fun show() {
         rule.setContent {
-            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account, syncer) }
+            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account, syncer, Fakes.linker(account)) }
             val ui by vm.ui.collectAsStateWithLifecycle()
             ElsewhereTheme { SettingsScreen(ui, vm, onBack = { closed++ }, sdk = false, onAccount = { opened = it }) }
         }
@@ -67,7 +67,7 @@ class SettingsScreenTest {
 
     @Test fun `signed out, Log in or sign up opens Welcome, whose Not now comes straight back`() {
         rule.setContent {
-            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account, syncer) }
+            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account, syncer, Fakes.linker(account)) }
             ElsewhereTheme { SettingsRoute(onBack = { closed++ }, vm = vm, account = { entry, _, _ -> Text("FLOW $entry") }) }
         }
         node("LOG IN OR SIGN UP").performClick()
@@ -85,7 +85,7 @@ class SettingsScreenTest {
     @Test fun `the Data section takes a Timeline export, and a bad file says so`() {
         lateinit var vm: SettingsViewModel
         rule.setContent {
-            vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account, syncer) }
+            vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account, syncer, Fakes.linker(account)) }
             val ui by vm.ui.collectAsStateWithLifecycle()
             ElsewhereTheme { SettingsScreen(ui, vm, onBack = { closed++ }, sdk = false, onAccount = { opened = it }) }
         }

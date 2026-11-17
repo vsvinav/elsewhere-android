@@ -28,7 +28,7 @@ class SettingsSnapshot {
         override fun setRelayUrl(url: String) {}
         override fun setAccountUrl(url: String) {}
         override fun logOut() {}
-        override fun deleteAccount() {}
+        override fun deleteAccount(activity: android.content.Context) {}
         override fun import(open: () -> java.io.InputStream, fileName: String) {}
         override fun syncNow() {}
         override fun startFresh(activity: android.content.Context) {}

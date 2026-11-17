@@ -132,6 +132,7 @@ private fun AccountSection(ui: SettingsUi, actions: SettingsActions, onAccount: 
     val a = ui.account
     var url by rememberSaveable(ui.maps.accountUrl) { mutableStateOf(ui.maps.accountUrl) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    val activity = LocalContext.current
     H2("Account")
     if (a.session == null) {
         Text(ACCOUNT_CAPTION, color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 16.sp))
@@ -166,7 +167,7 @@ private fun AccountSection(ui: SettingsUi, actions: SettingsActions, onAccount: 
             Text(DELETE_CAPTION, color = Poster.Ink, style = PosterType.Lede.copy(fontSize = 15.sp))
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                InkButton("Delete for good", { confirmDelete = false; actions.deleteAccount() }, red = true)
+                InkButton("Delete for good", { confirmDelete = false; actions.deleteAccount(activity) }, red = true)
                 InkButton("Keep it", { confirmDelete = false }, quiet = true)
             }
         }
