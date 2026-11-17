@@ -77,4 +77,16 @@ class AccountStoreTest {
         assertEquals("legacy_tok", store.state.first().session!!.session)
         assertEquals("legacy_tok", box.open(prefs.data.first()[k]!!))
     }
+
+    @Test fun `the Drive key is sealed at rest, read back whole, and forgotten on sign-out`() = runTest {
+        val k = stringPreferencesKey("account.driveKey")
+        store.saveDriveKey("a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5")
+        assertEquals("a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5", store.state.first().driveKey)
+        assertEquals("a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5", box.open(prefs.data.first()[k]!!))
+        store.saveDriveKey(null)
+        assertNull(store.state.first().driveKey)
+        store.saveDriveKey("x")
+        store.clearSession()
+        assertNull(store.state.first().driveKey)
+    }
 }

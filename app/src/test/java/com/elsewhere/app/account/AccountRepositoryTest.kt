@@ -50,9 +50,10 @@ class AccountRepositoryTest {
         override suspend fun saveSession(s: Session) = state.update { it.copy(session = s) }
         override suspend fun saveSalt(salt: String?) = state.update { it.copy(salt = salt) }
         override suspend fun saveVault(at: Long, hash: String?) = state.update { it.copy(vaultAt = at, vaultHash = hash) }
+        override suspend fun saveDriveKey(b64: String?) = state.update { it.copy(driveKey = b64) }
         override suspend fun markWelcomed() = state.update { it.copy(welcomed = true) }
         /** DataStore really suspends here; a cancelled caller must still get the session off disk. */
-        override suspend fun clearSession() { yield(); state.update { it.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) } }
+        override suspend fun clearSession() { yield(); state.update { it.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null, driveKey = null) } }
     }
 
     class FakeIdentity(var keys: DeviceKeys = DeviceKeys.fromSeeds(ByteArray(32) { 1 }, ByteArray(32) { 2 })) : Identity {

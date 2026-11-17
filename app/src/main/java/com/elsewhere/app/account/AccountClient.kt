@@ -96,7 +96,8 @@ class AccountClient(private val http: OkHttpClient, private val baseUrl: () -> S
     }
 }
 
-private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
+/** OkHttp's callback as a suspension; shared with the sync and Drive clients. */
+internal suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
     enqueue(object : Callback {
         override fun onFailure(call: Call, e: IOException) { if (cont.isActive) cont.resumeWithException(e) }
         override fun onResponse(call: Call, response: Response) { cont.resume(response) }
