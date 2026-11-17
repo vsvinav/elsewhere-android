@@ -37,6 +37,21 @@ class DatesSnapshot {
         }
     }
 
+    /** The newest trip with one recorded leg the phone only guessed at, so the card asks. */
+    @Test fun tripWithPrompt() = paparazzi.snapshot {
+        val ny = SampleRecord.record.trips.maxBy { it.start }
+        val leg = com.elsewhere.app.Fx.act(ny.start + 5 * com.elsewhere.app.Fx.H, ny.start + 6 * com.elsewhere.app.Fx.H, "IN_PASSENGER_VEHICLE", 15_000.0).copy(id = 41, p = 0.6, recorded = true)
+        val u = datesUi(SampleRecord.record.copy(activities = SampleRecord.record.activities + leg), SampleRecord.record, SampleRecord.profile, land)
+        val t = u.trips.first { it.trip.start == ny.start }
+        ElsewhereTheme {
+            CompositionLocalProvider(LocalMotion provides false) {
+                Column(Modifier.fillMaxWidth().background(Poster.Stock).padding(12.dp)) {
+                    TripPass(t, u.units, open = true, detail = tripDetail(u.data, u.strip, t.trip)) {}
+                }
+            }
+        }
+    }
+
     @Test fun deck() = paparazzi.snapshot {
         ElsewhereTheme {
             CompositionLocalProvider(LocalMotion provides false) {

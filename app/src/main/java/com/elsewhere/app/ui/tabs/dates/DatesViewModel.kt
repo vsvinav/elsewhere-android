@@ -6,12 +6,14 @@ import com.elsewhere.app.analytics.Night
 import com.elsewhere.app.analytics.bedStrip
 import com.elsewhere.app.analytics.dayKey
 import com.elsewhere.app.analytics.isHome
+import com.elsewhere.app.data.Activity
 import com.elsewhere.app.data.FeatureCollection
 import com.elsewhere.app.data.LandSource
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordStore
+import com.elsewhere.app.data.SURE_P
 import com.elsewhere.app.data.Trip
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ingest.PlaceLookups
@@ -28,10 +30,18 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** One trip as its pass prints it closed: nights, flights, the modes that carried it. */
-data class TripUi(val trip: Trip, val flights: Int, val modes: List<Pair<String, Double>>, val totalKm: Double)
+/**
+ * One trip as its pass prints it closed: nights, flights, the modes that carried it. `prompts` are the recorded legs the
+ * phone only guessed at, longest first, that the open card asks about.
+ */
+data class TripUi(val trip: Trip, val flights: Int, val modes: List<Pair<String, Double>>, val totalKm: Double, val prompts: List<Activity> = emptyList())
+
+/** At most three legs a card asks about: recorded on this phone, within the trip, and guessed with less than `SURE_P`. */
+fun legPrompts(data: Record, t: Trip): List<Activity> =
+    data.activities.filter { it.recorded && it.p < SURE_P && it.start >= t.start && it.end <= t.end }.sortedByDescending { it.m }.take(3)
 
 /** A stop on a trip; `place` is null when the record never described it, and `placeName` falls back to the id. */
 data class TripStop(val id: String, val place: Place?, val n: Int)
@@ -51,7 +61,7 @@ fun datesUi(data: Record, raw: Record, profile: Profile?, land: FeatureCollectio
     val cards = deckCards(data)
     val trips = data.trips.sortedByDescending { it.start }.mapIndexed { i, t ->
         val km = t.totalKmByMode.entries.sortedByDescending { it.value }.map { it.key to it.value }
-        TripUi(trip = t, flights = cards[i].flights, modes = km.take(4), totalKm = cards[i].km)
+        TripUi(trip = t, flights = cards[i].flights, modes = km.take(4), totalKm = cards[i].km, prompts = legPrompts(data, t))
     }
     return DatesUi(
         nights = nightsUi(strip, data.meta.range, profile?.name ?: ""),
@@ -76,9 +86,12 @@ fun tripDetail(data: Record, strip: List<Night>, t: Trip): TripDetail {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class DatesViewModel @Inject constructor(private val range: RangeStore, store: RecordStore, landSource: LandSource, private val lookups: PlaceLookups) : ViewModel() {
+class DatesViewModel @Inject constructor(private val range: RangeStore, private val store: RecordStore, landSource: LandSource, private val lookups: PlaceLookups) : ViewModel() {
     /** A stop on an open trip has scrolled into view: ask for its name and photo. */
     fun seen(id: String) { range.filtered.value?.let { lookups.need(listOf(id), it.places) } }
+
+    /** The visitor answered how a leg was travelled; the record is told and re-derived. */
+    fun confirm(activityId: Int, mode: String) { viewModelScope.launch { store.confirmMode(activityId, mode) } }
 
     private data class In(val data: Record, val raw: Record, val profile: Profile?, val land: FeatureCollection?)
 

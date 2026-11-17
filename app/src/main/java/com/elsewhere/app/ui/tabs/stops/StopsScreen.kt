@@ -52,6 +52,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elsewhere.app.analytics.Cat
 import com.elsewhere.app.ui.world.Barcode
+import com.elsewhere.app.ui.world.Chip
 import com.elsewhere.app.ui.world.Field
 import com.elsewhere.app.ui.world.InkButton
 import com.elsewhere.app.ui.world.LocalMuted
@@ -157,22 +158,6 @@ internal fun StopsHeader(ui: StopsUi, onFilter: (StopsFilter) -> Unit) {
             Chip("Named only", null, f.namedOnly) { onFilter(f.copy(namedOnly = !f.namedOnly)) }
             Text("${n0(ui.list.size)} TAGS", color = Poster.Ink3, style = PosterType.Caps.copy(fontSize = 12.sp), modifier = Modifier.padding(start = 6.dp, top = 8.dp))
         }
-    }
-}
-
-@Composable
-private fun Chip(label: String, n: String?, on: Boolean, role: Role = Role.Checkbox, swatch: Color? = null, onClick: () -> Unit) {
-    Row(
-        Modifier.background(if (on) Poster.Ink else Poster.Stock).border(2.dp, Poster.Ink)
-            .then(if (role == Role.RadioButton) Modifier.selectable(selected = on, role = role, onClick = onClick) else Modifier.toggleable(value = on, role = role, onValueChange = { onClick() }))
-            .semantics { contentDescription = label }
-            .padding(horizontal = 9.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val style = PosterType.Display.copy(fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.03.em, lineHeight = 1.em)
-        if (swatch != null) { Box(Modifier.size(9.dp).background(swatch).border(1.dp, if (on) Poster.Stock else Poster.Ink)); Spacer(Modifier.width(6.dp)) }
-        Text(label.uppercase(), color = if (on) Poster.Stock else Poster.Ink, style = style, softWrap = false)
-        if (n != null) { Spacer(Modifier.width(6.dp)); Text(n, color = if (on) Poster.Mustard else Poster.Red, style = style) }
     }
 }
 
