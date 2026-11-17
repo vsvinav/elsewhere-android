@@ -54,6 +54,7 @@ interface Syncer {
  * come back when the network allows.
  */
 class SyncEngine(
+    private val context: Context,
     private val api: SyncApi,
     private val db: ElsewhereDb,
     private val store: AccountStorage,
@@ -67,14 +68,17 @@ class SyncEngine(
 ) : Syncer {
     companion object {
         const val MIN_INTERVAL_MS = 15 * 60_000L
-        /** Local bookkeeping row: when the last round finished; not a worker key. */
+        /** Local bookkeeping rows, not worker keys: when the last round finished, and a fingerprint of the key it all was sealed under. */
         private const val LAST = "_last"
+        private const val KEY = "_key"
     }
 
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Off)
     override val status: StateFlow<SyncStatus> = _status
     private val lock = Mutex()
     private var lastRun = 0L
+    /** A round failed; the next nudge runs one whatever the interval. */
+    private var pending = false
 
     init {
         scope.launch {
@@ -100,22 +104,41 @@ class SyncEngine(
         if (session == null || key == null) { _status.value = SyncStatus.Off; return }
         if (_status.value is SyncStatus.Error && (_status.value as SyncStatus.Error).kind == SyncError.Locked && !force) return
         val now = clock()
-        if (!force && now - lastRun < minIntervalMs) return
+        if (!force && !pending && now - lastRun < minIntervalMs) return
+        record.ready.first { it }
         _status.value = SyncStatus.Syncing
         try {
-            round(session, key, now)
-            lastRun = now
+            keyed(key)
+            try { round(session, key, now) } catch (e: GeneralSecurityException) {
+                val fresh = refetchKey() ?: throw e
+                if (fresh.contentEquals(key)) throw e
+                keyed(fresh)
+                round(session, fresh, now)
+            }
+            lastRun = now; pending = false
             db.syncState().upsert(SyncStateEntity(LAST, now, null))
             _status.value = SyncStatus.Idle(now)
         } catch (e: GeneralSecurityException) {
             _status.value = SyncStatus.Error(SyncError.Locked)
         } catch (e: AccountException) {
             if (e.code == 401) { _status.value = SyncStatus.Off; return }
-            _status.value = SyncStatus.Error(SyncError.Server); retry()
+            pending = true; _status.value = SyncStatus.Error(SyncError.Server); retry()
         } catch (e: IOException) {
-            _status.value = SyncStatus.Error(SyncError.Network); retry()
+            pending = true; _status.value = SyncStatus.Error(SyncError.Network); retry()
         }
     }
+
+    /** The bookkeeping only holds under the key it was made with: a different key (another device started fresh) means everything goes up again. */
+    private suspend fun keyed(key: ByteArray) {
+        val fp = Crypto.sha256hex(key)
+        val held = db.syncState().all().firstOrNull { it.key == KEY }
+        if (held != null && held.hash == fp) return
+        if (held != null) { db.syncState().clear(); lastRun = 0L }
+        db.syncState().upsert(SyncStateEntity(KEY, 0L, fp))
+    }
+
+    /** Drive asked once for the key as it is now; null when Drive would not answer or the vault under it will not open. */
+    private suspend fun refetchKey(): ByteArray? = try { linker.refresh(context) } catch (e: Exception) { null }
 
     private suspend fun round(session: String, key: ByteArray, now: Long) {
         val state = db.syncState().all().associateBy { it.key }.toMutableMap()
@@ -136,14 +159,14 @@ class SyncEngine(
         }
 
         val local = record.profile.value
+        val editedAt = record.profileEditedAt().takeIf { it > 0 } ?: now
         val profileState = state[Wire.PROFILE]
         if (local != null) {
             val h = Crypto.sha256hex(Wire.profile(local, 0L).encode().toByteArray())
             if (profileState?.hash != h) {
                 try {
-                    val ts = maxOf(now, (profileState?.ts ?: 0L) + 1)
-                    api.put(session, Wire.PROFILE, Wire.seal(key, Wire.PROFILE, Wire.profile(local, ts).encode(), ts))
-                    remember(state, SyncStateEntity(Wire.PROFILE, ts, h))
+                    api.put(session, Wire.PROFILE, Wire.seal(key, Wire.PROFILE, Wire.profile(local, editedAt).encode(), editedAt))
+                    remember(state, SyncStateEntity(Wire.PROFILE, editedAt, h))
                     profilePushed = true
                 } catch (e: AccountException) { if (e.code != 409) throw e }
             }
@@ -153,11 +176,11 @@ class SyncEngine(
             val known = state[entry.key]
             if (known != null && known.ts >= entry.ts) continue
             if (entry.key == Wire.PROFILE) {
-                if (profilePushed) continue
+                if (profilePushed || (local != null && entry.ts <= editedAt)) continue
                 val blob = api.get(session, entry.key) ?: continue
                 val w = WireProfile.decode(Wire.open(key, entry.key, blob))
                 val p = Wire.toProfile(w, record.profile.value)
-                record.saveProfile(p)
+                record.adoptProfile(p, entry.ts)
                 remember(state, SyncStateEntity(Wire.PROFILE, entry.ts, Crypto.sha256hex(Wire.profile(p, 0L).encode().toByteArray())))
                 continue
             }
@@ -171,15 +194,13 @@ class SyncEngine(
         }
     }
 
-    /** Our own chunk is authoritative: a 409 only means another copy of this device pushed later, so it goes up again, newer. */
+    /** A 409 means the worker holds a newer copy of our chunk: its ts is taken as ours and the chunk counts as pushed. */
     private suspend fun putFresh(session: String, key: ByteArray, k: String, plain: String, now: Long): Long {
-        var ts = now
-        try { api.put(session, k, Wire.seal(key, k, plain, ts)) } catch (e: AccountException) {
+        try { api.put(session, k, Wire.seal(key, k, plain, now)) } catch (e: AccountException) {
             if (e.code != 409) throw e
-            ts = maxOf(now, (api.get(session, k)?.ts ?: 0L) + 1)
-            api.put(session, k, Wire.seal(key, k, plain, ts))
+            return api.get(session, k)?.ts ?: now
         }
-        return ts
+        return now
     }
 
     private suspend fun remember(state: MutableMap<String, SyncStateEntity>, row: SyncStateEntity) { state[row.key] = row; db.syncState().upsert(row) }

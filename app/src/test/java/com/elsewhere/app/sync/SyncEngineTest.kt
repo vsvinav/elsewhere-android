@@ -95,8 +95,8 @@ class SyncEngineTest {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
         val ds = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") }
-        repo = RecordRepository(db, SettingsStore(ds, SecretBox.inMemory()), CitiesLoader(ctx), scope)
-        engine = SyncEngine(api, db, store, repo, identity, DriveLinker(drive, drive, accounts), scope, { now }, { retries++ }, minIntervalMs = 15 * 60_000L)
+        repo = RecordRepository(db, SettingsStore(ds, SecretBox.inMemory()), CitiesLoader(ctx), scope).apply { clock = { now } }
+        engine = SyncEngine(ctx, api, db, store, repo, identity, DriveLinker(drive, drive, accounts), scope, { now }, { retries++ }, minIntervalMs = 15 * 60_000L)
     }
 
     @After fun tearDown() { scope.cancel(); db.close(); dir.deleteRecursively() }
@@ -185,12 +185,72 @@ class SyncEngineTest {
         assertEquals(SyncStatus.Off, engine.status.value)
     }
 
-    @Test fun `a stale answer on our own chunk sends it again, newer`() = runTest {
-        api.blobs["$mySource:2024-01"] = Wire.seal(key, "$mySource:2024-01", """{"v":1,"stays":[]}""", now + 5000)
+    @Test fun `a stale answer on our own chunk takes the worker's ts as pushed and the round goes on`() = runTest {
+        val held = Wire.seal(key, "$mySource:2023-12", """{"v":1,"stays":[]}""", now + 5000)
+        api.blobs["$mySource:2023-12"] = held
+        repo.insertDevice(listOf(stay(1703000000L), stay(1704067200L)), emptyList(), emptyList())
+        engine.run(force = true)
+        assertEquals("the worker's copy stands", held, api.blobs["$mySource:2023-12"])
+        assertEquals(now + 5000, db.syncState().all().single { it.key == "$mySource:2023-12" }.ts)
+        assertEquals(1, chunk("$mySource:2024-01").stays.size)
+        assertEquals(SyncStatus.Idle(now), engine.status.value)
+        api.calls.clear()
+        engine.run(force = true)
+        assertEquals("counted as pushed", listOf("list"), api.calls)
+    }
+
+    @Test fun `a Drive key that differs from the one the bookkeeping was made under sends everything again`() = runTest {
         repo.insertDevice(listOf(stay(1704067200L)), emptyList(), emptyList())
         engine.run(force = true)
-        assertEquals(now + 5001, api.blobs["$mySource:2024-01"]!!.ts)
-        assertEquals(1, chunk("$mySource:2024-01").stays.size)
+        val other = ByteArray(32) { 7 }
+        api.blobs.clear(); api.calls.clear()
+        store.saveDriveKey(Vault.b64(other))
+        engine.run(force = true)
+        assertTrue(api.calls.contains("put $mySource:2024-01"))
+        assertEquals(1, MonthChunk.decode(Wire.open(other, "$mySource:2024-01", api.blobs["$mySource:2024-01"]!!)).stays.size)
+        assertEquals(SyncStatus.Idle(now), engine.status.value)
+    }
+
+    @Test fun `a blob that will not open fetches the Drive key again once, then the round goes on under it`() = runTest {
+        repo.insertDevice(listOf(stay(1704067200L)), emptyList(), emptyList())
+        engine.run(force = true)
+        val newKey = ByteArray(32) { 9 }
+        drive.key = newKey
+        val other = "d_otherphone0001"
+        api.blobs["$other:2023-11"] = Wire.seal(newKey, "$other:2023-11", MonthChunk(stays = listOf(WireStay(Wire.stayId(other, 1700000000L), 1.5, -2.25, null, 1700000000L, 1700003600L))).encode(), 2L)
+        api.calls.clear()
+        engine.run(force = true)
+        assertEquals(SyncStatus.Idle(now), engine.status.value)
+        assertEquals(listOf(Vault.b64(newKey)), accounts.driveKeys)
+        assertEquals(1, db.visits().bySource(SOURCE_SYNC).size)
+        assertEquals("our chunk went up again under the new key", 1, MonthChunk.decode(Wire.open(newKey, "$mySource:2024-01", api.blobs["$mySource:2024-01"]!!)).stays.size)
+
+        api.blobs["d_otherphone0002:2023-11"] = Wire.seal(ByteArray(32) { 11 }, "d_otherphone0002:2023-11", """{"v":1,"stays":[]}""", 3L)
+        store.saveDriveKey(Vault.b64(newKey))
+        engine.run(force = true)
+        assertEquals(SyncStatus.Error(SyncError.Locked), engine.status.value)
+        assertEquals("asked Drive once more, not in a loop", 2, accounts.driveKeys.size)
+    }
+
+    @Test fun `an older profile from the worker does not replace one edited here, which goes up with its edit time`() = runTest {
+        api.blobs["profile"] = Wire.seal(key, "profile", WireProfile(ts = now - 10, name = "Grace", homes = emptyList(), units = "mi").encode(), now - 10)
+        repo.saveProfile(profile); repo.profile.first { it != null }
+        now += 5
+        engine.run(force = true)
+        assertEquals("Ada", repo.profile.value!!.name)
+        val sent = WireProfile.decode(Wire.open(key, "profile", api.blobs["profile"]!!))
+        assertEquals("Ada", sent.name)
+        assertEquals(now - 5, sent.ts)
+    }
+
+    @Test fun `a round that failed offline runs again on the next nudge, interval or not`() = runTest {
+        engine.run(force = true)
+        api.fail = IOException("offline"); now += 60_000
+        engine.run(force = true)
+        assertEquals(SyncStatus.Error(SyncError.Network), engine.status.value)
+        api.fail = null; api.calls.clear(); now += 60_000
+        engine.run(force = false)
+        assertEquals(listOf("list"), api.calls)
         assertEquals(SyncStatus.Idle(now), engine.status.value)
     }
 
@@ -209,7 +269,7 @@ class SyncEngineTest {
         engine.run(force = true)
         api.blobs["d_otherphone0001:2023-11"] = Wire.seal(key, "d_otherphone0001:2023-11", """{"v":1,"stays":[]}""", 1L)
         engine.run(force = true)
-        assertEquals(3, db.syncState().all().size)
+        assertEquals(4, db.syncState().all().size)
 
         engine.startFresh(ApplicationProvider.getApplicationContext())
         assertEquals(1, api.deletes)
