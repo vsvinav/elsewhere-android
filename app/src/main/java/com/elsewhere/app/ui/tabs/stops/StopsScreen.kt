@@ -77,11 +77,15 @@ private const val PAGE = 48
 @Composable
 fun StopsTab(vm: StopsViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    ui?.let { StopsScreen(it, vm::setFilter, onSeen = vm::seen) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
+    val addresses by vm.addresses.collectAsStateWithLifecycle()
+    ui?.let { StopsScreen(it, vm::setFilter, onSeen = vm::seen, addresses = addresses) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
 }
 
 @Composable
-fun StopsScreen(ui: StopsUi, onFilter: (StopsFilter) -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true, onSeen: (String) -> Unit = {}) {
+fun StopsScreen(
+    ui: StopsUi, onFilter: (StopsFilter) -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true,
+    onSeen: (String) -> Unit = {}, addresses: Map<String, String?> = emptyMap(),
+) {
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     var limit by rememberSaveable(ui.filter) { mutableIntStateOf(PAGE) }
     val sel = open?.let { id -> ui.list.firstOrNull { it.id == id } }
@@ -98,7 +102,7 @@ fun StopsScreen(ui: StopsUi, onFilter: (StopsFilter) -> Unit, modifier: Modifier
             Spacer(Modifier.height(20.dp))
             shown.chunked(2).forEachIndexed { r, pair ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    pair.forEachIndexed { c, s -> Tag(s, r * 2 + c, open == s.id, Modifier.weight(1f).seen(s, onSeen)) { open = s.id } }
+                    pair.forEachIndexed { c, s -> Tag(s, r * 2 + c, open == s.id, Modifier.weight(1f).seen(s, onSeen), addresses[s.id]) { open = s.id } }
                     if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(16.dp))
@@ -111,7 +115,7 @@ fun StopsScreen(ui: StopsUi, onFilter: (StopsFilter) -> Unit, modifier: Modifier
         contentPadding = PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item(span = { GridItemSpan(2) }) { Column { header(); Spacer(Modifier.height(4.dp)) } }
-        itemsIndexed(shown, key = { _, s -> s.id }) { i, s -> Tag(s, i, open == s.id, Modifier.seen(s, onSeen)) { open = s.id; scope.launch { grid.animateScrollToItem(0) } } }
+        itemsIndexed(shown, key = { _, s -> s.id }) { i, s -> Tag(s, i, open == s.id, Modifier.seen(s, onSeen), addresses[s.id]) { open = s.id; scope.launch { grid.animateScrollToItem(0) } } }
         if (limit < ui.list.size) item(span = { GridItemSpan(2) }) {
             val more = minOf(PAGE, ui.list.size - limit)
             Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) { InkButton("Print $more more tags", { limit += PAGE }) }
@@ -119,8 +123,9 @@ fun StopsScreen(ui: StopsUi, onFilter: (StopsFilter) -> Unit, modifier: Modifier
     }
 }
 
-/** A tag still missing its name or photo asks for them the first time it is on screen (the web's `useInView`). */
-private fun Modifier.seen(s: Stop, onSeen: (String) -> Unit) = if (s.place.name == null || s.place.photo == null) onFirstVisible { onSeen(s.id) } else this
+/** A tag still missing its name, photo or street asks for them the first time it is on screen (the web's `useInView`). */
+private fun Modifier.seen(s: Stop, onSeen: (String) -> Unit) =
+    if (s.place.name == null || s.place.photo == null || s.address(null) == null) onFirstVisible { onSeen(s.id) } else this
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -171,14 +176,19 @@ private fun Chip(label: String, n: String?, on: Boolean, role: Role = Role.Check
     }
 }
 
-/** One luggage tag: photo, what and where, three quick figures, a strip of tape across the top. */
+/**
+ * One luggage tag: photo, what and where, three quick figures, a strip of tape across the top. The street, from Places
+ * or `nominatim`, takes the sub-line, and the name line too when the stop has no name; until it is known the card reads as before.
+ */
 @Composable
-internal fun Tag(s: Stop, index: Int, open: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun Tag(s: Stop, index: Int, open: Boolean, modifier: Modifier = Modifier, nominatim: String? = null, onClick: () -> Unit) {
     val tilt = listOf(-1.2f, 0.9f, -0.6f, 1.4f)[index % 4]
+    val address = s.address(nominatim)
+    val title = s.place.name ?: address ?: s.name
     Box(modifier.rotate(tilt)) {
         Column(
             Modifier.fillMaxWidth().background(if (open) Poster.Stock2 else Color.White).border(2.dp, Poster.Ink)
-                .clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = "Open ${s.name}" }
+                .clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = "Open $title" }
                 .padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 14.dp),
         ) {
             androidx.compose.runtime.CompositionLocalProvider(LocalContentColor provides Poster.Ink, LocalMuted provides Poster.Ink3) {
@@ -186,9 +196,9 @@ internal fun Tag(s: Stop, index: Int, open: Boolean, modifier: Modifier = Modifi
                 Spacer(Modifier.height(10.dp))
                 Text((s.kind ?: if (s.place.name != null) "place" else "unnamed stop").uppercase(), color = Poster.Ink3, style = PosterType.Caps.copy(fontSize = 10.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
-                Text(s.name.uppercase(), color = Poster.Ink, style = PosterType.Display.copy(fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 0.95.em), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(title.uppercase(), color = Poster.Ink, style = PosterType.Display.copy(fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 0.95.em), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
-                Text(s.sub, color = Poster.Ink3, style = PosterType.Label.copy(fontSize = 12.sp, lineHeight = 1.3.em), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(address ?: s.sub, color = Poster.Ink3, style = PosterType.Label.copy(fontSize = 12.sp, lineHeight = 1.3.em), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Mini("Visits", n0(s.place.nVisits))

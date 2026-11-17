@@ -8,6 +8,7 @@ import com.elsewhere.app.analytics.placeName
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.Role
+import com.elsewhere.app.ingest.Geocoder
 import com.elsewhere.app.ingest.PlaceLookups
 import com.elsewhere.app.ui.shell.RangeStore
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class Sort(val label: String) { VISITS("Most visits"), HOURS("Most time"), RECENT("Recently seen"), FIRST("Newest") }
@@ -30,6 +32,8 @@ data class StopsFilter(val cat: Cat? = null, val sort: Sort = Sort.VISITS, val n
 data class Stop(val id: String, val place: Place, val cat: Cat) {
     val name get() = placeName(place, id)
     val sub get() = listOfNotNull(place.city, place.countryCode).joinToString(", ").ifEmpty { "city not on record" }
+    /** The street line a tag shows, given what Nominatim said for it so far (see [stopAddress]). */
+    fun address(nominatim: String?) = stopAddress(place.address, place.city, nominatim)
     /** What Google calls it, or its role at home. */
     val kind: String? get() = when (place.role) { Role.HOME -> "Home"; Role.WORK -> "Work"; null -> place.primaryType?.replace('_', ' ') }
 }
@@ -53,14 +57,24 @@ fun stopsUi(data: Record, filter: StopsFilter): StopsUi {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class StopsViewModel @Inject constructor(private val range: RangeStore, private val lookups: PlaceLookups) : ViewModel() {
+class StopsViewModel @Inject constructor(private val range: RangeStore, private val lookups: PlaceLookups, private val geocoder: Geocoder) : ViewModel() {
     private val filter = MutableStateFlow(StopsFilter())
+    private val asked = HashSet<String>()
+    private val streets = MutableStateFlow<Map<String, String?>>(emptyMap())
+    /** What Nominatim said per place id, asked only once a tag without a Places street was on screen; null means it had nothing. */
+    val addresses: StateFlow<Map<String, String?>> = streets
     val ui: StateFlow<StopsUi?> = combine(range.filtered, filter) { d, f -> d?.let { it to f } }
         .mapLatest { it?.let { (d, f) -> stopsUi(d, f) } }
         .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun setFilter(f: StopsFilter) = filter.update { f }
 
-    /** A tag has scrolled into view: ask for its name and photo. */
-    fun seen(id: String) { range.filtered.value?.let { lookups.need(listOf(id), it.places) } }
+    /** A tag has scrolled into view: ask for its name and photo, and for its street when Places has none. */
+    fun seen(id: String) {
+        val places = range.filtered.value?.places ?: return
+        lookups.need(listOf(id), places)
+        val p = places[id] ?: return
+        if (stopAddress(p.address, p.city, null) != null || !asked.add(id)) return
+        viewModelScope.launch { val a = geocoder.address(p.lat, p.lng); streets.update { it + (id to a) } }
+    }
 }
