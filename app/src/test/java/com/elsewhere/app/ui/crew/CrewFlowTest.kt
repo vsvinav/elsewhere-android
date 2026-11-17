@@ -104,7 +104,7 @@ class CrewFlowTest {
         val relay = RelayClient(OkHttpClient(), { server.url("/").toString() }, { store.keys() })
         val publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { null }, scope)
         val hub = RoomHub(store, relay, scope)
-        val engine = SonarEngine(store, hub, publisher, db, object : SonarAlerts { override fun nearby(friend: Friend, test: Boolean, sent: Boolean) = Unit }, scope)
+        val engine = SonarEngine(store, hub, publisher, db, object : SonarAlerts { override fun nearby(friend: Friend, test: Boolean, sent: Boolean) = Unit }, scope, rehearsalUntil = { settings.settings.first().rehearsalUntil })
         vm = CrewViewModel(store, Pairing(store, relay, { "Me" }), publisher, hub, engine, settings, Fakes.Control(Recording(enabled = true)))
         vm.pollMs = 60_000L
     }
@@ -207,6 +207,15 @@ class CrewFlowTest {
         node("PAIR").performClick()
         await { vm.ui.value?.pair is PairState.Failed }
         assertEquals(RELAY_DOWN, (vm.ui.value?.pair as PairState.Failed).message)
+    }
+
+    @Test fun `the header wears a REHEARSAL tag only while rehearsing`() {
+        setContent()
+        await { vm.ui.value != null }
+        rule.onNodeWithText(REHEARSAL_TAG).assertDoesNotExist()
+        runBlocking { settings.saveSettings(settings.settings.first().copy(rehearsalUntil = System.currentTimeMillis() + 3_600_000L)) }
+        await { vm.ui.value?.rehearsal == true }
+        node(REHEARSAL_TAG).assertIsDisplayed()
     }
 
     @Test fun `without a relay the code bill tells you where to set one`() {

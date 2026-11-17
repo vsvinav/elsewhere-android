@@ -38,8 +38,8 @@ object CrewFixtures {
 
     fun ui(
         friends: List<Friend> = this.friends, share: ShareSession? = null, pair: PairState = PairState.Idle, relay: Boolean = true,
-        recording: Boolean = true, fixes: Map<String, FriendFix> = this.fixes, code: ShareCode? = this.code,
-    ) = CrewUi(friends, code, pair, share, relay, Recording(enabled = recording, since = NOW / 1000 - 3600), fixes, NOW)
+        recording: Boolean = true, fixes: Map<String, FriendFix> = this.fixes, code: ShareCode? = this.code, rehearsal: Boolean = false,
+    ) = CrewUi(friends, code, pair, share, relay, Recording(enabled = recording, since = NOW / 1000 - 3600), fixes, NOW, rehearsal)
 
     object NoOp : CrewActions {
         override fun newCode() {}

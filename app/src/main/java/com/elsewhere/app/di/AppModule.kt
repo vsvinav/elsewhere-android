@@ -123,8 +123,8 @@ object AppModule {
     @Provides @Singleton fun publisher(crew: CrewStore, hub: RoomHub, recorder: Recorder, db: ElsewhereDb, cities: CitiesLoader, scope: CoroutineScope): CrewPublisher =
         CrewPublisher.forApp(crew, hub, recorder, db, cities, scope)
     @Provides @Singleton fun sonarAlerts(@ApplicationContext ctx: Context): SonarAlerts = SonarNotifier(ctx)
-    @Provides @Singleton fun sonarEngine(crew: CrewStore, hub: RoomHub, publisher: CrewPublisher, db: ElsewhereDb, alerts: SonarAlerts, scope: CoroutineScope): SonarEngine =
-        SonarEngine(crew, hub, publisher, db, alerts, scope)
+    @Provides @Singleton fun sonarEngine(crew: CrewStore, hub: RoomHub, publisher: CrewPublisher, db: ElsewhereDb, alerts: SonarAlerts, scope: CoroutineScope, settings: SettingsStore): SonarEngine =
+        SonarEngine(crew, hub, publisher, db, alerts, scope, rehearsalUntil = { settings.settings.first().rehearsalUntil })
 
     @Provides @Singleton fun accountClient(http: OkHttpClient, settings: SettingsStore): AccountClient =
         AccountClient(http, { runBlocking { settings.settings.first().accountUrl } })

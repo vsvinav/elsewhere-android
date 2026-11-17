@@ -56,6 +56,8 @@ data class CrewUi(
     val recording: Recording,
     val fixes: Map<String, FriendFix>,
     val now: Long,
+    /** Sonar rehearsal is on: pings fire on nearness alone. */
+    val rehearsal: Boolean = false,
 ) {
     val sharing: Boolean get() = share?.active(now) == true
     fun sharingWith(f: Friend) = share?.takeIf { it.active(now) }?.friendIds?.contains(f.deviceId) == true
@@ -109,10 +111,10 @@ class CrewViewModel @Inject constructor(
 
     val ui: StateFlow<CrewUi?> = combine(
         combine(store.friends, store.code, pair) { f, c, p -> Triple(f, c, p) },
-        combine(store.share, settings.settings.map { it.relayUrl.isNotBlank() }, record.recording) { s, r, rec -> Triple(s, r, rec) },
+        combine(store.share, settings.settings, record.recording) { s, r, rec -> Triple(s, r, rec) },
         hub.fixes, tick,
-    ) { (friends, code, p), (share, relay, rec), fixes, now ->
-        CrewUi(friends, code?.takeIf { !it.expired(now) }, p, share, relay, rec, fixes, now)
+    ) { (friends, code, p), (share, prefs, rec), fixes, now ->
+        CrewUi(friends, code?.takeIf { !it.expired(now) }, p, share, prefs.relayUrl.isNotBlank(), rec, fixes, now, rehearsal = prefs.rehearsalUntil > now)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {

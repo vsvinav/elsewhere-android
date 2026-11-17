@@ -30,7 +30,7 @@ interface SonarAlerts {
 }
 
 /** A hit as the Map wants it: who, when it landed on this phone (ms), and whether it was fired on purpose. */
-data class SonarHit(val friend: Friend, val hitId: String, val at: Long, val test: Boolean = false)
+data class SonarHit(val friend: Friend, val hitId: String, val at: Long, val test: Boolean = false, val rehearsal: Boolean = false)
 
 /**
  * Listens to the rooms and runs [decide] once per incoming ping — never on a timer, never per frame.
@@ -45,6 +45,8 @@ class SonarEngine(
     private val scope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
     private val zone: () -> ZoneId = ZoneId::systemDefault,
+    /** When Sonar rehearsal lapses (epoch ms); 0 or past means off. */
+    private val rehearsalUntil: suspend () -> Long = { 0L },
 ) {
     private val hitsFlow = MutableSharedFlow<SonarHit>(extraBufferCapacity = 8)
     val hits: SharedFlow<SonarHit> = hitsFlow.asSharedFlow()
@@ -77,28 +79,29 @@ class SonarEngine(
         if (p.lat == null || p.lng == null) return Decision.Quiet
         val mine = db.rawFixes().latest()?.toSonarFix() ?: return Decision.Quiet
         val friendFix = Fix(p.t * 1000, p.lat, p.lng)
+        val rehearsal = rehearsalUntil() > now
         val decision = withContext(Dispatchers.Default) {
             val history = dayRows(db.visits().since(now / 1000 - 30L * 86_400))
             val recent = db.rawFixes().since(now / 1000 - 6L * 3600).map { it.toSonarFix() }
             val me = mySide(mine, history, recent, friendFix, now)
             val them = Side(friendFix, p.habitat, p.absenceDays)
-            decide(me, them, friend.pairId, now, store.debounce(listOf(friend.pairId)), incomingHit)
+            decide(me, them, friend.pairId, now, store.debounce(listOf(friend.pairId)), incomingHit, rehearsal)
         }
         when (decision) {
             is Decision.Fire -> {
                 seenLock.withLock { seenHits[decision.hitId] = Unit }
                 store.recordHit(friend.pairId, now)
                 publisher.carryHit(friend, Ping.Hit(decision.hitId, now / 1000))
-                land(friend, decision.hitId, now)
+                land(friend, decision.hitId, now, rehearsal = rehearsal)
             }
-            is Decision.Echo -> { store.recordHit(friend.pairId, now); land(friend, decision.hitId, now) }
+            is Decision.Echo -> { store.recordHit(friend.pairId, now); land(friend, decision.hitId, now, rehearsal = rehearsal) }
             Decision.Quiet -> Unit
         }
         return decision
     }
 
-    private suspend fun land(friend: Friend, hitId: String, now: Long, test: Boolean = false, sent: Boolean = false) {
-        hitsFlow.emit(SonarHit(friend, hitId, now, test))
+    private suspend fun land(friend: Friend, hitId: String, now: Long, test: Boolean = false, sent: Boolean = false, rehearsal: Boolean = false) {
+        hitsFlow.emit(SonarHit(friend, hitId, now, test, rehearsal))
         if (!friend.muted(now)) alerts.nearby(friend, test, sent)
     }
 

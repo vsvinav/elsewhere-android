@@ -3,6 +3,10 @@ package com.elsewhere.app.sonar
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
+import android.os.Looper
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import com.elsewhere.app.data.SettingsStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -62,6 +66,7 @@ class SonarEngineTest {
     private lateinit var db: ElsewhereDb
     private lateinit var scope: CoroutineScope
     private lateinit var store: CrewStore
+    private lateinit var settings: SettingsStore
     private lateinit var dir: File
     private val rooms = FakeRooms()
     private val alerts = Rec()
@@ -77,7 +82,8 @@ class SonarEngineTest {
         store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }, SecretBox.inMemory())
         val publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { null }, scope) { now }
         val hub = RoomHub(store, RelayClient(OkHttpClient(), { "" }, { store.keys() }), scope)
-        engine = SonarEngine(store, hub, publisher, db, alerts, scope, { now }, { ZoneId.of("UTC") })
+        settings = SettingsStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") }, SecretBox.inMemory())
+        engine = SonarEngine(store, hub, publisher, db, alerts, scope, { now }, { ZoneId.of("UTC") }, rehearsalUntil = { settings.settings.first().rehearsalUntil })
         store.addFriend(marta)
         store.startShare(ShareSession(setOf("M"), now, ShareLength.UNTIL_STOP.until(now)))
         db.rawFixes().insertAll(listOf(RawFixEntity(ts = now / 1000 - 30, lat = 38.7223, lng = -9.1393, accuracyM = 10f, speedMps = null, altitude = null, activity = null, batteryPct = null)))
@@ -153,6 +159,23 @@ class SonarEngineTest {
         val s = now / 1000; val day = 86_400L
         db.visits().insertAll((1..5).map { i -> VisitEntity(i, s - i * day, s - i * day + 3600, 0, "p$i", 38.7230, -9.1400, "stay", 1.0, 1, "Lisbon", "PT", null) })
         assertEquals(Decision.Quiet, engine.evaluate(ping()))
+    }
+
+    @Test fun `rehearsal fires at home, marks the hit, and lapses after its day`() = runTest {
+        val s = now / 1000; val day = 86_400L
+        db.visits().insertAll((1..5).map { i -> VisitEntity(i, s - i * day, s - i * day + 3600, 0, "p$i", 38.7230, -9.1400, "stay", 1.0, 1, "Lisbon", "PT", null) })
+        settings.saveSettings(settings.settings.first().copy(rehearsalUntil = now + 24 * 3_600_000L))
+        val hits = ArrayList<SonarHit>()
+        val job = scope.launch { engine.hits.collect { hits += it } }
+        Thread.sleep(100)
+        assertTrue(engine.evaluate(ping(habitat = true, absence = 0)) is Decision.Fire)
+        assertEquals(listOf("Marta"), alerts.names)
+        shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(100)
+        assertEquals(true, hits.single().rehearsal)
+        job.cancel()
+        now += 25 * 3_600_000L
+        db.rawFixes().insertAll(listOf(RawFixEntity(ts = now / 1000 - 30, lat = 38.7223, lng = -9.1393, accuracyM = 10f, speedMps = null, altitude = null, activity = null, batteryPct = null)))
+        assertEquals(Decision.Quiet, engine.evaluate(ping(habitat = true, absence = 0, t = now / 1000)))
     }
 
     @Test fun `an incoming hit echoes without a sound when muted, and still debounces`() = runTest {

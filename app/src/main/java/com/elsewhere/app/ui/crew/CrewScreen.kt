@@ -2,6 +2,8 @@ package com.elsewhere.app.ui.crew
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.em
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -97,6 +99,10 @@ fun CrewScreen(
             Column {
                 CapsText("Crew · ${ui?.friends?.size ?: 0} ${if (ui?.friends?.size == 1) "friend" else "friends"}", size = 10.sp)
                 DisplayText("Crew", 56.sp)
+            }
+            if (ui?.rehearsal == true) {
+                Spacer(Modifier.weight(1f))
+                RedTag(REHEARSAL_TAG)
             }
         }
         if (ui != null) {
@@ -289,4 +295,16 @@ fun QrSheet(code: ShareCode, now: Long, onClose: () -> Unit, modifier: Modifier 
         Spacer(Modifier.height(20.dp))
         InkButton("Done", onClose, Modifier.fillMaxWidth(), quiet = true)
     }
+}
+
+/** The red caps tag the Crew header wears while Sonar is rehearsing. */
+const val REHEARSAL_TAG = "REHEARSAL"
+
+@Composable
+fun RedTag(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text, color = Poster.Stock, softWrap = false,
+        style = PosterType.Display.copy(fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.03.em, lineHeight = 1.em),
+        modifier = modifier.background(Poster.Red).padding(horizontal = 7.dp, vertical = 4.dp),
+    )
 }

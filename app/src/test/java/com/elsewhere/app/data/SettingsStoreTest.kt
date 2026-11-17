@@ -50,6 +50,12 @@ class SettingsStoreTest {
         assertEquals("", store.llm.first().baseUrl)
     }
 
+    @Test fun `sonar rehearsal is off until a time is stored, and round-trips`() = runTest {
+        assertEquals(0L, store.settings.first().rehearsalUntil)
+        store.saveSettings(store.settings.first().copy(rehearsalUntil = 1_763_222_520_000L))
+        assertEquals(1_763_222_520_000L, store.settings.first().rehearsalUntil)
+    }
+
     @Test fun `the account service URL defaults and round-trips trimmed`() = runTest {
         assertEquals("https://elsewhere-account.vinav.workers.dev", store.settings.first().accountUrl)
         store.saveSettings(store.settings.first().copy(accountUrl = " https://acct.example.org "))

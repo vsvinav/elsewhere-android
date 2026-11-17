@@ -26,6 +26,7 @@ class SettingsSnapshot {
         override fun testLlm(c: LlmConfig) {}
         override fun setUnits(u: Units) {}
         override fun setRelayUrl(url: String) {}
+        override fun setRehearsal(on: Boolean) {}
         override fun setAccountUrl(url: String) {}
         override fun logOut() {}
         override fun deleteAccount(activity: android.content.Context) {}

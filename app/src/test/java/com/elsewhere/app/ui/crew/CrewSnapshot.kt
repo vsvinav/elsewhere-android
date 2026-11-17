@@ -36,6 +36,8 @@ class CrewSnapshot {
 
     @Test fun crew() = shoot { CrewScreen(CrewFixtures.ui(share = CrewFixtures.share), CrewFixtures.NoOp, onBack = {}, scroll = false, onScan = {}, onShareCode = {}) }
 
+    @Test fun crewRehearsal() = shoot { CrewScreen(CrewFixtures.ui(rehearsal = true), CrewFixtures.NoOp, onBack = {}, scroll = false, onScan = {}, onShareCode = {}) }
+
     @Test fun friendDetail() = shoot {
         CrewScreen(CrewFixtures.ui(), CrewFixtures.NoOp, onBack = {}, scroll = false, onScan = {}, onShareCode = {}, openFriend = CrewFixtures.marta.deviceId)
     }

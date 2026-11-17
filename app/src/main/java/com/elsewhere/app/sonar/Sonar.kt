@@ -84,8 +84,7 @@ fun newcomerAbsence(me: Side, friend: Side): Int {
 }
 
 fun eligible(me: Side, friend: Side, now: Long): Boolean =
-    now - me.fix.ts <= FRESH_MS && now - friend.fix.ts <= FRESH_MS &&
-        within(me.fix, friend.fix) &&
+    nearNow(me, friend, now) &&
         !me.habitat && !friend.habitat &&
         newcomerAbsence(me, friend) >= ABSENCE_MIN_DAYS
 
@@ -93,14 +92,26 @@ fun debounced(d: Debounce, pairId: String, now: Long): Boolean = (d.lastHitByPai
 
 fun recordHit(d: Debounce, pairId: String, now: Long): Debounce = Debounce(d.lastHitByPair + (pairId to now))
 
-/** The one entry point; the friend's `hit` field, if any, wins over my own evaluation so both sides agree. */
-fun decide(me: Side, friend: Side, pairId: String, now: Long, d: Debounce, incomingHit: String?): Decision =
+/**
+ * The one entry point; the friend's `hit` field, if any, wins over my own evaluation so both sides agree.
+ * In [rehearsal] habitat, absence and the day's debounce are skipped; only fresh and within a mile still hold.
+ */
+fun decide(me: Side, friend: Side, pairId: String, now: Long, d: Debounce, incomingHit: String?, rehearsal: Boolean = false): Decision =
     when {
+        rehearsal -> when {
+            incomingHit != null -> Decision.Echo(incomingHit)
+            nearNow(me, friend, now) -> Decision.Fire("$pairId:$now")
+            else -> Decision.Quiet
+        }
         debounced(d, pairId, now) -> Decision.Quiet
         incomingHit != null -> Decision.Echo(incomingHit)
         eligible(me, friend, now) -> Decision.Fire("$pairId:$now")
         else -> Decision.Quiet
     }
+
+/** Both fixes fresh and within a mile: the part of [eligible] that rehearsal keeps. */
+fun nearNow(me: Side, friend: Side, now: Long): Boolean =
+    now - me.fix.ts <= FRESH_MS && now - friend.fix.ts <= FRESH_MS && within(me.fix, friend.fix)
 
 /** A test ping: a friend fired on purpose, so it echoes regardless of place, habitat, gap or debounce; a seen id is nothing. */
 fun decideTest(incomingHit: String?): Decision = if (incomingHit != null) Decision.Echo(incomingHit) else Decision.Quiet

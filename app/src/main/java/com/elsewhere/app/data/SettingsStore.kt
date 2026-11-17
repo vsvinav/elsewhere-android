@@ -34,6 +34,8 @@ data class Settings(
     val relayUrl: String = DEFAULT_RELAY,
     /** Where accounts and recovery vaults live. */
     val accountUrl: String = DEFAULT_ACCOUNT,
+    /** Sonar rehearsal: pings fire on nearness alone until this moment (epoch ms); 0 means off. */
+    val rehearsalUntil: Long = 0,
 ) {
     companion object {
         const val DEFAULT_RELAY = "https://elsewhere-relay.vinav.workers.dev"
@@ -62,6 +64,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
         val keyCheckedAt = longPreferencesKey("keyCheckedAt")
         val limitedAccepted = booleanPreferencesKey("limitedAccepted")
         val relayUrl = stringPreferencesKey("relayUrl")
+        val rehearsalUntil = longPreferencesKey("rehearsalUntil")
         val accountUrl = stringPreferencesKey("accountUrl")
         val detailsCalls = intPreferencesKey("detailsCalls")
         val photoCalls = intPreferencesKey("photoCalls")
@@ -100,6 +103,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
             limitedAccepted = p[K.limitedAccepted] ?: false,
             relayUrl = p[K.relayUrl] ?: Settings.DEFAULT_RELAY,
             accountUrl = p[K.accountUrl]?.takeIf { it.isNotBlank() } ?: Settings.DEFAULT_ACCOUNT,
+            rehearsalUntil = p[K.rehearsalUntil] ?: 0L,
         )
     }
 
@@ -150,6 +154,7 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
             it[K.mapProvider] = s.mapProvider.name
             it[K.keyPlaces] = s.keyPlaces; it[K.keyTiles] = s.keyTiles; it[K.keyCheckedAt] = s.keyCheckedAt; it[K.limitedAccepted] = s.limitedAccepted
             it[K.relayUrl] = s.relayUrl.trim(); it[K.accountUrl] = s.accountUrl.trim()
+            it[K.rehearsalUntil] = s.rehearsalUntil
         }
     }
 

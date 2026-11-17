@@ -101,6 +101,17 @@ class SonarTest {
         assertEquals(Decision.Quiet, decideTest(null), "a test ping whose hit was already seen is nothing")
     }
 
+    @Test fun `rehearsal skips habitat, absence and debounce but keeps fresh and within a mile`() {
+        val me = Side(lisbon, true, 0)
+        val friend = Side(at(38.7230, -9.1400, now + 1), true, 0)
+        assertEquals(Decision.Quiet, decide(me, friend, "PAIR", now, Debounce(), null), "at home, for real")
+        assertEquals(Decision.Fire("PAIR:$now"), decide(me, friend, "PAIR", now, Debounce(), null, rehearsal = true), "at home, rehearsing")
+        assertEquals(Decision.Fire("PAIR:$now"), decide(me, friend, "PAIR", now, recordHit(Debounce(), "PAIR", now - 1000), null, rehearsal = true), "debounced, rehearsing")
+        assertEquals(Decision.Echo("PAIR:1"), decide(me, friend, "PAIR", now, recordHit(Debounce(), "PAIR", now - 1000), "PAIR:1", rehearsal = true), "a friend's hit still echoes")
+        assertEquals(Decision.Quiet, decide(me, friend.copy(fix = at(38.7230, -9.1400, now - 11 * 60_000)), "PAIR", now, Debounce(), null, rehearsal = true), "stale")
+        assertEquals(Decision.Quiet, decide(me, friend.copy(fix = at(38.7223 + 1700 / 111_320.0, -9.1393)), "PAIR", now, Debounce(), null, rehearsal = true), "1700 m away")
+    }
+
     @Test fun `habitat over a hundred thousand rows is quick`() {
         val rows = (0 until 100_000).map { i -> DayAt(day(i % 29), 38.0 + (i % 100) * 0.01, -9.0 - (i % 37) * 0.01) }
         val t0 = System.nanoTime()
