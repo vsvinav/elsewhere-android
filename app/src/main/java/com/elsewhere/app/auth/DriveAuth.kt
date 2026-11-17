@@ -13,6 +13,8 @@ import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -42,18 +44,21 @@ class PlayDriveAuth @Inject constructor() : DriveAuth {
         }
     }
 
-    override suspend fun accessToken(activity: Context): String {
+    private val one = Mutex()
+
+    /** One consent at a time: a second caller waits rather than losing the first's result. */
+    override suspend fun accessToken(activity: Context): String = one.withLock {
         val client = Identity.getAuthorizationClient(activity)
         val request = AuthorizationRequest.builder().setRequestedScopes(listOf(Scope(SCOPE))).build()
         val result = try { client.authorize(request).await() } catch (e: Exception) { throw DriveAuthFailed(e) }
-        if (!result.hasResolution()) return result.accessToken ?: throw DriveAuthFailed()
+        if (!result.hasResolution()) return@withLock result.accessToken ?: throw DriveAuthFailed()
         val l = launcher ?: throw DriveAuthFailed()
         val sender = result.pendingIntent?.intentSender ?: throw DriveAuthFailed()
         val d = CompletableDeferred<Intent?>()
         pending = d
         l.launch(IntentSenderRequest.Builder(sender).build())
         val data = d.await() ?: throw DriveAuthFailed()
-        return try { client.getAuthorizationResultFromIntent(data).accessToken } catch (e: Exception) { throw DriveAuthFailed(e) } ?: throw DriveAuthFailed()
+        try { client.getAuthorizationResultFromIntent(data).accessToken } catch (e: Exception) { throw DriveAuthFailed(e) } ?: throw DriveAuthFailed()
     }
 
     private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { cont ->

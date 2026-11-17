@@ -5,6 +5,7 @@ import com.elsewhere.app.account.Accounts
 import com.elsewhere.app.account.DriveLink
 import com.elsewhere.app.account.Vault
 import com.elsewhere.app.auth.DriveAuth
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,7 +31,7 @@ class DriveLinker @Inject constructor(private val auth: DriveAuth, private val f
 
     /** Delete account: the key file goes too, when Drive lets us; the account goes either way. */
     suspend fun deleteAccount(activity: Context) {
-        if (accounts.account.first()?.driveKey != null) runCatching { files.delete(auth.accessToken(activity)) }
+        if (accounts.account.filterNotNull().first().driveKey != null) runCatching { files.delete(auth.accessToken(activity)) }
         accounts.deleteAccount()
     }
 

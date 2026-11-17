@@ -6,6 +6,8 @@ import com.elsewhere.app.Fakes
 import com.elsewhere.app.account.AccountState
 import com.elsewhere.app.account.Session
 import com.elsewhere.app.auth.DriveAuthFailed
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -26,6 +28,15 @@ class DriveLinkerTest {
         assertEquals(1, drive.deletes)
         assertEquals(1, acct.deletes)
         assertNull(acct.account.value!!.session)
+    }
+
+    @Test fun `deleting waits for the account to have been read before deciding about Drive`() = runTest {
+        val acct = Fakes.Account(google); val drive = Fakes.Drive()
+        acct.account.value = null
+        launch { delay(50); acct.account.value = google }
+        Fakes.linker(acct, drive).deleteAccount(ctx)
+        assertEquals(1, drive.deletes)
+        assertEquals(1, acct.deletes)
     }
 
     @Test fun `the account still goes when Drive will not answer, and an email account never asks Drive`() = runTest {
