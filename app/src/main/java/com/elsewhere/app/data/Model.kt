@@ -38,6 +38,8 @@ interface Spanned { val start: Long; val end: Long }
     val id: Int, override val start: Long, override val end: Long, val tz: Int,
     val sLat: Double, val sLng: Double, val eLat: Double, val eLng: Double,
     val m: Double, val mode: String, val p: Double,
+    /** True for a leg this phone recorded, as opposed to one an export described. */
+    val recorded: Boolean = false,
 ) : Spanned
 
 @Serializable data class Path(override val start: Long, override val end: Long, val pts: List<Pt>) : Spanned

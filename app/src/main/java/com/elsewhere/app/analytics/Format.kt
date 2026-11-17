@@ -22,8 +22,3 @@ private val TIME = DateTimeFormatter.ofPattern("h:mm a", Locale.US)
 fun fmtDate(ts: Long, tzMin: Int = 0): String = DATE.format(Instant.ofEpochSecond(ts + tzMin * 60L).atOffset(ZoneOffset.UTC))
 fun fmtTime(ts: Long, tzMin: Int = 0): String = TIME.format(Instant.ofEpochSecond(ts + tzMin * 60L).atOffset(ZoneOffset.UTC))
 
-val MODE_LABEL: Map<String, String> = mapOf(
-    "WALKING" to "Walking", "RUNNING" to "Running", "CYCLING" to "Cycling", "IN_PASSENGER_VEHICLE" to "Driving",
-    "MOTORCYCLING" to "Motorcycle", "IN_BUS" to "Bus", "IN_SUBWAY" to "Subway", "IN_TRAIN" to "Train",
-    "IN_TRAM" to "Tram", "IN_FERRY" to "Ferry", "FLYING" to "Flying",
-)

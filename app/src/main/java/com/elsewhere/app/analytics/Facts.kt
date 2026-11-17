@@ -3,6 +3,7 @@ package com.elsewhere.app.analytics
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.data.modeInProse
 import com.elsewhere.app.data.Visit
 import com.elsewhere.app.ingest.jsRound
 import com.elsewhere.app.ui.nav.Door
@@ -171,7 +172,7 @@ private val GEN: List<(Ctx) -> Fact?> = listOf(
             val v = if (c.u == Units.MI) bestKmh * MI else bestKmh
             val head = "${n0(v)} ${if (c.u == Units.MI) "mph" else "km/h"} door to door"
             Fact("fastest", Kind.RECORD, headline = head,
-                detail = "Your quickest leg over land, ${longTs(bestTs)}, by ${bestMode.replaceFirst(Regex("^IN_"), "").replace('_', ' ').lowercase()}. Averaged over the whole leg, stops included.",
+                detail = "Your quickest leg over land, ${longTs(bestTs)}, by ${modeInProse(bestMode)}. Averaged over the whole leg, stops included.",
                 door = Door.Range(bestTs, bestEnd, ""))
         }
     },

@@ -129,8 +129,15 @@ class FactsTest {
         val lyon = visit(JAN + 9 * D, JAN + 10 * D - 12 * H, "lyon", lat = 45.76, lng = 4.84)
         val f = facts(data.copy(activities = data.activities + drive, visits = data.visits + lyon, places = data.places + ("lyon" to pl(null, "Lyon", "FR", 45.76, 4.84))), Units.KM)
         assertEquals(Door.Range(JAN + 2 * D, JAN + 2 * D + 2 * H, "100 km/h door to door"), door(f, "fastest"))
+        assertTrue(f.first { it.id == "fastest" }.detail.contains(", by car."), "the mode reads by its short name")
         val density = door(f, "density") as Door.Places
         assertEquals(listOf("hotel", "hotel2", "lyon"), density.placeIds.sorted())
+    }
+
+    @Test fun `a fast leg nobody has a word for was travelled by road`() {
+        val leg = act(JAN + 2 * D, JAN + 2 * D + 2 * H, "IN_VEHICLE", 200_000.0, sLat = 42.36, sLng = -71.06, eLat = 43.0, eLng = -72.0)
+        val f = facts(data.copy(activities = data.activities + leg), Units.KM)
+        assertTrue(f.first { it.id == "fastest" }.detail.contains(", by road."), f.first { it.id == "fastest" }.detail)
     }
 
     @Test fun `a city fact opens on every place the record names there, even ones with a role or none visited`() {

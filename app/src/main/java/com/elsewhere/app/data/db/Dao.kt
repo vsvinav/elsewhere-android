@@ -26,6 +26,8 @@ import kotlinx.coroutines.flow.Flow
 @Dao interface ActivityDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(rows: List<ActivityEntity>)
     @Query("SELECT * FROM activities ORDER BY start, id") suspend fun all(): List<ActivityEntity>
+    /** The user said how they got there: the mode is theirs and no longer a guess. Only a leg this phone recorded; an export's legs keep their own answer. */
+    @Query("UPDATE activities SET mode = :mode, p = 1.0 WHERE id = :id AND source = 'device'") suspend fun confirmMode(id: Int, mode: String)
     @Query("DELETE FROM activities") suspend fun clear()
     @Query("DELETE FROM activities WHERE source = 'import'") suspend fun clearImported()
 }

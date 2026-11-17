@@ -29,5 +29,15 @@ class DatesUiTest {
         assertEquals(d.visited.map { it.n }.sortedDescending(), d.visited.map { it.n })
         assertTrue(tokyo.modes.isNotEmpty() && tokyo.modes.size <= 4)
         assertEquals(tokyo.modes.map { it.second }.sortedDescending(), tokyo.modes.map { it.second })
+        assertEquals(listOf("Flight", "Walk"), tokyo.modes.map { it.first }, "the bars are already named")
+    }
+
+    @Test fun `a trip's mode bars fold every unnamed mode into one Other bar`() {
+        val rec = SampleRecord.record
+        val ny = rec.trips.maxBy { it.start }
+        val folded = ny.copy(totalKmByMode = mapOf("IN_VEHICLE" to 30.0, "UNKNOWN" to 20.0, "FLYING" to 500.0, "IN_TAXI" to 5.0, "WALKING" to 12.0))
+        val u = datesUi(rec.copy(trips = rec.trips.map { if (it.start == ny.start) folded else it }), rec, SampleRecord.profile)
+        val bars = u.trips.first { it.trip.start == ny.start }.modes
+        assertEquals(listOf("Flight" to 500.0, "Other" to 55.0, "Walk" to 12.0), bars)
     }
 }

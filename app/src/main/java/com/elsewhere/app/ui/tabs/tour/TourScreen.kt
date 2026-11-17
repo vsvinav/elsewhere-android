@@ -25,8 +25,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.elsewhere.app.analytics.Lens
-import com.elsewhere.app.analytics.lensOf
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.share.LocalPrinting
 import com.elsewhere.app.ui.Tab
@@ -55,7 +53,6 @@ import com.elsewhere.app.ui.world.countUp
 import com.elsewhere.app.ui.world.cv
 import com.elsewhere.app.ui.world.date
 import com.elsewhere.app.ui.world.dateISO
-import com.elsewhere.app.ui.world.label
 import com.elsewhere.app.ui.world.n0
 import com.elsewhere.app.ui.world.plural
 import com.elsewhere.app.analytics.toFixed
@@ -73,7 +70,8 @@ fun TourTab(onGo: (Tab) -> Unit, onRecord: () -> Unit = {}, vm: TourViewModel = 
     ui?.let { TourScreen(it, onGo, onSeen = vm::seen, onRecord = onRecord, window = window, onRange = vm::setRange) } ?: Box(Modifier.fillMaxSize().background(Poster.Stock))
 }
 
-private fun lensColor(mode: String) = when (lensOf(mode)) { Lens.FLY -> Poster.Red; Lens.FOOT -> Poster.Mustard; else -> Poster.Ink }
+/** A setlist row's ink, from the name it prints: flights red, legs on foot mustard, everything else ink. */
+private fun labelColor(label: String) = when (label) { "Flight" -> Poster.Red; "Walk", "Run", "Cycle" -> Poster.Mustard; else -> Poster.Ink }
 
 /** `scroll = false` lays the whole poster out at its full height, for snapshots. */
 @Composable
@@ -180,7 +178,7 @@ internal fun SetlistBill(ui: TourUi) {
         Spacer(Modifier.height(28.dp))
         val top = f.kmByMode.firstOrNull()?.second ?: 1.0
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            for ((m, km) in f.kmByMode) SetlistRow(label(m), (km / top).toFloat(), lensColor(m), n0(u.cv(km)), u.u, door = ui.doors.modes[m])
+            for ((m, km) in f.kmByMode) SetlistRow(m, (km / top).toFloat(), labelColor(m), n0(u.cv(km)), u.u, door = ui.doors.modes[m])
         }
         Spacer(Modifier.height(40.dp))
         Foot(listOf(span("${toFixed(f.totalKm / 40075, 1)}× around the Earth", ui.doors.laps)), listOf(span("${f.flights} ${plural(f.flights, "flight")}", ui.doors.flights)))

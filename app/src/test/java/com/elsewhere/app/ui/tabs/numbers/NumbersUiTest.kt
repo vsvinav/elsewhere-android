@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test
 class NumbersUiTest {
     @Test fun `the sample year tallies`() {
         val ui = numbersUi(SampleRecord.record, SampleRecord.profile)
-        assertEquals(listOf("IN_PASSENGER_VEHICLE", "WALKING", "CYCLING"), ui.modes, "top three modes by the daily tallies")
+        assertEquals(listOf("Car", "Walk", "Cycle"), ui.modes, "top three modes by the daily tallies, already named")
         assertEquals(12, ui.stats.months.size)
         assertEquals(ui.maxMonth, ui.best?.total)
         assertTrue(ui.maxMonth >= ui.avg)
@@ -28,6 +28,17 @@ class NumbersUiTest {
         assertEquals(3, ui.countries)
         assertTrue(ui.hoursAway > 0)
         assertTrue(ui.peak != null && ui.topDay in 0..6)
+    }
+
+    @Test fun `unnamed modes never take a colour, they are all the grey remainder`() {
+        val days = listOf(
+            Fx.daily("2024-01-02", mapOf("IN_VEHICLE" to 300.0, "UNKNOWN" to 200.0, "FLYING" to 50.0, "WALKING" to 1.0)),
+            Fx.daily("2024-02-02", mapOf("IN_TAXI" to 400.0, "CYCLING" to 2.0)),
+        )
+        val ui = numbersUi(Fx.record(daily = days, range = Fx.utc(2024, 0, 1)..Fx.utc(2024, 2, 1)), null)
+        assertEquals(listOf("Flight", "Cycle", "Walk"), ui.modes)
+        assertEquals(0, ui.modes.count { it == "Other" })
+        assertEquals(mapOf("Other" to 500.0, "Flight" to 50.0, "Walk" to 1.0), ui.monthByLabel(ui.stats.months[0]))
     }
 
     @Test fun `an empty record is all blanks`() {

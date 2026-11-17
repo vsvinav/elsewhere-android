@@ -160,7 +160,7 @@ class RecordRepository @Inject constructor(
         val meta = db.importMeta().get() ?: if (visits.any { it.source != SOURCE_IMPORT }) ImportMetaEntity(sourceFile = "", sourceSha256 = "", builtAt = 0L, segmentsTotal = 0, parsed = 0, skippedJson = "{}") else return null
         val parsed = Parsed(
             visits = visits.map { PVisit(it.id, it.start, it.end, it.tz, it.placeId, it.lat, it.lng, it.type, it.p, it.lvl, it.city, it.cc, it.dist) },
-            activities = db.activities().all().map { PActivity(it.id, it.start, it.end, it.tz, it.sLat, it.sLng, it.eLat, it.eLng, it.m, it.mode, it.p, it.eCity) },
+            activities = db.activities().all().map { PActivity(it.id, it.start, it.end, it.tz, it.sLat, it.sLng, it.eLat, it.eLng, it.m, it.mode, it.p, it.eCity, recorded = it.source == SOURCE_DEVICE) },
             paths = db.paths().all().map { PPath(it.start, it.end, decodePts(it.pts)) },
             memories = db.memories().all().map { PMemory(it.start, it.end, it.km, Json.decodeFromString(strings, it.dests)) },
             frequentPlaces = db.frequentPlaces().all().map { FrequentPlace(it.placeId, it.lat, it.lng, it.label) },
@@ -236,6 +236,12 @@ class RecordRepository @Inject constructor(
             db.activities().insertAll(activities.map { it.copy(source = SOURCE_DEVICE) })
             db.paths().insertAll(paths.map { it.copy(source = SOURCE_DEVICE) })
         }
+        importVersion.update { it + 1 }
+    }
+
+    /** The user answered "How did you get there?" for a recorded leg: the mode is written as certain and the record re-derives. */
+    override suspend fun confirmMode(activityId: Int, mode: String) {
+        db.activities().confirmMode(activityId, mode)
         importVersion.update { it + 1 }
     }
 

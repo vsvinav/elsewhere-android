@@ -64,6 +64,8 @@ object Fakes {
         override suspend fun provisionalRecord(): Record = rec
         override suspend fun saveProfile(p: Profile) { saved = p; profile.value = p }
         override suspend fun reset() { resets++; hasImport.value = false; hasHistory.value = false; profile.value = null }
+        val confirmed = mutableListOf<Pair<Int, String>>()
+        override suspend fun confirmMode(activityId: Int, mode: String) { confirmed += activityId to mode }
     }
 
     /** An account layer that remembers what was asked of it; `welcomed = true` by default so older flows skip Welcome. */

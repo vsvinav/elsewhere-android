@@ -50,7 +50,7 @@ import com.elsewhere.app.ui.world.countUp
 import com.elsewhere.app.ui.world.cv
 import com.elsewhere.app.ui.world.date
 import com.elsewhere.app.ui.world.hours
-import com.elsewhere.app.ui.world.label
+import com.elsewhere.app.data.modeLabel
 import com.elsewhere.app.ui.world.month
 import com.elsewhere.app.ui.world.n0
 import com.elsewhere.app.ui.world.u
@@ -147,15 +147,16 @@ private fun MonthsPass(ui: NumbersUi) {
         val top = ui.modes
         Columns(
             s.months.map { m ->
-                val other = m.total - top.sumOf { m.byMode[it] ?: 0.0 }
-                listOf((other / ui.maxMonth).toFloat() to Poster.Stock2) + top.indices.reversed().map { i -> ((m.byMode[top[i]] ?: 0.0) / ui.maxMonth).toFloat() to CLS[i] }
+                val byLabel = ui.monthByLabel(m)
+                val other = m.total - top.sumOf { byLabel[it] ?: 0.0 }
+                listOf((other / ui.maxMonth).toFloat() to Poster.Stock2) + top.indices.reversed().map { i -> ((byLabel[top[i]] ?: 0.0) / ui.maxMonth).toFloat() to CLS[i] }
             },
             "Distance per month, stacked by mode",
             doors = ui.doors.monthColumns,
         )
         Axis(s.months.firstOrNull()?.let { month(it.key) }, s.months.lastOrNull()?.let { month(it.key) })
         Spacer(Modifier.height(14.dp))
-        Legend(top.mapIndexed { i, k -> label(k) to CLS[i] } + ("Other" to Poster.Stock2))
+        Legend(top.mapIndexed { i, k -> k to CLS[i] } + ("Other" to Poster.Stock2))
     }
 }
 
@@ -231,7 +232,7 @@ private fun CommutePass(ui: NumbersUi) {
     }) {
         Row(horizontalArrangement = Arrangement.spacedBy(40.dp)) {
             Field("Commute", "Home ↔ work legs under 3 hours", Modifier.weight(1f))
-            Field("Usually by", ui.usualMode?.let(::label))
+            Field("Usually by", ui.usualMode?.let(::modeLabel))
         }
         if (c.legs.isEmpty()) Big("—", ghost = true) else {
             Big(countUp(c.medianAll), "min door to door", door = ui.doors.median)

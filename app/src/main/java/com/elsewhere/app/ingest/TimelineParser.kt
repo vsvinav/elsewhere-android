@@ -24,6 +24,8 @@ data class PVisit(
 data class PActivity(
     val id: Int, val start: Long, val end: Long, val tz: Int, val sLat: Double, val sLng: Double, val eLat: Double, val eLng: Double,
     val m: Double, val mode: String, val p: Double, val eCity: String? = null,
+    /** True for a leg this phone recorded; only those are ever asked about. */
+    val recorded: Boolean = false,
 )
 data class PPath(val start: Long, val end: Long, val pts: List<Pt>)
 data class PMemory(val start: Long, val end: Long, val km: Double, val dests: List<String>)

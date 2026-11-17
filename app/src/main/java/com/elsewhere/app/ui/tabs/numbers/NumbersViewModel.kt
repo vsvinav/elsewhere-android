@@ -14,6 +14,7 @@ import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.data.kmByLabel
 import com.elsewhere.app.analytics.isHome
 import com.elsewhere.app.analytics.isWork
 import com.elsewhere.app.ui.nav.CityIndex
@@ -47,6 +48,7 @@ data class Peak(val d: Int, val h: Int, val v: Double)
 /** Port of the derived values at the top of web/src/tabs/Stats/Stats.tsx. */
 data class NumbersUi(
     val units: Units, val stats: Stats, val commute: CommuteStats, val explore: List<Bucket>, val hasWork: Boolean,
+    /** The top modes by printed name, the ones that take a colour. */
     val modes: List<String>, val maxMonth: Double, val best: MonthKm?, val avg: Double,
     val peak: Peak?, val byDay: List<Double>, val topDay: Int, val hoursAway: Double,
     val days: Int, val maxExplore: Int, val newTotal: Int, val lapsedTotal: Int, val hourMax: Int, val usualMode: String?,
@@ -54,6 +56,8 @@ data class NumbersUi(
     val doors: NumbersDoors,
 ) {
     fun pct(t: DayType): Int = (100.0 * (stats.dayTypes[t] ?: 0) / max(1, days)).roundToInt()
+    /** A month's kilometres by printed name, so the stack looks its colours up the same way `modes` was ranked. */
+    fun monthByLabel(m: MonthKm): Map<String, Double> = kmByLabel(m.byMode).toMap()
 }
 
 /** A city row's doors, one per cell. */
@@ -120,7 +124,8 @@ fun numbersUi(data: Record, profile: Profile?): NumbersUi {
     val explore = explorationScore(data, data.meta.range)
     val totals = HashMap<String, Double>()
     for (m in s.months) for ((k, v) in m.byMode) totals[k] = (totals[k] ?: 0.0) + v
-    val modes = totals.entries.sortedByDescending { it.value }.take(TOP_MODES).map { it.key }
+    // Only named modes take a colour; whatever prints as Other is the grey remainder.
+    val modes = kmByLabel(totals).map { it.first }.filter { it != "Other" }.take(TOP_MODES)
     val maxMonth = max(1.0, s.months.maxOfOrNull { it.total } ?: 0.0)
     val best = s.months.maxByOrNull { it.total }
     val avg = s.months.sumOf { it.total } / max(1, s.months.size)

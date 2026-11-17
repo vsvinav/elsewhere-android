@@ -60,7 +60,7 @@ import com.elsewhere.app.ui.world.LocalMotion
 import com.elsewhere.app.ui.world.PlacePhoto
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
-import com.elsewhere.app.ui.world.label
+import com.elsewhere.app.data.modeLabel
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.temporal.ChronoField
@@ -90,7 +90,7 @@ fun hudInfo(data: Record, playhead: Long): HudInfo {
         dow = WEEKDAY[d.get(ChronoField.DAY_OF_WEEK) % 7], day = d.dayOfMonth.toString().padStart(2, '0'),
         monthYear = "${MONTH[d.monthValue - 1]} ${d.year}", time = fmtTime(playhead, tz),
         atStop = visit != null,
-        where = if (visit != null) placeName(place, visit.placeId) else w?.let { label(it.mode) } ?: "—",
+        where = if (visit != null) placeName(place, visit.placeId) else w?.let { modeLabel(it.mode) } ?: "—",
         sub = if (visit != null) place?.city ?: "city not on record" else if (w != null) "in motion" else "no record",
         ink = if (visit == null && w != null) ink(lensOf(w.mode)) else null,
     )
