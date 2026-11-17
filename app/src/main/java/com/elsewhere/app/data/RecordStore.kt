@@ -21,6 +21,8 @@ interface RecordStore {
     suspend fun profileEditedAt(): Long
     /** Forget the import and the profile; back to the front door. */
     suspend fun reset()
+    /** Writes the mode the user chose for a recorded leg, as certain; the record re-derives. */
+    suspend fun confirmMode(activityId: Int, mode: String)
 }
 
 /** Thrown by `import` when the file parses but holds no Timeline segments. */

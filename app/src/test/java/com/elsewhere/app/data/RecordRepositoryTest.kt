@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.elsewhere.app.data.db.ElsewhereDb
+import com.elsewhere.app.data.db.ActivityEntity
 import com.elsewhere.app.data.db.VisitEntity
 import com.elsewhere.app.data.db.decodePts
 import com.elsewhere.app.data.db.encodePts
@@ -129,6 +130,38 @@ class RecordRepositoryTest {
         id = start.toInt(), start = start, end = start + 3600, tz = 0, placeId = "dev:drt2zp2", lat = 42.36, lng = -71.06,
         type = "UNKNOWN", p = 1.0, lvl = 0, city = null, cc = null, dist = null, source = "device",
     )
+
+    private val nyc = 40.71 to -74.0
+    private fun nycVisit(start: Long) = VisitEntity(
+        id = start.toInt(), start = start, end = start + 3600, tz = -300, placeId = "dev:dr5regw", lat = nyc.first, lng = nyc.second,
+        type = "UNKNOWN", p = 1.0, lvl = 0, city = null, cc = null, dist = null, source = "device",
+    )
+    private fun leg(start: Long, mode: String, p: Double, source: String = "device") = ActivityEntity(
+        id = start.toInt(), start = start, end = start + 3600, tz = -300, sLat = nyc.first, sLng = nyc.second, eLat = nyc.first + 0.3, eLng = nyc.second,
+        m = 50_000.0, mode = mode, p = p, eCity = null, source = source,
+    )
+
+    @Test fun `confirming a leg's mode rewrites the row and the trip's kilometres follow`() = runTest {
+        val t = 1_800_000_000L
+        repo.insertDevice(listOf(nycVisit(t), nycVisit(t + 86_400)), listOf(leg(t + 7200, "IN_PASSENGER_VEHICLE", 0.6)), emptyList())
+        db.activities().insertAll(listOf(leg(t - 100_000, "IN_PASSENGER_VEHICLE", 0.6, source = "import")))
+        repo.saveProfile(profile(boston))
+        val before = repo.record.first { it != null }!!
+        val trip = before.trips.single()
+        assertEquals(mapOf("IN_PASSENGER_VEHICLE" to 50.0), trip.totalKmByMode)
+        assertTrue(before.activities.single { it.id == (t + 7200).toInt() }.recorded)
+        assertFalse(before.activities.single { it.id == (t - 100_000).toInt() }.recorded)
+
+        repo.confirmMode((t + 7200).toInt(), "IN_TRAIN")
+        val row = db.activities().all().single { it.id == (t + 7200).toInt() }
+        assertEquals("IN_TRAIN", row.mode); assertEquals(1.0, row.p, 0.0)
+        val after = repo.record.first { it != null && "IN_TRAIN" in it.trips.single().totalKmByMode }!!
+        assertEquals(mapOf("IN_TRAIN" to 50.0), after.trips.single().totalKmByMode)
+        val a = after.activities.single { it.id == (t + 7200).toInt() }
+        assertEquals("IN_TRAIN", a.mode); assertEquals(1.0, a.p, 0.0); assertTrue(a.recorded)
+        // The imported leg was not touched.
+        assertEquals(0.6, db.activities().all().single { it.id == (t - 100_000).toInt() }.p, 0.0)
+    }
 
     @Test fun `re-import keeps device-recorded rows and drops the old import`() = runTest {
         repo.import({ open() }, "mini_timeline.json")

@@ -193,7 +193,7 @@ fun derive(parsed: Parsed, profile: Profile, cities: Cities, meta: Meta): Record
     val ends = p.visits.map { it.end } + p.activities.map { it.end }
     return Record(
         visits = p.visits.map { v -> Visit(v.id, v.start, v.end, v.tz, v.placeId, v.lat, v.lng, v.type, r3(v.p), v.lvl) },
-        activities = p.activities.map { a -> Activity(a.id, a.start, a.end, a.tz, a.sLat, a.sLng, a.eLat, a.eLng, a.m, a.mode, r3(a.p)) },
+        activities = p.activities.map { a -> Activity(a.id, a.start, a.end, a.tz, a.sLat, a.sLng, a.eLat, a.eLng, a.m, a.mode, r3(a.p), a.recorded) },
         strokes = strokes, paths = p.paths.map { Path(it.start, it.end, it.pts) },
         places = derivePlaces(p, profile), daily = deriveDaily(p, profile), trips = deriveTrips(p, profile),
         profile = RecordProfile(home = LatLng(last.lat, last.lng), homes = profile.homes, works = profile.works, frequentPlaces = p.frequentPlaces),
