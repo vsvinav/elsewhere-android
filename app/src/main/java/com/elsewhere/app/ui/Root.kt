@@ -49,7 +49,7 @@ fun Root(
 ) {
     val ready by vm.ready.collectAsStateWithLifecycle()
     val hasImport by vm.hasImport.collectAsStateWithLifecycle()
-    val hasExport by vm.hasExport.collectAsStateWithLifecycle()
+    val hasHistory by vm.hasHistory.collectAsStateWithLifecycle()
     val recordedDays by vm.recordedDays.collectAsStateWithLifecycle()
     val recordingOn by vm.recording.collectAsStateWithLifecycle()
     val profile by vm.profile.collectAsStateWithLifecycle()
@@ -67,8 +67,8 @@ fun Root(
     LaunchedEffect(pendingCode) { if (pendingCode != null) crew = true }
     // A phone that has just started recording has no closed stay yet; the recorder being on is enough to pass the door.
     val needsDoor = profile == null || profile!!.homes.isEmpty() || (!hasImport && !recordingOn)
-    // A phone with only its own record waits a week at the door; an export has history to show at once.
-    val waits = !hasExport && recordedDays < 7
+    // A phone with only its own record waits a week at the door; an export or a pulled record has history to show at once.
+    val waits = !hasHistory && recordedDays < 7
     val needsWelcome = profile == null && acct?.session == null && acct?.welcomed == false
     CompositionLocalProvider(LocalLand provides land) {
         when {

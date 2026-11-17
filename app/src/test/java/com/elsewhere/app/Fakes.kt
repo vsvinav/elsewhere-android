@@ -3,10 +3,15 @@ package com.elsewhere.app
 import com.elsewhere.app.account.AccountInfo
 import com.elsewhere.app.account.AccountState
 import com.elsewhere.app.account.Accounts
+import com.elsewhere.app.account.DriveLink
 import com.elsewhere.app.account.Session
 import com.elsewhere.app.account.VaultState
 import com.elsewhere.app.account.WrongPassphrase
+import com.elsewhere.app.auth.DriveAuth
 import com.elsewhere.app.auth.GoogleAuth
+import com.elsewhere.app.sync.DriveKeys
+import com.elsewhere.app.sync.DriveLinker
+import com.elsewhere.app.sync.SyncStatus
 import com.elsewhere.app.ask.LlmClient
 import com.elsewhere.app.ask.LlmConfig
 import com.elsewhere.app.data.Counters
@@ -46,18 +51,19 @@ object Fakes {
     class Store(private val rec: Record) : RecordStore {
         override val ready = MutableStateFlow(true)
         override val hasImport = MutableStateFlow(false)
-        override val hasExport = MutableStateFlow(false)
+        override val hasHistory = MutableStateFlow(false)
+        override suspend fun profileEditedAt() = 0L
         override val recordedDays = MutableStateFlow(0)
         override val profile = MutableStateFlow<Profile?>(null)
         var saved: Profile? = null
         var resets = 0
         override suspend fun import(open: () -> InputStream, fileName: String, onProgress: (Float) -> Unit): ImportReport {
-            open().use { it.readBytes() }; onProgress(1f); hasImport.value = true; hasExport.value = true
+            open().use { it.readBytes() }; onProgress(1f); hasImport.value = true; hasHistory.value = true
             return ImportReport(100, 98, mapOf("bad_json" to 2))
         }
         override suspend fun provisionalRecord(): Record = rec
         override suspend fun saveProfile(p: Profile) { saved = p; profile.value = p }
-        override suspend fun reset() { resets++; hasImport.value = false; hasExport.value = false; profile.value = null }
+        override suspend fun reset() { resets++; hasImport.value = false; hasHistory.value = false; profile.value = null }
     }
 
     /** An account layer that remembers what was asked of it; `welcomed = true` by default so older flows skip Welcome. */
@@ -87,6 +93,10 @@ object Fakes {
         override suspend fun setPassphrase(passphrase: String) { fail?.let { throw it }; passphrasesSet += passphrase; vaultState.value = VaultState.UpToDate }
         override suspend fun restore(passphrase: String) { fail?.let { throw it }; if (passphrase != this.passphrase) throw WrongPassphrase(); restored += passphrase }
         override suspend fun unlock(passphrase: String) { fail?.let { throw it }; if (passphrase != this.passphrase) throw WrongPassphrase(); unlocked += passphrase; vaultState.value = VaultState.UpToDate }
+        var driveLink = DriveLink.Ready
+        var driveFail: Throwable? = null
+        val driveKeys = mutableListOf<String>()
+        override suspend fun useDriveKey(b64: String, fresh: Boolean): DriveLink { fail?.let { throw it }; driveKeys += b64; driveFail?.let { throw it }; account.value = account.value!!.copy(driveKey = b64); return driveLink }
         override suspend fun logOut() { fail?.let { throw it }; logOuts++; account.value = account.value!!.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) }
         override suspend fun deleteAccount() { fail?.let { throw it }; deletes++; account.value = account.value!!.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) }
     }
@@ -94,6 +104,25 @@ object Fakes {
     class Google(var fail: Throwable? = null) : GoogleAuth {
         var asked = 0
         override suspend fun idToken(activity: android.content.Context): String { asked++; fail?.let { throw it }; return "id.tok" }
+    }
+
+    /** Drive access and the key file in one: hands out a token, then the same key until it is deleted. */
+    class Drive(var fail: Throwable? = null, var keyFail: Throwable? = null) : DriveAuth, DriveKeys {
+        var key: ByteArray? = null
+        var deletes = 0
+        var created = 0
+        override suspend fun accessToken(activity: android.content.Context): String { fail?.let { throw it }; return "drive.tok" }
+        override suspend fun fetchOrCreate(token: String): ByteArray { keyFail?.let { throw it }; return key ?: ByteArray(32) { (created + 1).toByte() }.also { key = it; created++ } }
+        override suspend fun delete(token: String) { deletes++; key = null }
+    }
+
+    fun linker(acct: Accounts, drive: Drive = Drive()) = DriveLinker(drive, drive, acct)
+
+    class Syncer(initial: SyncStatus = SyncStatus.Off) : com.elsewhere.app.sync.Syncer {
+        override val status = MutableStateFlow(initial)
+        var nows = 0; var fresh = 0
+        override fun syncNow() { nows++; status.value = SyncStatus.Syncing }
+        override fun startFresh(activity: android.content.Context) { fresh++; status.value = SyncStatus.Idle(1L) }
     }
 
     class Maps : MapsSettings {

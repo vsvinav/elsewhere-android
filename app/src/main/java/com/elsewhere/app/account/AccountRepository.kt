@@ -8,6 +8,7 @@ import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Settings
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.Units
+import com.elsewhere.app.sync.Wire
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,12 @@ class WrongPassphrase : Exception("That's not it")
 /** The account has no vault to restore from. */
 class NoVault : Exception("No vault on this account")
 
+/** The vault on the server is sealed under a Drive key other than the one in the user's Drive. */
+class VaultLocked : Exception("Can't unlock your synced record.")
+
+/** What a Google login still needs after the Drive key is at hand: nothing, or the old passphrase once to move over. */
+enum class DriveLink { Ready, NeedsPassphrase }
+
 /** Everything the screens need from the account layer; the repository is the real one, tests hand in a fake. */
 interface Accounts {
     /** Null until the store has been read, so the gate never flashes the wrong door. */
@@ -45,6 +52,12 @@ interface Accounts {
     suspend fun setPassphrase(passphrase: String)
     suspend fun restore(passphrase: String)
     suspend fun unlock(passphrase: String)
+    /**
+     * The Drive key takes over from the passphrase: a vault already under it is restored, a passphrase vault asks for
+     * the passphrase once (then [restore] re-seals it), none means one goes up. `fresh` skips the server and re-seals
+     * what this phone has, for Start fresh.
+     */
+    suspend fun useDriveKey(b64: String, fresh: Boolean = false): DriveLink
     suspend fun logOut()
     suspend fun deleteAccount()
 }
@@ -69,6 +82,8 @@ class AccountRepository(
 
     private val key = MutableStateFlow<ByteArray?>(null)
     private var pending: Job? = null
+    /** A Drive key waiting on the passphrase that opens the old vault; it becomes the account's only once [restore] has moved the vault over. */
+    private var owedDrive: String? = null
 
     override val account: StateFlow<AccountState?> = store.state.stateIn(scope, SharingStarted.Eagerly, null)
 
@@ -95,8 +110,8 @@ class AccountRepository(
 
     /** A new session: whatever vault stamp the last account left is wrong for this one. */
     private suspend fun signedIn(login: Login): AccountInfo {
-        key.value = null
-        store.saveSalt(null); store.saveVault(0L, null)
+        key.value = null; owedDrive = null
+        store.saveSalt(null); store.saveVault(0L, null); store.saveDriveKey(null)
         store.saveSession(Session(login.session, login.account.id, login.account.email))
         return login.account
     }
@@ -113,12 +128,18 @@ class AccountRepository(
     /** Log in on a new device: become the identity in the vault, take its profile and relay. */
     override suspend fun restore(passphrase: String) {
         val (k, body, contents) = open(passphrase) ?: throw NoVault()
+        adopt(contents)
+        val drive = owedDrive
+        if (drive != null) { owedDrive = null; store.saveDriveKey(drive); store.saveSalt(null); store.saveVault(0L, null); uploadNow(); return }
+        store.saveSalt(body.salt); store.saveVault(clock(), hash(contents.encode()))
+        key.value = k
+    }
+
+    private suspend fun adopt(contents: VaultContents) {
         identity.replaceKeys(DeviceKeys.fromSeeds(Crypto.unhex(contents.signPriv), Crypto.unhex(contents.kxPriv)))
         record.saveProfile(contents.profile)
         // The account URL that just worked stays; a vault from another service would lock us out of this one.
         contents.settings?.relayUrl?.let { url -> settings.saveSettings(settings.settings.first().copy(relayUrl = url)) }
-        store.saveSalt(body.salt); store.saveVault(clock(), hash(contents.encode()))
-        key.value = k
     }
 
     /** Settings → Update: prove the passphrase against the vault on the server, then send what this phone has. */
@@ -130,10 +151,30 @@ class AccountRepository(
         uploadNow()
     }
 
+    override suspend fun useDriveKey(b64: String, fresh: Boolean): DriveLink {
+        val k = Vault.unb64(b64)
+        owedDrive = null
+        if (fresh) { store.saveDriveKey(b64); store.saveSalt(null); store.saveVault(0L, null); schedule(0L); return DriveLink.Ready }
+        val session = session() ?: throw AccountException(401, "signed out")
+        val body = authed { api.getVault(session) }
+        when {
+            body == null -> { store.saveDriveKey(b64); store.saveSalt(null); store.saveVault(0L, null); schedule(0L) }
+            // The passphrase vault stays whole until the passphrase has opened it; a Drive key kept now would write a new one over it.
+            body.v < 2 -> { owedDrive = b64; return DriveLink.NeedsPassphrase }
+            else -> {
+                store.saveDriveKey(b64); store.saveSalt(null)
+                val plaintext = try { withContext(crypto) { Vault.open(k, body) } } catch (e: GeneralSecurityException) { throw VaultLocked() }
+                adopt(VaultContents.decode(plaintext))
+                store.saveVault(clock(), hash(plaintext))
+            }
+        }
+        return DriveLink.Ready
+    }
+
     private suspend fun open(passphrase: String): Triple<ByteArray, VaultBody, VaultContents>? {
         val session = session() ?: throw AccountException(401, "signed out")
         val body = authed { api.getVault(session) } ?: return null
-        val k = withContext(crypto) { Vault.deriveKey(passphrase, Vault.unb64(body.salt)) }
+        val k = withContext(crypto) { Vault.deriveKey(passphrase, Vault.unb64(body.salt ?: throw NoVault())) }
         val plaintext = try { Vault.open(k, body) } catch (e: GeneralSecurityException) { throw WrongPassphrase() }
         return Triple(k, body, VaultContents.decode(plaintext))
     }
@@ -154,13 +195,14 @@ class AccountRepository(
     suspend fun uploadNow(): Boolean {
         val st = store.state.first()
         val session = st.session?.session ?: return false
-        val k = key.value ?: return false
-        val salt = st.salt ?: return false
+        val drive = st.driveKey?.let(Vault::unb64)
+        val k = drive ?: key.value ?: return false
+        val salt = if (drive == null) st.salt ?: return false else null
         val p = record.profile.value ?: return false
         val plaintext = plaintext(identity.keys(), p, settings.settings.first())
         val h = hash(plaintext)
         if (h == st.vaultHash) return true
-        val body = withContext(crypto) { Vault.seal(k, plaintext, Vault.unb64(salt)) }
+        val body = withContext(crypto) { if (salt == null) Wire.sealVault(k, plaintext) else Vault.seal(k, plaintext, Vault.unb64(salt)) }
         authed { api.putVault(session, body) }
         store.saveVault(clock(), h)
         return true
@@ -181,7 +223,7 @@ class AccountRepository(
 
     /** The store first: cancelling `pending` from inside the scheduled upload would otherwise cut this short. */
     private suspend fun signOutLocally() {
-        key.value = null
+        key.value = null; owedDrive = null
         store.clearSession()
         val job = pending
         if (job != null && job !== coroutineContext[Job]) job.cancel()

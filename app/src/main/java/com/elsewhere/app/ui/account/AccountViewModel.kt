@@ -5,11 +5,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.elsewhere.app.account.AccountException
 import com.elsewhere.app.account.Accounts
+import com.elsewhere.app.account.DriveLink
+import com.elsewhere.app.account.VaultLocked
 import com.elsewhere.app.account.NoVault
 import com.elsewhere.app.account.Vault
 import com.elsewhere.app.account.WrongPassphrase
 import com.elsewhere.app.account.userMessage
+import com.elsewhere.app.auth.DriveAuthFailed
 import com.elsewhere.app.auth.GoogleAuth
+import com.elsewhere.app.sync.DriveLinker
+import java.io.IOException
 import com.elsewhere.app.auth.GoogleSignInFailed
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,7 +66,7 @@ const val NO_VAULT = "This account has no vault yet. Set a passphrase instead."
 const val GOOGLE_FAIL = "Google sign-in didn't finish. Try again."
 
 @HiltViewModel
-class AccountViewModel @Inject constructor(private val accounts: Accounts, private val google: GoogleAuth) : ViewModel(), AccountActions {
+class AccountViewModel @Inject constructor(private val accounts: Accounts, private val google: GoogleAuth, private val drive: DriveLinker) : ViewModel(), AccountActions {
     private val _ui = MutableStateFlow(AccountUi())
     val ui: StateFlow<AccountUi> = _ui
 
@@ -74,10 +79,21 @@ class AccountViewModel @Inject constructor(private val accounts: Accounts, priva
         _ui.value = AccountUi(entry = entry, step = if (entry == AccountEntry.Update) AccountStep.Unlock else AccountStep.Email)
     }
 
-    /** The token goes to the service; from there it is the same road as a finished code. The limiter and a dead network keep their own words. */
+    /**
+     * The token goes to the service, then the Drive key stands in for a passphrase: usually that is the end of it. A
+     * passphrase vault asks for it once more; when Drive is refused the passphrase pages serve as for a code. A vault
+     * under another Drive key still lets the user in; Settings says the synced record is locked.
+     */
     override fun google(activity: Context) = run(after = { it }) {
         val account = try { accounts.google(google.idToken(activity)) } catch (e: AccountException) { if (e.error == "slow down") throw e else throw GoogleSignInFailed(e) }
-        _ui.update { it.copy(step = if (account.hasVault) AccountStep.Unlock else AccountStep.SetPassphrase) }
+        val link = try { drive.link(activity) } catch (e: DriveAuthFailed) { null } catch (e: IOException) { null } catch (e: VaultLocked) { DriveLink.Ready }
+        _ui.update {
+            when (link) {
+                DriveLink.Ready -> it.copy(done = true)
+                DriveLink.NeedsPassphrase -> it.copy(step = AccountStep.Unlock)
+                null -> it.copy(step = if (account.hasVault) AccountStep.Unlock else AccountStep.SetPassphrase)
+            }
+        }
     }
 
     override fun sendCode(email: String) {

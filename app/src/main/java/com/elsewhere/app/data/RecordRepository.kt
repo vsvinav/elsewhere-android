@@ -10,6 +10,8 @@ import com.elsewhere.app.data.db.MemoryEntity
 import com.elsewhere.app.data.db.PathEntity
 import com.elsewhere.app.data.db.PlaceEnrichmentEntity
 import com.elsewhere.app.data.db.SOURCE_DEVICE
+import com.elsewhere.app.data.db.SOURCE_IMPORT
+import com.elsewhere.app.data.db.SOURCE_SYNC
 import com.elsewhere.app.data.db.VisitEntity
 import com.elsewhere.app.data.db.decodePts
 import com.elsewhere.app.data.db.encodePts
@@ -73,6 +75,8 @@ class RecordRepository @Inject constructor(
     private val photoFiles: PhotoFiles? = null,
 ) : RecordSource, RecordStore, EnrichmentStore {
     private val importVersion = MutableStateFlow(0)
+    /** Stamps profile edits; tests pin it. */
+    var clock: () -> Long = System::currentTimeMillis
     /** Set by `build()` so the UI can tell an export-only record from one the phone is adding to. */
     val deviceVisits: StateFlow<Int> get() = deviceCount
     private val deviceCount = MutableStateFlow(0)
@@ -87,14 +91,17 @@ class RecordRepository @Inject constructor(
         .onEach { profileRead.value = true }
         .stateIn(scope, SharingStarted.Eagerly, null)
 
-    /** True once there is anything to derive from: an export, or stays the phone recorded itself. */
+    /** Bumps whenever stays land, from an import, the recorder or a pull; sync pushes on it. */
+    val changes: StateFlow<Int> get() = importVersion
+
+    /** True once there is anything to derive from: an export, stays the phone recorded itself, or ones pulled from another device. */
     override val hasImport: StateFlow<Boolean> = importVersion
-        .map { db.importMeta().get() != null || db.visits().countDevice() > 0 }
+        .map { db.importMeta().get() != null || db.visits().countOwn() > 0 }
         .onEach { importRead.value = true }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
-    override val hasExport: StateFlow<Boolean> = importVersion
-        .map { db.importMeta().get() != null }
+    override val hasHistory: StateFlow<Boolean> = importVersion
+        .map { db.importMeta().get() != null || db.visits().countSource(SOURCE_SYNC) > 0 }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
     override val recordedDays: StateFlow<Int> = importVersion
@@ -149,8 +156,8 @@ class RecordRepository @Inject constructor(
     private suspend fun build(profile: Profile, key: String): Record? {
         val visits = db.visits().all()
         deviceCount.value = visits.count { it.source == SOURCE_DEVICE }
-        // No export yet: the phone's own rows stand in for one.
-        val meta = db.importMeta().get() ?: if (deviceCount.value > 0) ImportMetaEntity(sourceFile = "", sourceSha256 = "", builtAt = 0L, segmentsTotal = 0, parsed = 0, skippedJson = "{}") else return null
+        // No export yet: the phone's own rows, or ones pulled from another device, stand in for one.
+        val meta = db.importMeta().get() ?: if (visits.any { it.source != SOURCE_IMPORT }) ImportMetaEntity(sourceFile = "", sourceSha256 = "", builtAt = 0L, segmentsTotal = 0, parsed = 0, skippedJson = "{}") else return null
         val parsed = Parsed(
             visits = visits.map { PVisit(it.id, it.start, it.end, it.tz, it.placeId, it.lat, it.lng, it.type, it.p, it.lvl, it.city, it.cc, it.dist) },
             activities = db.activities().all().map { PActivity(it.id, it.start, it.end, it.tz, it.sLat, it.sLng, it.eLat, it.eLng, it.m, it.mode, it.p, it.eCity) },
@@ -232,6 +239,18 @@ class RecordRepository @Inject constructor(
         importVersion.update { it + 1 }
     }
 
+    /** Stays pulled from another device, by id; a name travels with each and is kept unless the place already has one. */
+    suspend fun insertSynced(visits: List<VisitEntity>, names: Map<String, String>) {
+        if (visits.isEmpty()) return
+        db.withTransaction {
+            db.visits().insertAll(visits.map { it.copy(source = SOURCE_SYNC) })
+            val known = db.placeEnrichment().all().associateBy { it.placeId }
+            for ((placeId, name) in names) if (known[placeId]?.name == null) db.placeEnrichment().upsert(PlaceEnrichmentEntity(placeId, name, known[placeId]?.address, known[placeId]?.types ?: "[]", known[placeId]?.primaryType, known[placeId]?.photo))
+        }
+        importVersion.update { it + 1 }
+        if (names.isNotEmpty()) placesVersion.update { it + 1 }
+    }
+
     /** A re-import replaces the export's rows only; what the phone recorded stays. */
     private suspend fun clearImported() {
         db.visits().clearImported(); db.activities().clearImported(); db.paths().clearImported(); db.memories().clear()
@@ -240,10 +259,15 @@ class RecordRepository @Inject constructor(
 
     private suspend fun clearRows() {
         db.visits().clear(); db.activities().clear(); db.paths().clear(); db.rawFixes().clear(); db.memories().clear()
-        db.frequentPlaces().clear(); db.placeEnrichment().clear(); db.importMeta().clear(); db.photos().clear()
+        db.frequentPlaces().clear(); db.placeEnrichment().clear(); db.importMeta().clear(); db.photos().clear(); db.syncState().clear()
     }
 
-    override suspend fun saveProfile(p: Profile) = settings.saveProfile(p)
+    override suspend fun saveProfile(p: Profile) = settings.saveProfile(p, clock())
+
+    /** A profile that arrived from another device, stamped with when it was edited there. */
+    suspend fun adoptProfile(p: Profile, editedAt: Long) = settings.saveProfile(p, editedAt)
+
+    override suspend fun profileEditedAt(): Long = settings.profileEditedAt.first()
 
     override suspend fun cached(): Map<String, Enrichment> = db.placeEnrichment().all().associate {
         it.placeId to Enrichment(it.name, it.address, Json.decodeFromString(strings, it.types), it.primaryType, it.photo)

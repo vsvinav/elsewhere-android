@@ -36,6 +36,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.IOException
+import com.elsewhere.app.sync.SyncError
+import com.elsewhere.app.sync.SyncStatus
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onFirst
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
@@ -49,11 +53,12 @@ class SettingsScreenTest {
     private var closed = 0
 
     private val account = Fakes.Account()
+    private val syncer = Fakes.Syncer()
     private var opened: AccountEntry? = null
 
     private fun show() {
         rule.setContent {
-            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account) }
+            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account, syncer, Fakes.linker(account)) }
             val ui by vm.ui.collectAsStateWithLifecycle()
             ElsewhereTheme { SettingsScreen(ui, vm, onBack = { closed++ }, sdk = false, onAccount = { opened = it }) }
         }
@@ -62,7 +67,7 @@ class SettingsScreenTest {
 
     @Test fun `signed out, Log in or sign up opens Welcome, whose Not now comes straight back`() {
         rule.setContent {
-            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account) }
+            val vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account, syncer, Fakes.linker(account)) }
             ElsewhereTheme { SettingsRoute(onBack = { closed++ }, vm = vm, account = { entry, _, _ -> Text("FLOW $entry") }) }
         }
         node("LOG IN OR SIGN UP").performClick()
@@ -80,7 +85,7 @@ class SettingsScreenTest {
     @Test fun `the Data section takes a Timeline export, and a bad file says so`() {
         lateinit var vm: SettingsViewModel
         rule.setContent {
-            vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account) }
+            vm = remember { SettingsViewModel(maps, KeyVerifier(maps, Fakes.Checker()), store, llm, asker, account, syncer, Fakes.linker(account)) }
             val ui by vm.ui.collectAsStateWithLifecycle()
             ElsewhereTheme { SettingsScreen(ui, vm, onBack = { closed++ }, sdk = false, onAccount = { opened = it }) }
         }
@@ -92,7 +97,7 @@ class SettingsScreenTest {
         rule.onNodeWithText("not json").performScrollTo().assertIsDisplayed()
         vm.import({ "{}".byteInputStream() }, "Timeline.json")
         rule.waitForIdle()
-        assertEquals(true, store.hasExport.value)
+        assertEquals(true, store.hasHistory.value)
         rule.onNodeWithText("not json").assertDoesNotExist()
     }
 
@@ -264,5 +269,47 @@ class SettingsScreenTest {
         rule.waitForIdle()
         node("Key accepted · Places ✓ · Map tiles ✓").assertIsDisplayed()
         assertEquals("AIzaNew", maps.cur.value.mapsKey)
+    }
+
+    @Test fun `the Sync section says sync is off and offers nothing until there is a Drive key`() {
+        show()
+        rule.onNodeWithText(SYNC_OFF).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText(SYNC_NOW.uppercase()).assertDoesNotExist()
+        rule.onNodeWithText(SYNC_FRESH.uppercase()).assertDoesNotExist()
+    }
+
+    @Test fun `synced, the line says when, Sync now asks for a round and Start fresh wants a second tap`() {
+        syncer.status.value = SyncStatus.Idle(0L)
+        show()
+        rule.onNodeWithText(SYNC_NEVER).performScrollTo().assertIsDisplayed()
+        syncer.status.value = SyncStatus.Idle(System.currentTimeMillis() - 5 * 60_000L)
+        rule.waitForIdle()
+        rule.onNodeWithText("Synced · 5 min ago").performScrollTo().assertIsDisplayed()
+        node(SYNC_FRESH.uppercase()).performScrollTo().performClick()
+        rule.onNodeWithText(SYNC_FRESH_BODY).performScrollTo().assertIsDisplayed()
+        assertEquals(0, syncer.fresh)
+        node("KEEP IT").performClick()
+        rule.onNodeWithText(SYNC_FRESH_BODY).assertDoesNotExist()
+        node(SYNC_FRESH.uppercase()).performClick()
+        rule.onAllNodesWithText(SYNC_FRESH.uppercase()).onFirst().performClick()
+        rule.waitForIdle()
+        assertEquals(1, syncer.fresh)
+        node(SYNC_NOW.uppercase()).performScrollTo().performClick()
+        rule.waitForIdle()
+        assertEquals(1, syncer.nows)
+        rule.onNodeWithText(SYNC_BUSY).performScrollTo().assertIsDisplayed()
+        node(SYNC_NOW.uppercase()).assertIsNotEnabled()
+    }
+
+    @Test fun `a failed round says it will try again, a locked record offers only Start fresh`() {
+        syncer.status.value = SyncStatus.Error(SyncError.Network)
+        show()
+        rule.onNodeWithText(SYNC_ERR).performScrollTo().assertIsDisplayed()
+        node(SYNC_NOW.uppercase()).assertIsDisplayed()
+        syncer.status.value = SyncStatus.Error(SyncError.Locked)
+        rule.waitForIdle()
+        rule.onNodeWithText(SYNC_LOCKED).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText(SYNC_NOW.uppercase()).assertDoesNotExist()
+        node(SYNC_FRESH.uppercase()).assertIsDisplayed()
     }
 }

@@ -45,14 +45,16 @@ class AccountRepositoryTest {
         override suspend fun deleteMe(session: String) { calls += "deleteMe $session"; check() }
     }
 
-    class FakeStorage(initial: AccountState = AccountState()) : AccountStorage {
+    class FakeStorage(initial: AccountState = AccountState(), var installId: String = "install00000001") : AccountStorage {
         override val state = MutableStateFlow(initial)
+        override suspend fun installId(): String = installId
         override suspend fun saveSession(s: Session) = state.update { it.copy(session = s) }
         override suspend fun saveSalt(salt: String?) = state.update { it.copy(salt = salt) }
         override suspend fun saveVault(at: Long, hash: String?) = state.update { it.copy(vaultAt = at, vaultHash = hash) }
+        override suspend fun saveDriveKey(b64: String?) = state.update { it.copy(driveKey = b64) }
         override suspend fun markWelcomed() = state.update { it.copy(welcomed = true) }
         /** DataStore really suspends here; a cancelled caller must still get the session off disk. */
-        override suspend fun clearSession() { yield(); state.update { it.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) } }
+        override suspend fun clearSession() { yield(); state.update { it.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null, driveKey = null) } }
     }
 
     class FakeIdentity(var keys: DeviceKeys = DeviceKeys.fromSeeds(ByteArray(32) { 1 }, ByteArray(32) { 2 })) : Identity {
@@ -235,5 +237,93 @@ class AccountRepositoryTest {
         val w = world()
         w.repo.start(" Ada@Example.org ")
         assertEquals(listOf("start ada@example.org"), w.api.calls)
+    }
+
+    private val driveKey = ByteArray(32) { (it + 1).toByte() }
+
+    @Test fun `a Google user with no vault gets one sealed under the Drive key, without a salt`() = runTest {
+        val w = world()
+        advanceTimeBy(1)
+        w.repo.google("id.tok")
+        assertEquals(DriveLink.Ready, w.repo.useDriveKey(Vault.b64(driveKey)))
+        advanceTimeBy(1)
+        assertEquals(1, w.api.calls.count { it == "put" })
+        assertEquals(2, w.api.vault!!.v)
+        assertNull(w.api.vault!!.salt)
+        assertEquals(profile, contentsOf(w, driveKey).profile)
+        assertEquals(VaultState.UpToDate, w.vault())
+        w.record.saveProfile(profile.copy(name = "Ada L."))
+        advanceTimeBy(2_001)
+        assertEquals("Ada L.", contentsOf(w, driveKey).profile.name)
+    }
+
+    @Test fun `a Google user whose vault is already under the Drive key is restored from it straight away`() = runTest {
+        val other = DeviceKeys.fromSeeds(ByteArray(32) { 7 }, ByteArray(32) { 8 })
+        val contents = VaultContents(signPriv = Crypto.hex(other.signPriv), kxPriv = Crypto.hex(other.kxPriv), profile = profile.copy(name = "Grace"), settings = VaultSettings("km", "https://relay.example.org", null))
+        val w = world(withProfile = false)
+        w.api.vault = com.elsewhere.app.sync.Wire.sealVault(driveKey, contents.encode())
+        w.repo.google("id.tok")
+        assertEquals(DriveLink.Ready, w.repo.useDriveKey(Vault.b64(driveKey)))
+        assertEquals("Grace", w.record.saved!!.name)
+        assertEquals(1, w.identity.replaced)
+        assertEquals("https://relay.example.org", w.maps.cur.value.relayUrl)
+        advanceTimeBy(3_000)
+        assertEquals("Grace", contentsOf(w, driveKey).profile.name)
+        assertEquals(VaultState.UpToDate, w.vault())
+    }
+
+    @Test fun `a Google user with a passphrase vault is asked for it once, then it is re-sealed under the Drive key`() = runTest {
+        val other = DeviceKeys.fromSeeds(ByteArray(32) { 7 }, ByteArray(32) { 8 })
+        val contents = VaultContents(signPriv = Crypto.hex(other.signPriv), kxPriv = Crypto.hex(other.kxPriv), profile = profile.copy(name = "Grace"))
+        val salt = Vault.newSalt()
+        val w = world(withProfile = false)
+        w.api.vault = Vault.seal(Vault.deriveKey("correct horse battery staple", salt), contents.encode(), salt)
+        w.repo.google("id.tok")
+        assertEquals(DriveLink.NeedsPassphrase, w.repo.useDriveKey(Vault.b64(driveKey)))
+        assertEquals(0, w.identity.replaced)
+        w.repo.restore("correct horse battery staple")
+        assertEquals(1, w.identity.replaced)
+        assertEquals("Grace", w.record.saved!!.name)
+        assertEquals(1, w.api.calls.count { it == "put" })
+        assertEquals(2, w.api.vault!!.v)
+        assertNull(w.store.state.value.salt)
+        assertEquals("Grace", contentsOf(w, driveKey).profile.name)
+        assertEquals(VaultState.UpToDate, w.vault())
+    }
+
+    @Test fun `while the passphrase is still owed, nothing goes up and the Drive key is not kept`() = runTest {
+        val salt = Vault.newSalt()
+        val w = world(withProfile = false)
+        val v1 = Vault.seal(Vault.deriveKey("correct horse battery staple", salt), VaultContents(signPriv = "aa", kxPriv = "bb", profile = profile).encode(), salt)
+        w.api.vault = v1
+        w.repo.google("id.tok")
+        assertEquals(DriveLink.NeedsPassphrase, w.repo.useDriveKey(Vault.b64(driveKey)))
+        assertNull(w.store.state.value.driveKey)
+        w.record.profile.value = profile.copy(name = "Edited here")
+        advanceTimeBy(AccountRepository.DEBOUNCE_MS + 10)
+        assertEquals(v1, w.api.vault, "the passphrase vault must not be written over")
+        assertEquals(0, w.api.calls.count { it == "put" })
+    }
+
+    @Test fun `a Drive key owed to one login is forgotten when another account signs in`() = runTest {
+        val salt = Vault.newSalt()
+        val w = world(withProfile = false)
+        val other = DeviceKeys.fromSeeds(ByteArray(32) { 7 }, ByteArray(32) { 8 })
+        w.api.vault = Vault.seal(Vault.deriveKey("correct horse battery staple", salt), VaultContents(signPriv = Crypto.hex(other.signPriv), kxPriv = Crypto.hex(other.kxPriv), profile = profile).encode(), salt)
+        w.repo.google("id.tok")
+        assertEquals(DriveLink.NeedsPassphrase, w.repo.useDriveKey(Vault.b64(driveKey)))
+        w.repo.finish("other@example.com", "123456")
+        w.repo.restore("correct horse battery staple")
+        assertNull(w.store.state.value.driveKey, "the first account's key must not seal the second's vault")
+        assertEquals(1, w.api.vault!!.v)
+        assertEquals(Vault.b64(salt), w.store.state.value.salt)
+    }
+
+    @Test fun `a vault under another Drive key cannot be opened and says so`() = runTest {
+        val w = world(withProfile = false)
+        w.api.vault = com.elsewhere.app.sync.Wire.sealVault(ByteArray(32) { 9 }, "{}")
+        w.repo.google("id.tok")
+        assertTrue(runCatching { w.repo.useDriveKey(Vault.b64(driveKey)) }.exceptionOrNull() is VaultLocked)
+        assertEquals(Vault.b64(driveKey), w.store.state.value.driveKey, "the key is kept so Settings can say the record is locked")
     }
 }

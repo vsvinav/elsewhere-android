@@ -47,6 +47,9 @@ import com.elsewhere.app.data.Units
 import com.elsewhere.app.ingest.Probe
 import com.elsewhere.app.map.Sdk
 import com.elsewhere.app.account.VaultState
+import com.elsewhere.app.record.age
+import com.elsewhere.app.sync.SyncError
+import com.elsewhere.app.sync.SyncStatus
 import com.elsewhere.app.ui.account.AccountEntry
 import com.elsewhere.app.ui.account.AccountRoute
 import com.elsewhere.app.ui.account.WelcomeScreen
@@ -91,7 +94,7 @@ fun SettingsRoute(
 @Composable
 fun SettingsScreen(
     ui: SettingsUi?, actions: SettingsActions, onBack: () -> Unit, modifier: Modifier = Modifier, scroll: Boolean = true, sdk: Boolean = Sdk.available,
-    onAccount: (AccountEntry) -> Unit = {}, onAddExport: () -> Unit = {},
+    onAccount: (AccountEntry) -> Unit = {}, onAddExport: () -> Unit = {}, now: () -> Long = System::currentTimeMillis,
 ) {
     BackHandler { onBack() }
     Column(modifier.fillMaxWidth().background(Poster.Stock).then(if (scroll) Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()) else Modifier)) {
@@ -106,6 +109,8 @@ fun SettingsScreen(
         }
         if (ui != null) Column(Modifier.padding(horizontal = 20.dp)) {
             AccountSection(ui, actions, onAccount)
+            Spacer(Modifier.height(48.dp))
+            SyncSection(ui.sync, actions, now)
             Spacer(Modifier.height(48.dp))
             GoogleMaps(ui, actions, sdk)
             Spacer(Modifier.height(48.dp))
@@ -127,6 +132,7 @@ private fun AccountSection(ui: SettingsUi, actions: SettingsActions, onAccount: 
     val a = ui.account
     var url by rememberSaveable(ui.maps.accountUrl) { mutableStateOf(ui.maps.accountUrl) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    val activity = LocalContext.current
     H2("Account")
     if (a.session == null) {
         Text(ACCOUNT_CAPTION, color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 16.sp))
@@ -161,7 +167,7 @@ private fun AccountSection(ui: SettingsUi, actions: SettingsActions, onAccount: 
             Text(DELETE_CAPTION, color = Poster.Ink, style = PosterType.Lede.copy(fontSize = 15.sp))
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                InkButton("Delete for good", { confirmDelete = false; actions.deleteAccount() }, red = true)
+                InkButton("Delete for good", { confirmDelete = false; actions.deleteAccount(activity) }, red = true)
                 InkButton("Keep it", { confirmDelete = false }, quiet = true)
             }
         }
@@ -171,6 +177,50 @@ private fun AccountSection(ui: SettingsUi, actions: SettingsActions, onAccount: 
     Spacer(Modifier.height(24.dp))
     InkButton("Save service", { actions.setAccountUrl(url) }, enabled = url.trim() != ui.maps.accountUrl)
 }
+
+/** One line for where sync stands, then Sync now and a two-tap Start fresh; locked, only Start fresh gets out. */
+@Composable
+private fun SyncSection(sync: SyncStatus, actions: SettingsActions, now: () -> Long) {
+    var confirm by rememberSaveable { mutableStateOf(false) }
+    val activity = LocalContext.current
+    H2(SYNC_TITLE)
+    val locked = sync == SyncStatus.Error(SyncError.Locked)
+    Text(
+        when (sync) {
+            SyncStatus.Off -> SYNC_OFF
+            is SyncStatus.Idle -> if (sync.lastTs == 0L) SYNC_NEVER else SYNC_OK.replace("{ago}", age(sync.lastTs / 1000, now() / 1000))
+            SyncStatus.Syncing -> SYNC_BUSY
+            is SyncStatus.Error -> if (locked) SYNC_LOCKED else SYNC_ERR
+        },
+        color = if (sync is SyncStatus.Error) Poster.Red else Poster.Ink2, style = PosterType.Lede.copy(fontSize = 15.sp),
+    )
+    if (sync == SyncStatus.Off) return
+    Spacer(Modifier.height(24.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (!locked) InkButton(SYNC_NOW, { actions.syncNow() }, enabled = sync != SyncStatus.Syncing)
+        if (!confirm) InkButton(SYNC_FRESH, { confirm = true }, quiet = !locked)
+    }
+    if (confirm) {
+        Spacer(Modifier.height(20.dp))
+        Text(SYNC_FRESH_BODY, color = Poster.Ink, style = PosterType.Lede.copy(fontSize = 15.sp))
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            InkButton(SYNC_FRESH, { confirm = false; actions.startFresh(activity) }, red = true)
+            InkButton("Keep it", { confirm = false }, quiet = true)
+        }
+    }
+}
+
+const val SYNC_TITLE = "Sync"
+const val SYNC_OFF = "Sync is off — sign in with Google to turn it on."
+const val SYNC_NEVER = "Not synced yet"
+const val SYNC_OK = "Synced · {ago}"
+const val SYNC_BUSY = "Syncing…"
+const val SYNC_ERR = "Couldn't sync. We'll try again."
+const val SYNC_LOCKED = "Can't unlock your synced record."
+const val SYNC_NOW = "Sync now"
+const val SYNC_FRESH = "Start fresh"
+const val SYNC_FRESH_BODY = "This removes your synced copy from the cloud. What's on this device stays."
 
 const val ACCOUNT_CAPTION = "An account keeps your record in a vault only your passphrase opens, and brings it to your next phone."
 const val VAULT_UP_TO_DATE = "Recovery vault: up to date"

@@ -9,6 +9,8 @@ import java.nio.ByteOrder
 
 const val SOURCE_IMPORT = "import"
 const val SOURCE_DEVICE = "device"
+/** Stays another device of ours pushed; never pushed again from here, never dropped by a pull. */
+const val SOURCE_SYNC = "sync"
 
 // Rows mirror the parser output (ingest.Parsed), not the derived Record: derivation is cheap and
 // depends on the profile, parsing is not and depends only on the file.
@@ -64,6 +66,10 @@ data class PlaceEnrichmentEntity(
     @PrimaryKey val placeId: String, val name: String?, val address: String?,
     val types: String, val primaryType: String?, val photo: String?,
 )
+
+/** What the worker holds under a sync key, as far as this phone knows: the blob's `ts`, and for our own keys the hash of the plaintext sent. */
+@Entity(tableName = "sync_state")
+data class SyncStateEntity(@PrimaryKey val key: String, val ts: Long, val hash: String?)
 
 @Entity(tableName = "import_meta")
 data class ImportMetaEntity(

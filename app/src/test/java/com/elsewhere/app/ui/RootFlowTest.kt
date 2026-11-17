@@ -49,6 +49,23 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.ByteArrayInputStream
+import android.content.Context
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import com.elsewhere.app.data.CitiesLoader
+import com.elsewhere.app.data.RecordRepository
+import com.elsewhere.app.data.SecretBox
+import com.elsewhere.app.data.SettingsStore
+import com.elsewhere.app.data.db.ElsewhereDb
+import com.elsewhere.app.data.db.SOURCE_SYNC
+import com.elsewhere.app.data.db.VisitEntity
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import java.io.File
+import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
@@ -109,7 +126,7 @@ class RootFlowTest {
     /** A phone that has recorded for a few days, answered the questions, and never brought an export. */
     private fun waiting(days: Int, export: Boolean, control: Fakes.Control = Fakes.Control(Recording(true, 1_800_000_000L, 0L)), stays: Boolean = true): Fakes.Store {
         val store = Fakes.Store(record)
-        store.hasImport.value = stays; store.hasExport.value = export; store.recordedDays.value = days
+        store.hasImport.value = stays; store.hasHistory.value = export; store.recordedDays.value = days
         store.profile.value = Profile("Ana", Units.KM, listOf(Home(42.36, -71.06, "Boston", "US", 0, null)), emptyList())
         val maps = Fakes.Maps().apply { cur.value = com.elsewhere.app.data.Settings(limitedAccepted = true) }
         rule.setContent {
@@ -148,7 +165,7 @@ class RootFlowTest {
         rule.waitForIdle()
         assertEquals(true, control.recording.value.enabled)
         rule.onNodeWithText("RECORDING IS PAUSED").assertDoesNotExist()
-        store.hasExport.value = true
+        store.hasHistory.value = true
         rule.waitForIdle()
         rule.onNodeWithText("THE APP").assertIsDisplayed()
     }
@@ -158,5 +175,31 @@ class RootFlowTest {
         rule.onAllNodesWithText("DAY 1").onFirst().assertIsDisplayed()
         rule.onNodeWithText("THE DOOR").assertDoesNotExist()
         rule.onNodeWithText("THE APP").assertDoesNotExist()
+    }
+
+    /** A fresh phone that pulled another device's record: the stays are `sync` rows, not an export and not recorded here. */
+    @Test fun `a record pulled from another device lands in the app, not at the door`() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val dir = File("build/test-datastore/${UUID.randomUUID()}").apply { mkdirs() }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
+        val ds = PreferenceDataStoreFactory.create(scope = scope) { File(dir, "settings.preferences_pb") }
+        val repo = RecordRepository(db, SettingsStore(ds, SecretBox.inMemory()), CitiesLoader(ctx), scope)
+        try {
+            runBlocking {
+                val pulled = (0 until 2).map { d -> VisitEntity(d, start / 1000 + d * 86400L, start / 1000 + d * 86400L + 3600L, 0, "dev:p$d", 42.36, -71.06, "UNKNOWN", 1.0, 0, null, null, null, SOURCE_SYNC) }
+                repo.insertSynced(pulled, emptyMap())
+                repo.saveProfile(Profile("Ana", Units.KM, listOf(Home(42.36, -71.06, "Boston", "US", 0, null)), emptyList()))
+                repo.hasImport.first { it }; repo.profile.first { it != null }; repo.hasHistory.first { it }
+            }
+            val maps = Fakes.Maps().apply { cur.value = com.elsewhere.app.data.Settings(limitedAccepted = true) }
+            rule.setContent {
+                val root = remember { RootViewModel(repo, Fakes.Land, maps, Fakes.Account(), Fakes.Control()) }
+                ElsewhereTheme { Root(vm = root, door = { _, _ -> androidx.compose.material3.Text("THE DOOR") }, app = { _, _, _, _ -> androidx.compose.material3.Text("THE APP") }, waiting = { androidx.compose.material3.Text("THE WAIT") }) }
+            }
+            rule.waitForIdle()
+            rule.onNodeWithText("THE APP").assertIsDisplayed()
+            rule.onNodeWithText("THE DOOR").assertDoesNotExist()
+        } finally { scope.cancel(); db.close(); dir.deleteRecursively() }
     }
 }

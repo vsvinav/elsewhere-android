@@ -4,7 +4,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
+import com.elsewhere.app.sync.SyncApi
+import com.elsewhere.app.sync.SyncBlob
+import com.elsewhere.app.sync.SyncEntry
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -53,7 +57,7 @@ interface AccountApi {
 /** Emails are trimmed and lowercased before they leave, as the service normalises them. */
 fun normalizeEmail(email: String): String = email.trim().lowercase()
 
-class AccountClient(private val http: OkHttpClient, private val baseUrl: () -> String) : AccountApi {
+class AccountClient(private val http: OkHttpClient, private val baseUrl: () -> String) : AccountApi, SyncApi {
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun start(email: String) {
@@ -71,6 +75,11 @@ class AccountClient(private val http: OkHttpClient, private val baseUrl: () -> S
     override suspend fun putVault(session: String, body: VaultBody) { call("PUT", "/vault", body.encode(), session) }
     override suspend fun getVault(session: String): VaultBody? = call("GET", "/vault", null, session, allow404 = true)?.let { VaultBody.decode(it) }
     override suspend fun deleteMe(session: String) { call("DELETE", "/me", "", session) }
+
+    override suspend fun list(session: String): List<SyncEntry> = json.decodeFromString(ListSerializer(SyncEntry.serializer()), call("GET", "/sync", null, session)!!)
+    override suspend fun get(session: String, key: String): SyncBlob? = call("GET", "/sync/$key", null, session, allow404 = true)?.let { SyncBlob.decode(it) }
+    override suspend fun put(session: String, key: String, blob: SyncBlob) { call("PUT", "/sync/$key", blob.encode(), session) }
+    override suspend fun deleteAll(session: String) { call("DELETE", "/sync", "", session) }
 
     private fun quote(s: String) = Json.encodeToString(String.serializer(), s)
 
@@ -96,7 +105,8 @@ class AccountClient(private val http: OkHttpClient, private val baseUrl: () -> S
     }
 }
 
-private suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
+/** OkHttp's callback as a suspension; shared with the sync and Drive clients. */
+internal suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
     enqueue(object : Callback {
         override fun onFailure(call: Call, e: IOException) { if (cont.isActive) cont.resumeWithException(e) }
         override fun onResponse(call: Call, response: Response) { cont.resume(response) }

@@ -53,7 +53,16 @@ import com.elsewhere.app.account.AccountRepository
 import com.elsewhere.app.account.AccountStore
 import com.elsewhere.app.account.Accounts
 import com.elsewhere.app.auth.CredentialGoogleAuth
+import com.elsewhere.app.auth.DriveAuth
 import com.elsewhere.app.auth.GoogleAuth
+import com.elsewhere.app.auth.PlayDriveAuth
+import com.elsewhere.app.sync.DriveKey
+import com.elsewhere.app.sync.DriveLinker
+import com.elsewhere.app.sync.SyncApi
+import com.elsewhere.app.sync.SyncEngine
+import com.elsewhere.app.sync.SyncWorker
+import com.elsewhere.app.sync.Syncer
+import com.elsewhere.app.sync.DriveKeys
 import com.elsewhere.app.crew.CrewPublisher
 import com.elsewhere.app.crew.Identity
 import com.elsewhere.app.crew.CrewStore
@@ -112,13 +121,20 @@ object AppModule {
     @Provides @Singleton fun sonarEngine(crew: CrewStore, hub: RoomHub, publisher: CrewPublisher, db: ElsewhereDb, alerts: SonarAlerts, scope: CoroutineScope): SonarEngine =
         SonarEngine(crew, hub, publisher, db, alerts, scope)
 
-    @Provides @Singleton fun accountApi(http: OkHttpClient, settings: SettingsStore): AccountApi =
+    @Provides @Singleton fun accountClient(http: OkHttpClient, settings: SettingsStore): AccountClient =
         AccountClient(http, { runBlocking { settings.settings.first().accountUrl } })
+    @Provides fun accountApi(c: AccountClient): AccountApi = c
+    @Provides fun syncer(e: SyncEngine): Syncer = e
+    @Provides fun syncApi(c: AccountClient): SyncApi = c
+    @Provides @Singleton fun syncEngine(@ApplicationContext ctx: Context, api: SyncApi, db: ElsewhereDb, store: AccountStore, repo: RecordRepository, linker: DriveLinker, scope: CoroutineScope): SyncEngine =
+        SyncEngine(ctx, api, db, store, repo, linker, scope, retry = { SyncWorker.schedule(ctx) })
     @Provides fun identity(crew: CrewStore): Identity = crew
     @Provides @Singleton fun accountRepository(api: AccountApi, store: AccountStore, repo: RecordRepository, settings: SettingsStore, crew: CrewStore, scope: CoroutineScope): AccountRepository =
         AccountRepository(api, store, repo, settings, crew, scope)
     @Provides fun accounts(r: AccountRepository): Accounts = r
     @Provides fun googleAuth(): GoogleAuth = CredentialGoogleAuth(BuildConfig.GOOGLE_CLIENT_ID)
+    @Provides fun driveAuth(p: PlayDriveAuth): DriveAuth = p
+    @Provides @Singleton fun driveKeys(http: OkHttpClient): DriveKeys = DriveKey(http)
 
     @Provides fun visits(db: ElsewhereDb) = db.visits()
     @Provides fun activities(db: ElsewhereDb) = db.activities()

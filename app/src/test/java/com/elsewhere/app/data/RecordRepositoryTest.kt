@@ -163,7 +163,7 @@ class RecordRepositoryTest {
         assertEquals(0, rec.meta.importReport.segmentsTotal)
         assertEquals(2, repo.deviceVisits.value)
         assertEquals(2, repo.recordedDays.first { it == 2 })
-        assertFalse(repo.hasExport.value)
+        assertFalse(repo.hasHistory.value)
     }
 
     @Test fun `refresh rebuilds from whatever Room holds now, and the bar reads Working out trips`() = runTest {
@@ -188,7 +188,9 @@ class RecordRepositoryTest {
         repo.record.first { it != null }
 
         repo.insertDevice(listOf(deviceVisit(1_800_000_000L)), emptyList(), emptyList())
+        db.syncState().upsert(com.elsewhere.app.data.db.SyncStateEntity("d_x:2024-01", 5L, null))
         repo.reset()
+        assertEquals("what was pulled or pushed is forgotten with the rows", 0, db.syncState().all().size)
         assertFalse(repo.hasImport.first { !it })
         assertNull(repo.record.first { it == null })
         assertNull(repo.profile.first { it == null })

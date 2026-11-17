@@ -12,8 +12,12 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM visits ORDER BY start, id") suspend fun all(): List<VisitEntity>
     @Query("SELECT COUNT(*) FROM visits") suspend fun count(): Int
     @Query("SELECT COUNT(*) FROM visits WHERE source = 'device'") suspend fun countDevice(): Int
+    /** Stays that did not come from an export: recorded here or pulled from another device. */
+    @Query("SELECT COUNT(*) FROM visits WHERE source != 'import'") suspend fun countOwn(): Int
+    @Query("SELECT COUNT(*) FROM visits WHERE source = :source") suspend fun countSource(source: String): Int
+    @Query("SELECT * FROM visits WHERE source = :source ORDER BY start, id") suspend fun bySource(source: String): List<VisitEntity>
     /** How many distinct days the phone has recorded a stay on; `start` is in seconds. */
-    @Query("SELECT COUNT(DISTINCT start / 86400) FROM visits WHERE source = 'device'") suspend fun recordedDays(): Int
+    @Query("SELECT COUNT(DISTINCT start / 86400) FROM visits WHERE source != 'import'") suspend fun recordedDays(): Int
     @Query("SELECT * FROM visits WHERE `end` >= :since ORDER BY start") suspend fun since(since: Long): List<VisitEntity>
     @Query("DELETE FROM visits") suspend fun clear()
     @Query("DELETE FROM visits WHERE source = 'import'") suspend fun clearImported()
@@ -78,4 +82,11 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM import_meta WHERE id = 1") suspend fun get(): ImportMetaEntity?
     @Query("SELECT * FROM import_meta") suspend fun all(): List<ImportMetaEntity>
     @Query("DELETE FROM import_meta") suspend fun clear()
+}
+
+@Dao
+interface SyncStateDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(row: SyncStateEntity)
+    @Query("SELECT * FROM sync_state") suspend fun all(): List<SyncStateEntity>
+    @Query("DELETE FROM sync_state") suspend fun clear()
 }
