@@ -48,6 +48,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -80,6 +81,7 @@ class CrewFlowTest {
     private lateinit var scope: CoroutineScope
     private lateinit var db: ElsewhereDb
     private lateinit var vm: CrewViewModel
+    private lateinit var engine: SonarEngine
     private val martaKeys = DeviceKeys.generate()
     private val martaSign = Crypto.hex(martaKeys.signPub)
     private val martaKx = Crypto.hex(martaKeys.kxPub)
@@ -104,7 +106,7 @@ class CrewFlowTest {
         val relay = RelayClient(OkHttpClient(), { server.url("/").toString() }, { store.keys() })
         val publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { null }, scope)
         val hub = RoomHub(store, relay, scope)
-        val engine = SonarEngine(store, hub, publisher, db, object : SonarAlerts { override fun nearby(friend: Friend, test: Boolean, sent: Boolean) = Unit }, scope, rehearsalUntil = { settings.settings.first().rehearsalUntil })
+        engine = SonarEngine(store, hub, publisher, db, object : SonarAlerts { override fun nearby(friend: Friend, test: Boolean, sent: Boolean) = Unit }, scope, rehearsalUntil = { settings.settings.first().rehearsalUntil })
         vm = CrewViewModel(store, Pairing(store, relay, { "Me" }), publisher, hub, engine, settings, Fakes.Control(Recording(enabled = true)))
         vm.pollMs = 60_000L
     }
@@ -216,6 +218,18 @@ class CrewFlowTest {
         runBlocking { settings.saveSettings(settings.settings.first().copy(rehearsalUntil = System.currentTimeMillis() + 3_600_000L)) }
         await { vm.ui.value?.rehearsal == true }
         node(REHEARSAL_TAG).assertIsDisplayed()
+    }
+
+    @Test fun `a sonar hit opens the sheet once, and dismissing it remembers the hit`() {
+        val marta = Friend("M", "Marta", Crypto.hex(ByteArray(32) { 1 }), Crypto.hex(ByteArray(32) { 2 }), "PAIRM", Crypto.b64(ByteArray(32)), 0L, Grants(sonar = true))
+        runBlocking { store.addFriend(marta) }
+        await { vm.ui.value?.friends?.size == 1 }
+        assertNull(vm.sheet.value)
+        val id = runBlocking { engine.testFire("M") }!!
+        await { vm.sheet.value?.hitId == id }
+        assertEquals("Marta", vm.sheet.value!!.friend.name)
+        vm.dismissSheet()
+        await { vm.sheet.value == null && runBlocking { store.sheetSeen() }.contains(id) }
     }
 
     @Test fun `without a relay the code bill tells you where to set one`() {

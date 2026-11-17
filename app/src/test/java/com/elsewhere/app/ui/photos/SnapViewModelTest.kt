@@ -1,6 +1,8 @@
 package com.elsewhere.app.ui.photos
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.core.content.FileProvider
 import androidx.lifecycle.SavedStateHandle
@@ -62,6 +64,22 @@ class SnapViewModelTest {
     // FileProvider caches its root strategy per JVM; each Robolectric test gets a fresh cache dir, so drop it around this test.
     private fun resetFileProvider() {
         FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }.let { (it.get(null) as MutableMap<*, *>).clear() }
+    }
+
+    @Test fun `a caption handed to begin lands on the photo once it is picked`() {
+        val handle = SavedStateHandle()
+        val vm = SnapViewModel(store, files, handle)
+        val launched = CompletableDeferred<Source>()
+        vm.begin(SnapPlace("sonar:h1", "Lisbon", 38.72, -9.14, "Lisbon"), Source.CAMERA, caption = "with Marta") { launched.complete(it) }
+        runBlocking { withTimeout(5_000) { launched.await() } }
+        assertEquals("with Marta", SnapViewModel(store, files, handle).pendingCaption)
+        val f = File(ctx.cacheDir, "pic-${UUID.randomUUID()}.jpg")
+        Bitmap.createBitmap(64, 48, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFFE9B531.toInt()) }.let { b -> f.outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 90, it) } }
+        vm.picked(Uri.fromFile(f))
+        val open = runBlocking { withTimeout(5_000) { while (vm.open == null) kotlinx.coroutines.delay(20); vm.open!! } }
+        assertEquals("with Marta", open.photo.caption)
+        assertEquals("with Marta", runBlocking { db.photos().get(open.photo.id)!!.caption })
+        assertNull(vm.pendingCaption)
     }
 
     @Test fun `the place and camera file behind an open camera survive the view model being rebuilt`() {

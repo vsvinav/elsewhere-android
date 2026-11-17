@@ -65,6 +65,7 @@ class CrewStore @Inject constructor(private val store: DataStore<Preferences>, p
         val code = stringPreferencesKey("crew.code")
         val share = stringPreferencesKey("crew.share")
         fun lastHit(pairId: String) = longPreferencesKey("sonar.lastHit.$pairId")
+        val sheetSeen = stringPreferencesKey("sonar.sheetSeen")
     }
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val keysLock = Mutex()
@@ -117,6 +118,15 @@ class CrewStore @Inject constructor(private val store: DataStore<Preferences>, p
     }
     suspend fun recordHit(pairId: String, at: Long) = store.edit { it[K.lastHit(pairId)] = at }
 
+    /** Hits whose Sonar sheet has already been shown; each shows once, and the list forgets its oldest past [SHEET_SEEN_MAX]. */
+    suspend fun sheetSeen(): Set<String> = seenList(store.data.first()[K.sheetSeen]).toSet()
+    suspend fun markSheetSeen(hitId: String) = store.edit { p ->
+        p[K.sheetSeen] = (seenList(p[K.sheetSeen]).filterNot { it == hitId } + hitId).takeLast(SHEET_SEEN_MAX).joinToString("\n")
+    }
+    private fun seenList(s: String?) = s?.split('\n')?.filter { it.isNotEmpty() } ?: emptyList()
+
     /** A tombstone of our own: forget friends, the code, the share and the debounce, but keep the keys. */
     suspend fun clearFriends() = store.edit { p -> p.remove(K.friends); p.remove(K.share) }
 }
+
+const val SHEET_SEEN_MAX = 64

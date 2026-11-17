@@ -19,6 +19,7 @@ import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.record.FreshFix
 import com.elsewhere.app.record.RecordControl
 import com.elsewhere.app.sonar.SonarEngine
+import com.elsewhere.app.sonar.SonarHit
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -108,6 +109,9 @@ class CrewViewModel @Inject constructor(
     /** Friends whose Sonar hit is still ringing on the map: evaluated once per ping, cleared after [RING_MS]. */
     private val hitsFlow = MutableStateFlow<Set<String>>(emptySet())
     val hits: StateFlow<Set<String>> = hitsFlow
+    private val sheetFlow = MutableStateFlow<SonarHit?>(null)
+    /** The hit the Map should raise its Sonar sheet for; each hit gets the sheet once. */
+    val sheet: StateFlow<SonarHit?> = sheetFlow
 
     val ui: StateFlow<CrewUi?> = combine(
         combine(store.friends, store.code, pair) { f, c, p -> Triple(f, c, p) },
@@ -125,10 +129,17 @@ class CrewViewModel @Inject constructor(
         }
         viewModelScope.launch {
             engine.hits.collect { h ->
+                if (h.hitId !in store.sheetSeen()) sheetFlow.value = h
                 hitsFlow.update { it + h.friend.deviceId }
                 launch { delay(RING_MS.toLong() + 300); hitsFlow.update { it - h.friend.deviceId } }
             }
         }
+    }
+
+    fun dismissSheet() {
+        val h = sheetFlow.value ?: return
+        sheetFlow.value = null
+        viewModelScope.launch { store.markSheetSeen(h.hitId) }
     }
 
     /** The Crew or Map tab has come into view: while recording, fetch one fresh fix and publish it at once. */

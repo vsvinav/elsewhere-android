@@ -49,11 +49,15 @@ class SnapViewModel @Inject constructor(val store: PhotoStore, val files: PhotoF
     var cameraFile: File?
         get() = state.get<String>(CAMERA_FILE)?.let(::File)
         private set(v) { state[CAMERA_FILE] = v?.path }
+    /** A caption to write on the photo once it is taken, e.g. the friend a Sonar hit was snapped with. */
+    var pendingCaption: String?
+        get() = state.get<String>(PENDING_CAPTION)
+        private set(v) { state[PENDING_CAPTION] = v }
 
     /** Resolves to the picker to launch, or null when the note has to be read first. */
-    fun begin(place: SnapPlace?, source: Source, launch: (Source) -> Unit) {
+    fun begin(place: SnapPlace?, source: Source, caption: String? = null, launch: (Source) -> Unit) {
         viewModelScope.launch {
-            pending = place
+            pending = place; pendingCaption = caption
             if (store.privacySeen()) launch(source) else privacyFor = place to source
         }
     }
@@ -64,16 +68,20 @@ class SnapViewModel @Inject constructor(val store: PhotoStore, val files: PhotoF
         viewModelScope.launch { store.markPrivacySeen(); pending = place; launch(source) }
     }
 
-    fun privacyDismissed() { privacyFor = null; pending = null }
+    fun privacyDismissed() { privacyFor = null; pending = null; pendingCaption = null }
 
     fun cameraTarget(): Uri { val (f, uri) = files.cameraTarget(); cameraFile = f; return uri }
 
     fun picked(uri: Uri?) {
         val place = pending; pending = null
+        val caption = pendingCaption?.take(CAPTION_MAX)?.ifBlank { null }; pendingCaption = null
         val tmp = cameraFile; cameraFile = null
         if (uri == null) { tmp?.delete(); return }
         viewModelScope.launch {
-            store.snap(uri, place?.ctx)?.let { open = OpenPhoto(it, place) }
+            store.snap(uri, place?.ctx)?.let {
+                if (caption != null) store.caption(it.id, caption)
+                open = OpenPhoto(it.copy(caption = caption ?: it.caption), place)
+            }
             tmp?.delete()
         }
     }
@@ -96,3 +104,4 @@ class SnapViewModel @Inject constructor(val store: PhotoStore, val files: PhotoF
 
 private const val PENDING = "snap.pending"
 private const val CAMERA_FILE = "snap.cameraFile"
+private const val PENDING_CAPTION = "snap.caption"
