@@ -97,7 +97,7 @@ class SettingsScreenTest {
         rule.onNodeWithText("not json").performScrollTo().assertIsDisplayed()
         vm.import({ "{}".byteInputStream() }, "Timeline.json")
         rule.waitForIdle()
-        assertEquals(true, store.hasExport.value)
+        assertEquals(true, store.hasHistory.value)
         rule.onNodeWithText("not json").assertDoesNotExist()
     }
 

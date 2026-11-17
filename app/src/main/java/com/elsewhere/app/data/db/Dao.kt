@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT COUNT(*) FROM visits WHERE source = 'device'") suspend fun countDevice(): Int
     /** Stays that did not come from an export: recorded here or pulled from another device. */
     @Query("SELECT COUNT(*) FROM visits WHERE source != 'import'") suspend fun countOwn(): Int
+    @Query("SELECT COUNT(*) FROM visits WHERE source = :source") suspend fun countSource(source: String): Int
     @Query("SELECT * FROM visits WHERE source = :source ORDER BY start, id") suspend fun bySource(source: String): List<VisitEntity>
     /** How many distinct days the phone has recorded a stay on; `start` is in seconds. */
     @Query("SELECT COUNT(DISTINCT start / 86400) FROM visits WHERE source != 'import'") suspend fun recordedDays(): Int

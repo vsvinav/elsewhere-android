@@ -51,18 +51,19 @@ object Fakes {
     class Store(private val rec: Record) : RecordStore {
         override val ready = MutableStateFlow(true)
         override val hasImport = MutableStateFlow(false)
-        override val hasExport = MutableStateFlow(false)
+        override val hasHistory = MutableStateFlow(false)
+        override suspend fun profileEditedAt() = 0L
         override val recordedDays = MutableStateFlow(0)
         override val profile = MutableStateFlow<Profile?>(null)
         var saved: Profile? = null
         var resets = 0
         override suspend fun import(open: () -> InputStream, fileName: String, onProgress: (Float) -> Unit): ImportReport {
-            open().use { it.readBytes() }; onProgress(1f); hasImport.value = true; hasExport.value = true
+            open().use { it.readBytes() }; onProgress(1f); hasImport.value = true; hasHistory.value = true
             return ImportReport(100, 98, mapOf("bad_json" to 2))
         }
         override suspend fun provisionalRecord(): Record = rec
         override suspend fun saveProfile(p: Profile) { saved = p; profile.value = p }
-        override suspend fun reset() { resets++; hasImport.value = false; hasExport.value = false; profile.value = null }
+        override suspend fun reset() { resets++; hasImport.value = false; hasHistory.value = false; profile.value = null }
     }
 
     /** An account layer that remembers what was asked of it; `welcomed = true` by default so older flows skip Welcome. */

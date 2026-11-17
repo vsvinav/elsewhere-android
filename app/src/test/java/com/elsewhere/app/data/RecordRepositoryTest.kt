@@ -163,7 +163,7 @@ class RecordRepositoryTest {
         assertEquals(0, rec.meta.importReport.segmentsTotal)
         assertEquals(2, repo.deviceVisits.value)
         assertEquals(2, repo.recordedDays.first { it == 2 })
-        assertFalse(repo.hasExport.value)
+        assertFalse(repo.hasHistory.value)
     }
 
     @Test fun `refresh rebuilds from whatever Room holds now, and the bar reads Working out trips`() = runTest {

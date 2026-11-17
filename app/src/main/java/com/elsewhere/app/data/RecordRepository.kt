@@ -75,6 +75,8 @@ class RecordRepository @Inject constructor(
     private val photoFiles: PhotoFiles? = null,
 ) : RecordSource, RecordStore, EnrichmentStore {
     private val importVersion = MutableStateFlow(0)
+    /** Stamps profile edits; tests pin it. */
+    var clock: () -> Long = System::currentTimeMillis
     /** Set by `build()` so the UI can tell an export-only record from one the phone is adding to. */
     val deviceVisits: StateFlow<Int> get() = deviceCount
     private val deviceCount = MutableStateFlow(0)
@@ -98,8 +100,8 @@ class RecordRepository @Inject constructor(
         .onEach { importRead.value = true }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
-    override val hasExport: StateFlow<Boolean> = importVersion
-        .map { db.importMeta().get() != null }
+    override val hasHistory: StateFlow<Boolean> = importVersion
+        .map { db.importMeta().get() != null || db.visits().countSource(SOURCE_SYNC) > 0 }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
     override val recordedDays: StateFlow<Int> = importVersion
@@ -260,7 +262,12 @@ class RecordRepository @Inject constructor(
         db.frequentPlaces().clear(); db.placeEnrichment().clear(); db.importMeta().clear(); db.photos().clear()
     }
 
-    override suspend fun saveProfile(p: Profile) = settings.saveProfile(p)
+    override suspend fun saveProfile(p: Profile) = settings.saveProfile(p, clock())
+
+    /** A profile that arrived from another device, stamped with when it was edited there. */
+    suspend fun adoptProfile(p: Profile, editedAt: Long) = settings.saveProfile(p, editedAt)
+
+    override suspend fun profileEditedAt(): Long = settings.profileEditedAt.first()
 
     override suspend fun cached(): Map<String, Enrichment> = db.placeEnrichment().all().associate {
         it.placeId to Enrichment(it.name, it.address, Json.decodeFromString(strings, it.types), it.primaryType, it.photo)

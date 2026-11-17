@@ -126,7 +126,7 @@ class RootFlowTest {
     /** A phone that has recorded for a few days, answered the questions, and never brought an export. */
     private fun waiting(days: Int, export: Boolean, control: Fakes.Control = Fakes.Control(Recording(true, 1_800_000_000L, 0L)), stays: Boolean = true): Fakes.Store {
         val store = Fakes.Store(record)
-        store.hasImport.value = stays; store.hasExport.value = export; store.recordedDays.value = days
+        store.hasImport.value = stays; store.hasHistory.value = export; store.recordedDays.value = days
         store.profile.value = Profile("Ana", Units.KM, listOf(Home(42.36, -71.06, "Boston", "US", 0, null)), emptyList())
         val maps = Fakes.Maps().apply { cur.value = com.elsewhere.app.data.Settings(limitedAccepted = true) }
         rule.setContent {
@@ -165,7 +165,7 @@ class RootFlowTest {
         rule.waitForIdle()
         assertEquals(true, control.recording.value.enabled)
         rule.onNodeWithText("RECORDING IS PAUSED").assertDoesNotExist()
-        store.hasExport.value = true
+        store.hasHistory.value = true
         rule.waitForIdle()
         rule.onNodeWithText("THE APP").assertIsDisplayed()
     }
@@ -187,10 +187,10 @@ class RootFlowTest {
         val repo = RecordRepository(db, SettingsStore(ds, SecretBox.inMemory()), CitiesLoader(ctx), scope)
         try {
             runBlocking {
-                val pulled = (0 until 8).map { d -> VisitEntity(d, start / 1000 + d * 86400L, start / 1000 + d * 86400L + 3600L, 0, "dev:p$d", 42.36, -71.06, "UNKNOWN", 1.0, 0, null, null, null, SOURCE_SYNC) }
+                val pulled = (0 until 2).map { d -> VisitEntity(d, start / 1000 + d * 86400L, start / 1000 + d * 86400L + 3600L, 0, "dev:p$d", 42.36, -71.06, "UNKNOWN", 1.0, 0, null, null, null, SOURCE_SYNC) }
                 repo.insertSynced(pulled, emptyMap())
                 repo.saveProfile(Profile("Ana", Units.KM, listOf(Home(42.36, -71.06, "Boston", "US", 0, null)), emptyList()))
-                repo.hasImport.first { it }; repo.profile.first { it != null }; repo.recordedDays.first { it >= 7 }
+                repo.hasImport.first { it }; repo.profile.first { it != null }; repo.hasHistory.first { it }
             }
             val maps = Fakes.Maps().apply { cur.value = com.elsewhere.app.data.Settings(limitedAccepted = true) }
             rule.setContent {

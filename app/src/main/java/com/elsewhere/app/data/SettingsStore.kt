@@ -53,6 +53,7 @@ data class Counters(val detailsCalls: Int = 0, val photoCalls: Int = 0, val mapL
 class SettingsStore @Inject constructor(private val store: DataStore<Preferences>, private val box: SecretBox) : MapsSettings, LlmSettings, CostMeter, AddressBook {
     private object K {
         val profile = stringPreferencesKey("profile")
+        val profileEditedAt = longPreferencesKey("profileEditedAt")
         val mapsKey = stringPreferencesKey("mapsKey")
         val mapId = stringPreferencesKey("mapId")
         val mapProvider = stringPreferencesKey("mapProvider")
@@ -134,8 +135,13 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
     val passportSeen: Flow<Set<String>?> = store.data.map { it[K.passportSeen] }
     suspend fun savePassportSeen(ids: Set<String>) { store.edit { it[K.passportSeen] = ids } }
 
-    suspend fun saveProfile(profile: Profile?) {
-        store.edit { if (profile == null) it.remove(K.profile) else it[K.profile] = json.encodeToString(Profile.serializer(), profile) }
+    /** Epoch ms of the last `saveProfile`; 0 before any. */
+    val profileEditedAt: Flow<Long> = store.data.map { it[K.profileEditedAt] ?: 0L }
+
+    suspend fun saveProfile(profile: Profile?, editedAt: Long = System.currentTimeMillis()) {
+        store.edit {
+            if (profile == null) { it.remove(K.profile); it.remove(K.profileEditedAt) } else { it[K.profile] = json.encodeToString(Profile.serializer(), profile); it[K.profileEditedAt] = editedAt }
+        }
     }
 
     override suspend fun saveSettings(s: Settings) {

@@ -32,7 +32,7 @@ class RootViewModel @Inject constructor(repo: RecordStore, landLoader: LandSourc
     val readyBar: StateFlow<Ready?> = readyState.ready
     val ready: StateFlow<Boolean> = repo.ready
     val hasImport: StateFlow<Boolean> = repo.hasImport
-    val hasExport: StateFlow<Boolean> = repo.hasExport
+    val hasHistory: StateFlow<Boolean> = repo.hasHistory
     val recordedDays: StateFlow<Int> = repo.recordedDays
     val recording: StateFlow<Boolean> = control.recording.map { it.enabled }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val profile: StateFlow<Profile?> = repo.profile
