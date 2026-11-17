@@ -37,6 +37,7 @@ class AccountRepositoryTest {
         private fun check() { fail?.let { throw it } }
         override suspend fun start(email: String) { calls += "start $email"; check() }
         override suspend fun finish(email: String, code: String): Login { calls += "finish $email $code"; check(); return Login(session, AccountInfo("acct_0123456789abcdef", email, 1L, hasVault)) }
+        override suspend fun google(idToken: String): Login { calls += "google $idToken"; check(); return Login(session, AccountInfo("acct_0123456789abcdef", "ada@example.org", 1L, hasVault)) }
         override suspend fun me(session: String): AccountInfo { calls += "me"; check(); return AccountInfo("acct_0123456789abcdef", "ada@example.org", 1L, hasVault) }
         override suspend fun logout(session: String) { calls += "logout $session"; check() }
         override suspend fun putVault(session: String, body: VaultBody) { calls += "put"; putFail?.let { throw it }; check(); vault = body; hasVault = true }

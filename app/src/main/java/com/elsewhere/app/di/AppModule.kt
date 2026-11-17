@@ -46,11 +46,14 @@ import com.elsewhere.app.ingest.KeyCheck
 import com.elsewhere.app.ingest.KeyChecker
 import com.elsewhere.app.ask.HttpLlmClient
 import com.elsewhere.app.ask.LlmClient
+import com.elsewhere.app.BuildConfig
 import com.elsewhere.app.account.AccountApi
 import com.elsewhere.app.account.AccountClient
 import com.elsewhere.app.account.AccountRepository
 import com.elsewhere.app.account.AccountStore
 import com.elsewhere.app.account.Accounts
+import com.elsewhere.app.auth.CredentialGoogleAuth
+import com.elsewhere.app.auth.GoogleAuth
 import com.elsewhere.app.crew.CrewPublisher
 import com.elsewhere.app.crew.Identity
 import com.elsewhere.app.crew.CrewStore
@@ -115,6 +118,7 @@ object AppModule {
     @Provides @Singleton fun accountRepository(api: AccountApi, store: AccountStore, repo: RecordRepository, settings: SettingsStore, crew: CrewStore, scope: CoroutineScope): AccountRepository =
         AccountRepository(api, store, repo, settings, crew, scope)
     @Provides fun accounts(r: AccountRepository): Accounts = r
+    @Provides fun googleAuth(): GoogleAuth = CredentialGoogleAuth(BuildConfig.GOOGLE_CLIENT_ID)
 
     @Provides fun visits(db: ElsewhereDb) = db.visits()
     @Provides fun activities(db: ElsewhereDb) = db.activities()

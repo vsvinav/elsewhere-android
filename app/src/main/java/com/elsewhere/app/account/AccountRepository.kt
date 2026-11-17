@@ -41,6 +41,7 @@ interface Accounts {
     suspend fun welcome()
     suspend fun start(email: String)
     suspend fun finish(email: String, code: String): AccountInfo
+    suspend fun google(idToken: String): AccountInfo
     suspend fun setPassphrase(passphrase: String)
     suspend fun restore(passphrase: String)
     suspend fun unlock(passphrase: String)
@@ -88,9 +89,12 @@ class AccountRepository(
 
     override suspend fun start(email: String) = api.start(normalizeEmail(email))
 
+    override suspend fun finish(email: String, code: String): AccountInfo = signedIn(api.finish(normalizeEmail(email), code))
+
+    override suspend fun google(idToken: String): AccountInfo = signedIn(api.google(idToken))
+
     /** A new session: whatever vault stamp the last account left is wrong for this one. */
-    override suspend fun finish(email: String, code: String): AccountInfo {
-        val login = api.finish(normalizeEmail(email), code)
+    private suspend fun signedIn(login: Login): AccountInfo {
         key.value = null
         store.saveSalt(null); store.saveVault(0L, null)
         store.saveSession(Session(login.session, login.account.id, login.account.email))

@@ -43,7 +43,7 @@ fun Root(
     recordScreen: @Composable (onClose: () -> Unit) -> Unit = { RecordRoute(it) },
     settingsScreen: @Composable (onClose: () -> Unit) -> Unit = { SettingsRoute(it) },
     crewScreen: @Composable (onClose: () -> Unit) -> Unit = { CrewRoute(it) },
-    welcome: @Composable (onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit) -> Unit = { s, l, k -> WelcomeScreen(s, l, k) },
+    welcome: @Composable (onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit, onGoogle: () -> Unit) -> Unit = { s, l, k, g -> WelcomeScreen(s, l, k, g) },
     account: @Composable (entry: AccountEntry, onDone: () -> Unit, onClose: () -> Unit) -> Unit = { e, d, c -> AccountRoute(e, d, c) },
     waiting: @Composable (onSettings: () -> Unit) -> Unit = { WaitingRoute(it) },
 ) {
@@ -74,7 +74,7 @@ fun Root(
         when {
             !ready || gated == null || acct == null -> Box(Modifier.fillMaxSize().background(Poster.Stock))
             entry != null -> account(entry!!, { entry = null; vm.welcome() }, { entry = null })
-            needsWelcome -> welcome({ entry = AccountEntry.SignUp }, { entry = AccountEntry.LogIn }, { vm.welcome() })
+            needsWelcome -> welcome({ entry = AccountEntry.SignUp }, { entry = AccountEntry.LogIn }, { vm.welcome() }, { entry = AccountEntry.Google })
             recording -> recordScreen { recording = false }
             needsDoor -> door(Step.Record, null)
             editing != null -> door(editing!!) { editing = null }

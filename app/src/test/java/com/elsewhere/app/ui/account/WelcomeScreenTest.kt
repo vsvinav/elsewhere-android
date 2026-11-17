@@ -17,10 +17,10 @@ import org.robolectric.annotation.Config
 class WelcomeScreenTest {
     @get:Rule val rule = createComposeRule()
 
-    private var signUps = 0; private var logIns = 0; private var skips = 0
+    private var signUps = 0; private var logIns = 0; private var skips = 0; private var googles = 0
 
-    private fun show(welcomed: Boolean) {
-        rule.setContent { ElsewhereTheme { WelcomeScreen({ signUps++ }, { logIns++ }, { skips++ }, welcomed = welcomed) } }
+    private fun show(welcomed: Boolean, googleClientId: String = "") {
+        rule.setContent { ElsewhereTheme { WelcomeScreen({ signUps++ }, { logIns++ }, { skips++ }, onGoogle = { googles++ }, welcomed = welcomed, googleClientId = googleClientId) } }
     }
 
     @Test fun `a first visit prints the tagline and three ways on`() {
@@ -36,5 +36,16 @@ class WelcomeScreenTest {
         show(welcomed = true)
         rule.onNodeWithText("NOT NOW").performClick()
         assertEquals(1, skips)
+    }
+
+    @Test fun `with a Google client id the Google way in sits above the others`() {
+        show(welcomed = false, googleClientId = "123.apps.googleusercontent.com")
+        rule.onNodeWithText(GOOGLE_BUTTON.uppercase()).performClick()
+        assertEquals(1, googles)
+    }
+
+    @Test fun `without a client id there is no Google button`() {
+        show(welcomed = false)
+        rule.onNodeWithText(GOOGLE_BUTTON.uppercase()).assertDoesNotExist()
     }
 }

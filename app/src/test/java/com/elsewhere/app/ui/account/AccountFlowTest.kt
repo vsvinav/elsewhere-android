@@ -38,7 +38,7 @@ class AccountFlowTest {
 
     private fun show(acct: Fakes.Account, entry: AccountEntry) {
         rule.setContent {
-            val vm = remember { AccountViewModel(acct) }
+            val vm = remember { AccountViewModel(acct, Fakes.Google()) }
             val ui by vm.ui.collectAsStateWithLifecycle()
             remember { vm.begin(entry); true }
             if (ui.done) done++
@@ -89,7 +89,7 @@ class AccountFlowTest {
 
     /** The Activity comes back after a rotation with the same view model; the page it was on must still be there. */
     @Test fun `recreating the activity at the Code step stays on the Code step`() {
-        val acct = Fakes.Account(); val vm = AccountViewModel(acct)
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google())
         val restorer = StateRestorationTester(rule)
         restorer.setContent { ElsewhereTheme { AccountRoute(AccountEntry.LogIn, onDone = { done++ }, onClose = null, vm = vm) } }
         field("account.email").performTextInput("ana@example.com")

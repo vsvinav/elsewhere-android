@@ -6,6 +6,7 @@ import com.elsewhere.app.account.Accounts
 import com.elsewhere.app.account.Session
 import com.elsewhere.app.account.VaultState
 import com.elsewhere.app.account.WrongPassphrase
+import com.elsewhere.app.auth.GoogleAuth
 import com.elsewhere.app.ask.LlmClient
 import com.elsewhere.app.ask.LlmConfig
 import com.elsewhere.app.data.Counters
@@ -65,6 +66,7 @@ object Fakes {
         override val vaultState = MutableStateFlow(VaultState.None)
         val started = mutableListOf<String>()
         val codes = mutableListOf<String>()
+        val googleTokens = mutableListOf<String>()
         var passphrasesSet = mutableListOf<String>()
         var restored = mutableListOf<String>()
         var unlocked = mutableListOf<String>()
@@ -77,11 +79,21 @@ object Fakes {
             account.value = account.value!!.copy(session = Session("sess", "acct_1", email))
             return AccountInfo("acct_1", email, 0L, hasVault)
         }
+        override suspend fun google(idToken: String): AccountInfo {
+            fail?.let { throw it }; googleTokens += idToken
+            account.value = account.value!!.copy(session = Session("sess", "acct_1", "google@example.com"))
+            return AccountInfo("acct_1", "google@example.com", 0L, hasVault)
+        }
         override suspend fun setPassphrase(passphrase: String) { fail?.let { throw it }; passphrasesSet += passphrase; vaultState.value = VaultState.UpToDate }
         override suspend fun restore(passphrase: String) { fail?.let { throw it }; if (passphrase != this.passphrase) throw WrongPassphrase(); restored += passphrase }
         override suspend fun unlock(passphrase: String) { fail?.let { throw it }; if (passphrase != this.passphrase) throw WrongPassphrase(); unlocked += passphrase; vaultState.value = VaultState.UpToDate }
         override suspend fun logOut() { fail?.let { throw it }; logOuts++; account.value = account.value!!.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) }
         override suspend fun deleteAccount() { fail?.let { throw it }; deletes++; account.value = account.value!!.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) }
+    }
+
+    class Google(var fail: Throwable? = null) : GoogleAuth {
+        var asked = 0
+        override suspend fun idToken(activity: android.content.Context): String { asked++; fail?.let { throw it }; return "id.tok" }
     }
 
     class Maps : MapsSettings {

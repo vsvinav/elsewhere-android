@@ -12,7 +12,7 @@ class AccountSnapshot {
     @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, theme = "android:Theme.Material.Light.NoActionBar")
 
     private object NoOp : AccountActions {
-        override fun begin(entry: AccountEntry) {}
+        override fun begin(entry: AccountEntry) = true
         override fun sendCode(email: String) {}
         override fun resend() {}
         override fun submitCode(code: String) {}
@@ -28,11 +28,15 @@ class AccountSnapshot {
     }
 
     @Test fun welcomeStart() = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = false, sketchAt = 0L) } }
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = false, sketchAt = 0L, googleClientId = "") } }
     }
 
     @Test fun welcomeRest() = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = true, sketchAt = SKETCH_TOTAL) } }
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = true, sketchAt = SKETCH_TOTAL, googleClientId = "") } }
+    }
+
+    @Test fun welcomeGoogle() = paparazzi.snapshot {
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = false, sketchAt = 0L, googleClientId = "web-client") } }
     }
 
     @Test fun email() = shoot(AccountUi(entry = AccountEntry.SignUp, step = AccountStep.Email), close = false)

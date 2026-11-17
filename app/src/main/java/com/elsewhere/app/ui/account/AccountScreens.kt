@@ -1,6 +1,7 @@
 package com.elsewhere.app.ui.account
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,10 +26,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.elsewhere.app.BuildConfig
+import com.elsewhere.app.R
 import com.elsewhere.app.ui.onboard.OnboardFrame
 import com.elsewhere.app.ui.world.CapsText
 import com.elsewhere.app.ui.world.DisplayText
@@ -41,14 +45,18 @@ const val WELCOME_LINE = "Your life, mapped as you live it."
 const val PASSPHRASE_NOTE = "Only you know this. We can't reset it."
 const val MAIL_LINK_NOTE = "Opening the link in the mail works too."
 const val START_OVER = "Start over without my vault"
+const val GOOGLE_BUTTON = "Continue with Google"
 
 /**
- * The first page a fresh install sees: the sketch, then sign up, log in, or carry on as before.
- * Shown again from Settings once `welcomed`, where the third way out is just "Not now".
- * `sketchAt` pins the panel to one frame for snapshots.
+ * The first page a fresh install sees: the sketch, then Google, sign up, log in, or carry on as before.
+ * Shown again from Settings once `welcomed`, where the last way out is just "Not now".
+ * `sketchAt` pins the panel to one frame for snapshots; an empty `googleClientId` leaves the Google button out.
  */
 @Composable
-fun WelcomeScreen(onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit, welcomed: Boolean = false, sketchAt: Long? = null) {
+fun WelcomeScreen(
+    onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit, onGoogle: () -> Unit = {}, welcomed: Boolean = false, sketchAt: Long? = null,
+    googleClientId: String = BuildConfig.GOOGLE_CLIENT_ID,
+) {
     OnboardFrame(question = null, onCancel = null) {
         DisplayText("Elsewhere", 72.sp)
         Spacer(Modifier.height(20.dp))
@@ -57,6 +65,9 @@ fun WelcomeScreen(onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit,
         Text(WELCOME_LINE, color = Poster.Ink, style = PosterType.Lede.copy(fontSize = 22.sp))
         Spacer(Modifier.height(32.dp))
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (googleClientId.isNotEmpty()) {
+                InkButton(GOOGLE_BUTTON, onGoogle, Modifier.fillMaxWidth(), quiet = true, icon = { Image(painterResource(R.drawable.ic_google_g), null, Modifier.size(18.dp)) })
+            }
             InkButton("Sign up", onSignUp, Modifier.fillMaxWidth())
             InkButton("Log in", onLogIn, Modifier.fillMaxWidth(), quiet = true)
         }

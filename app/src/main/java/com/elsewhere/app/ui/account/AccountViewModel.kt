@@ -1,12 +1,16 @@
 package com.elsewhere.app.ui.account
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.elsewhere.app.account.AccountException
 import com.elsewhere.app.account.Accounts
 import com.elsewhere.app.account.NoVault
 import com.elsewhere.app.account.Vault
 import com.elsewhere.app.account.WrongPassphrase
 import com.elsewhere.app.account.userMessage
+import com.elsewhere.app.auth.GoogleAuth
+import com.elsewhere.app.auth.GoogleSignInFailed
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,8 +18,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Why the flow opened: the two Welcome buttons, Settings' "Log in or sign up", or Settings' "Update" on a stale vault. */
-enum class AccountEntry { SignUp, LogIn, Update }
+/** Why the flow opened: Welcome's three buttons, Settings' "Log in or sign up", or Settings' "Update" on a stale vault. */
+enum class AccountEntry { SignUp, LogIn, Google, Update }
 
 enum class AccountStep { Email, Code, SetPassphrase, Unlock }
 
@@ -33,7 +37,8 @@ data class AccountUi(
 
 /** Everything the account pages can do; the view model is the real one, snapshots pass a no-op. */
 interface AccountActions {
-    fun begin(entry: AccountEntry)
+    /** True when the flow (re)started from its first page; a recreated Activity gets false and must not start anything again. */
+    fun begin(entry: AccountEntry): Boolean
     fun sendCode(email: String)
     fun resend()
     fun submitCode(code: String)
@@ -52,19 +57,27 @@ const val PASSPHRASES_DIFFER = "Those don't match."
 const val NOT_AN_EMAIL = "That doesn't look like an email."
 const val WRONG_PASSPHRASE = "That's not it"
 const val NO_VAULT = "This account has no vault yet. Set a passphrase instead."
+const val GOOGLE_FAIL = "Google sign-in didn't finish. Try again."
 
 @HiltViewModel
-class AccountViewModel @Inject constructor(private val accounts: Accounts) : ViewModel(), AccountActions {
+class AccountViewModel @Inject constructor(private val accounts: Accounts, private val google: GoogleAuth) : ViewModel(), AccountActions {
     private val _ui = MutableStateFlow(AccountUi())
     val ui: StateFlow<AccountUi> = _ui
 
     private var begun = false
 
     /** Idempotent: a recreated Activity calls this again and must not throw the visitor back to the first page. */
-    override fun begin(entry: AccountEntry) {
-        if (begun && _ui.value.entry == entry && !_ui.value.done) return
+    override fun begin(entry: AccountEntry): Boolean {
+        if (begun && _ui.value.entry == entry && !_ui.value.done) return false
         begun = true
         _ui.value = AccountUi(entry = entry, step = if (entry == AccountEntry.Update) AccountStep.Unlock else AccountStep.Email)
+        return true
+    }
+
+    /** The Google sheet over `activity`, then the token to the service; from there it is the same road as a finished code. */
+    fun google(activity: Context) = run(after = { it }) {
+        val account = try { accounts.google(google.idToken(activity)) } catch (e: AccountException) { if (e.code == 401) throw GoogleSignInFailed(e) else throw e }
+        _ui.update { it.copy(step = if (account.hasVault) AccountStep.Unlock else AccountStep.SetPassphrase) }
     }
 
     override fun sendCode(email: String) {
@@ -124,6 +137,7 @@ class AccountViewModel @Inject constructor(private val accounts: Accounts) : Vie
     private fun messageOf(e: Throwable): String = when (e) {
         is WrongPassphrase -> WRONG_PASSPHRASE
         is NoVault -> NO_VAULT
+        is GoogleSignInFailed -> GOOGLE_FAIL
         else -> e.userMessage()
     }
 
