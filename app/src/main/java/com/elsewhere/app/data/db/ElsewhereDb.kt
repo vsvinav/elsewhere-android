@@ -7,8 +7,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [VisitEntity::class, ActivityEntity::class, PathEntity::class, RawFixEntity::class, MemoryEntity::class,
-        FrequentPlaceEntity::class, PlaceEnrichmentEntity::class, ImportMetaEntity::class, PhotoEntity::class],
-    version = 3, exportSchema = true,
+        FrequentPlaceEntity::class, PlaceEnrichmentEntity::class, ImportMetaEntity::class, PhotoEntity::class,
+        SyncStateEntity::class],
+    version = 4, exportSchema = true,
 )
 abstract class ElsewhereDb : RoomDatabase() {
     abstract fun visits(): VisitDao
@@ -20,6 +21,7 @@ abstract class ElsewhereDb : RoomDatabase() {
     abstract fun placeEnrichment(): PlaceEnrichmentDao
     abstract fun importMeta(): ImportMetaDao
     abstract fun photos(): PhotoDao
+    abstract fun syncState(): SyncStateDao
 }
 
 /** 1 → 2: rows learn where they came from, and the phone's own fixes get a table. */
@@ -43,4 +45,11 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
-val MIGRATIONS = arrayOf<Migration>(MIGRATION_1_2, MIGRATION_2_3)
+/** 3 → 4: what the sync worker holds under each key. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `sync_state` (`key` TEXT NOT NULL, `ts` INTEGER NOT NULL, `hash` TEXT, PRIMARY KEY(`key`))")
+    }
+}
+
+val MIGRATIONS = arrayOf<Migration>(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)

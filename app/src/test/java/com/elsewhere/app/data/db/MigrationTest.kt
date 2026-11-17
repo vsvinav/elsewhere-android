@@ -33,7 +33,7 @@ class MigrationTest {
         "CREATE TABLE IF NOT EXISTS `import_meta` (`id` INTEGER NOT NULL, `sourceFile` TEXT NOT NULL, `sourceSha256` TEXT NOT NULL, `builtAt` INTEGER NOT NULL, `segmentsTotal` INTEGER NOT NULL, `parsed` INTEGER NOT NULL, `skippedJson` TEXT NOT NULL, PRIMARY KEY(`id`))",
     )
 
-    @Test fun `v1 rows migrate to v3 with source = import and empty raw_fixes and photos tables`() {
+    @Test fun `v1 rows migrate to v4 with source = import and empty raw_fixes, photos and sync_state tables`() {
         val helper = FrameworkSQLiteOpenHelperFactory().create(
             SupportSQLiteOpenHelper.Configuration.builder(ctx).name(name).callback(object : SupportSQLiteOpenHelper.Callback(1) {
                 override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
@@ -57,6 +57,9 @@ class MigrationTest {
             assertEquals(emptyList<PhotoEntity>(), migrated.photos().list())
             migrated.photos().upsert(PhotoEntity("p", 1L, null, null, "place", null, null, "p.jpg"))
             assertEquals("place", migrated.photos().get("p")?.placeId)
+            assertEquals(emptyList<SyncStateEntity>(), migrated.syncState().all())
+            migrated.syncState().upsert(SyncStateEntity("profile", 5L, null))
+            assertEquals(5L, migrated.syncState().all().single().ts)
         }
     }
 }

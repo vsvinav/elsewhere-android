@@ -16,6 +16,7 @@ import com.elsewhere.app.ui.world.PhotoSources
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import com.elsewhere.app.auth.PlayDriveAuth
+import com.elsewhere.app.sync.SyncEngine
 import javax.inject.Inject
 import com.elsewhere.app.ui.Root
 import com.elsewhere.app.ui.world.ElsewhereTheme
@@ -36,11 +37,12 @@ import dagger.hilt.android.AndroidEntryPoint
     @Inject lateinit var meter: CostMeter
     @Inject lateinit var hub: RoomHub
 
-    override fun onStart() { super.onStart(); hub.foreground(true) }
+    override fun onStart() { super.onStart(); hub.foreground(true); sync.foreground() }
     override fun onStop() { hub.foreground(false); super.onStop() }
     @Inject lateinit var wikimedia: Wikimedia
     @Inject lateinit var appScope: CoroutineScope
     @Inject lateinit var driveAuth: PlayDriveAuth
+    @Inject lateinit var sync: SyncEngine
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

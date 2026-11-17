@@ -25,9 +25,10 @@ class VisitDaoTest {
     private fun visit(id: Int, day: Int, hour: Int, source: String = SOURCE_DEVICE) =
         VisitEntity(id, day * 86400L + hour * 3600L, day * 86400L + hour * 3600L + 1800L, 0, "p$id", 1.0, 2.0, "visit", 0.9, 0, null, null, null, source = source)
 
-    @Test fun `recorded days counts distinct days of device stays only`() = runBlocking {
+    @Test fun `recorded days counts distinct days of device and synced stays, not the export's`() = runBlocking {
         assertEquals(0, db.visits().recordedDays())
-        db.visits().insertAll(listOf(visit(1, 10, 8), visit(2, 10, 20), visit(3, 11, 9), visit(4, 13, 9), visit(5, 14, 9, source = SOURCE_IMPORT)))
-        assertEquals(3, db.visits().recordedDays())
+        db.visits().insertAll(listOf(visit(1, 10, 8), visit(2, 10, 20), visit(3, 11, 9), visit(4, 13, 9), visit(5, 14, 9, source = SOURCE_IMPORT), visit(6, 15, 9, source = SOURCE_SYNC)))
+        assertEquals(4, db.visits().recordedDays())
+        assertEquals(5, db.visits().countOwn())
     }
 }
