@@ -9,7 +9,9 @@ import com.elsewhere.app.data.db.VisitEntity
 import com.elsewhere.app.ingest.Cities
 import com.elsewhere.app.ingest.record.Fix
 import com.elsewhere.app.data.SecretBox
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -18,6 +20,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,8 +55,16 @@ class CrewPublisherTest {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         db = Room.inMemoryDatabaseBuilder(ctx, ElsewhereDb::class.java).allowMainThreadQueries().build()
         store = CrewStore(PreferenceDataStoreFactory.create(scope = scope) { File(dir, "crew.preferences_pb") }, SecretBox.inMemory())
-        publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { CityLookup(cities) }, scope) { now }
+        publisher = CrewPublisher(store, rooms, MutableSharedFlow(), db, { CityLookup(cities) }, scope, { now }, sleep = { ms -> waits += ms; release.await() })
     }
+
+    private val waits = ArrayList<Long>()
+    private var release = CompletableDeferred<Unit>()
+
+    /** Let a held send go, as if its wait had passed. */
+    private fun wake(ms: Long) { now += ms; val r = release; release = CompletableDeferred(); r.complete(Unit) }
+
+    private fun await(what: String, cond: () -> Boolean) { repeat(300) { if (cond()) return; Thread.sleep(10) }; assertTrue(what, cond()) }
 
     @After fun tearDown() { scope.cancel(); db.close(); dir.deleteRecursively() }
 
@@ -95,7 +106,9 @@ class CrewPublisherTest {
         now += 5_000
         publisher.demand(fresh)
         assertEquals(1, asked)
-        assertEquals("the demand ping ignores the cadence", listOf("A"), rooms.sent.map { it.first })
+        await("the demand ping ignores the cadence, but still waits out the relay's gap") { waits == listOf(5_000L) }
+        wake(5_000)
+        await("sent") { rooms.sent.map { it.first } == listOf("A") }
         now += 30_000
         publisher.demand(fresh)
         assertEquals("debounced", 1, asked)
@@ -124,7 +137,7 @@ class CrewPublisherTest {
         publisher.startShare(setOf("A", "B"), ShareLength.UNTIL_STOP)
         publisher.onFix(fix(now))
         rooms.sent.clear()
-        now += 5_000
+        now += 15_000
         publisher.carryHit(a, Ping.Hit("PAIRA:1", now / 1000))
         assertEquals(listOf("A"), rooms.sent.map { it.first })
         assertEquals(Ping.Hit("PAIRA:1", now / 1000), Ping.decode(rooms.sent[0].second).hit)
@@ -140,5 +153,56 @@ class CrewPublisherTest {
         publisher.revoke(a)
         assertEquals(listOf("A" to REVOKE_JSON), rooms.sent)
         assertEquals(emptyList<Friend>(), store.friendsNow())
+    }
+
+    @Test fun `a hit inside the relay's ten seconds waits for them, and rides a ping sent in the meantime`() = runTest {
+        val a = friend("A", Grants(sonar = true))
+        store.addFriend(a)
+        publisher.onFix(fix(now))
+        rooms.sent.clear()
+        now += 3_000
+        publisher.carryHit(a, Ping.Hit("PAIRA:1", now / 1000))
+        assertEquals("too soon for the relay: nothing yet", 0, rooms.sent.size)
+        await("the send is held") { waits == listOf(7_000L) }
+        wake(7_000)
+        await("sent once the gap has passed") { rooms.sent.size == 1 }
+        assertEquals("PAIRA:1", Ping.decode(rooms.sent[0].second).hit!!.id)
+        rooms.sent.clear()
+
+        now += 3_000
+        publisher.carryHit(a, Ping.Hit("PAIRA:2", now / 1000))
+        await("held again") { waits.size == 2 }
+        now += 2_000
+        publisher.demand { fix(now) }
+        assertEquals("a forced ping inside the gap waits too", 0, rooms.sent.size)
+        val at = now / 1000
+        wake(5_000)
+        await("one ping carries both the fix and the hit") { rooms.sent.size == 1 }
+        assertEquals("PAIRA:2", Ping.decode(rooms.sent[0].second).hit!!.id)
+        assertEquals(at, Ping.decode(rooms.sent[0].second).t)
+        Thread.sleep(50)
+        assertEquals("the hit is sent once, with one wait", 1, rooms.sent.size); assertEquals(2, waits.size)
+    }
+
+    @Test fun `two tabs asking for a fix at once fetch it once`() = runTest {
+        store.addFriend(friend("A", Grants(sonar = true)))
+        var asked = 0
+        val gate = CompletableDeferred<Unit>()
+        val fresh: suspend () -> Fix? = { asked++; gate.await(); fix(now) }
+        val first = scope.launch { publisher.demand(fresh) }
+        await("the first fetch is under way") { asked == 1 }
+        publisher.demand(fresh)
+        assertEquals("the second ask returns without fetching", 1, asked)
+        gate.complete(Unit)
+        first.join()
+        assertEquals(1, rooms.sent.size)
+    }
+
+    @Test fun `a fetch that comes back empty leaves the minute open for the next ask`() = runTest {
+        store.addFriend(friend("A", Grants(sonar = true)))
+        publisher.demand { null }
+        var asked = 0
+        publisher.demand { asked++; fix(now) }
+        assertEquals(1, asked)
     }
 }

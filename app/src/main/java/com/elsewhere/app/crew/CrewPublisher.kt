@@ -11,6 +11,7 @@ import com.elsewhere.app.sonar.stintStart
 import com.elsewhere.app.sonar.toSonarFix
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -30,6 +31,7 @@ class CrewPublisher(
     private val cities: suspend () -> CityLookup?,
     private val scope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val sleep: suspend (Long) -> Unit = { delay(it) },
 ) {
     private var planner: PublishPlanner? = null
     private val lock = Mutex()
@@ -37,6 +39,10 @@ class CrewPublisher(
     private var lastFix: RecordFix? = null
     private var selfAt = 0L
     private var demandAt: Long? = null
+    /** When each friend's room last took a ping from us; the relay drops anything sooner than [RELAY_GAP_MS] after. */
+    private val sentAt = HashMap<String, Long>()
+    /** Pings waiting out the relay's gap, newest fix wins and a hit is kept until it has gone. */
+    private val held = HashMap<String, Ping>()
     private var self: Pair<Boolean, Int?> = false to null
 
     val share: Flow<ShareSession?> get() = store.share
@@ -56,9 +62,11 @@ class CrewPublisher(
      */
     suspend fun demand(fresh: suspend () -> RecordFix?) {
         val asked = clock()
-        if (demandAt?.let { asked - it < DEMAND_MS } == true) return
-        val fix = fresh() ?: return
+        val before = demandAt
+        if (before?.let { asked - it < DEMAND_MS } == true) return
+        // Claim the minute before asking, so two tabs coming into view together ask the phone once.
         demandAt = asked
+        val fix = fresh() ?: run { if (demandAt == asked) demandAt = before; return }
         lock.withLock { publishNow(fix, force = true) }
     }
 
@@ -74,7 +82,26 @@ class CrewPublisher(
         val (habitat, absence) = selfJudgement(fix, now)
         val my = MyFix(fix.ts, fix.lat, fix.lng, habitat, absence)
         val friends = store.friendsNow()
-        for ((friend, ping) in planner().plan(my, friends, session, now, force)) hub.send(friend, ping.encode())
+        for ((friend, ping) in planner().plan(my, friends, session, now, force)) send(friend, ping, now)
+    }
+
+    /** Under [lock]. A ping inside the relay's gap is held and sent when the gap has passed, so a hit is never dropped. */
+    private suspend fun send(friend: Friend, ping: Ping, now: Long) {
+        val id = friend.deviceId
+        val last = sentAt[id]
+        if (last != null && now - last < RELAY_GAP_MS) {
+            val waiting = held.put(id, ping.copy(hit = ping.hit ?: held[id]?.hit))
+            if (waiting == null) scope.launch { sleep(last + RELAY_GAP_MS - now); lock.withLock { release(friend) } }
+            return
+        }
+        hub.send(friend, ping.encode())
+        sentAt[id] = now
+    }
+
+    private suspend fun release(friend: Friend) {
+        val ping = held.remove(friend.deviceId) ?: return
+        hub.send(friend, ping.encode())
+        sentAt[friend.deviceId] = clock()
     }
 
     private suspend fun selfJudgement(fix: RecordFix, now: Long): Pair<Boolean, Int?> {
@@ -121,10 +148,13 @@ class CrewPublisher(
         store.removeFriend(friend.deviceId)
         hub.forget(friend.deviceId)
         planner().forget(friend.deviceId)
+        lock.withLock { held.remove(friend.deviceId); sentAt.remove(friend.deviceId) }
     }
 
     companion object {
         const val DEMAND_MS = 60_000L
+        /** The relay takes one ping per room per ten seconds. */
+        const val RELAY_GAP_MS = 10_000L
 
         fun forApp(store: CrewStore, hub: RoomHub, recorder: Recorder, db: ElsewhereDb, cities: CitiesLoader, scope: CoroutineScope) =
             CrewPublisher(store, hub, recorder.fixes, db, { CityLookup(cities.get()) }, scope)
