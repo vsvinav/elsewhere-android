@@ -5,7 +5,6 @@ import com.elsewhere.app.account.AccountException
 import com.elsewhere.app.account.AccountStorage
 import com.elsewhere.app.account.Vault
 import com.elsewhere.app.crew.Crypto
-import com.elsewhere.app.crew.Identity
 import com.elsewhere.app.data.RecordRepository
 import com.elsewhere.app.data.db.ElsewhereDb
 import com.elsewhere.app.data.db.SOURCE_DEVICE
@@ -14,6 +13,7 @@ import com.elsewhere.app.data.db.SOURCE_SYNC
 import com.elsewhere.app.data.db.SyncStateEntity
 import com.elsewhere.app.data.db.VisitEntity
 import com.elsewhere.app.ingest.record.devicePlaceId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,8 +43,8 @@ enum class SyncError { Network, Locked, Server }
 interface Syncer {
     val status: StateFlow<SyncStatus>
     fun syncNow()
-    /** `activity` must be the foreground Activity: Drive may ask for consent over it. */
-    suspend fun startFresh(activity: Context)
+    /** `activity` must be the foreground Activity: Drive may ask for consent over it. Runs in the app's scope; [status] tells how it went. */
+    fun startFresh(activity: Context)
 }
 
 /**
@@ -59,7 +59,6 @@ class SyncEngine(
     private val db: ElsewhereDb,
     private val store: AccountStorage,
     private val record: RecordRepository,
-    private val identity: Identity,
     private val linker: DriveLinker,
     private val scope: CoroutineScope,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -85,7 +84,13 @@ class SyncEngine(
             val st = store.state.first()
             lastRun = if (st.session != null && st.driveKey != null) db.syncState().all().firstOrNull { it.key == LAST }?.ts ?: 0L else 0L
             _status.value = if (st.session != null && st.driveKey != null) SyncStatus.Idle(lastRun) else SyncStatus.Off
-            combine(record.changes, record.profile, store.state) { c, p, s -> Triple(c, p, s) }.drop(1).collect { sync(force = false) }
+            var signedIn = st.session != null
+            combine(record.changes, record.profile, store.state) { c, p, s -> Triple(c, p, s) }.drop(1).collect { (_, _, s) ->
+                // Signing out ends the bookkeeping: a later login, even to the same account, pulls everything afresh.
+                if (signedIn && s.session == null) lock.withLock { db.syncState().clear(); lastRun = 0L }
+                signedIn = s.session != null
+                sync(force = false)
+            }
         }
     }
 
@@ -118,6 +123,7 @@ class SyncEngine(
             lastRun = now; pending = false
             db.syncState().upsert(SyncStateEntity(LAST, now, null))
             _status.value = SyncStatus.Idle(now)
+        } catch (e: CancellationException) { throw e
         } catch (e: GeneralSecurityException) {
             _status.value = SyncStatus.Error(SyncError.Locked)
         } catch (e: AccountException) {
@@ -125,6 +131,9 @@ class SyncEngine(
             pending = true; _status.value = SyncStatus.Error(SyncError.Server); retry()
         } catch (e: IOException) {
             pending = true; _status.value = SyncStatus.Error(SyncError.Network); retry()
+        } catch (e: Exception) {
+            // A body that is not a blob, or a blob that is not JSON: the worker's fault, say so and keep the process.
+            pending = true; _status.value = SyncStatus.Error(SyncError.Server)
         }
     }
 
@@ -153,7 +162,7 @@ class SyncEngine(
                 val plain = MonthChunk(stays = stays.map { WireStay(Wire.stayId(source, it.start), it.lat, it.lng, names[it.placeId], it.start, it.end) }.sortedWith(compareBy({ it.start }, { it.id }))).encode()
                 val h = Crypto.sha256hex(plain.toByteArray())
                 if (state[k]?.hash == h) continue
-                val ts = putFresh(session, key, k, plain, now)
+                val ts = putFresh(session, key, k, plain, now) ?: continue
                 remember(state, SyncStateEntity(k, ts, h))
             }
         }
@@ -194,13 +203,19 @@ class SyncEngine(
         }
     }
 
-    /** A 409 means the worker holds a newer copy of our chunk: its ts is taken as ours and the chunk counts as pushed. */
-    private suspend fun putFresh(session: String, key: ByteArray, k: String, plain: String, now: Long): Long {
-        try { api.put(session, k, Wire.seal(key, k, plain, now)) } catch (e: AccountException) {
-            if (e.code != 409) throw e
-            return api.get(session, k)?.ts ?: now
+    /**
+     * Our chunk is authoritative; a 409 means the worker holds a later ts, so it goes up again at that ts. A second
+     * 409 leaves the chunk for the next round, unrecorded, so it is not taken as pushed. Returns the ts it went up with.
+     */
+    private suspend fun putFresh(session: String, key: ByteArray, k: String, plain: String, now: Long): Long? {
+        var ts = now
+        repeat(2) {
+            try { api.put(session, k, Wire.seal(key, k, plain, ts)); return ts } catch (e: AccountException) {
+                if (e.code != 409) throw e
+                ts = maxOf(now, api.get(session, k)?.ts ?: now)
+            }
         }
-        return now
+        return null
     }
 
     private suspend fun remember(state: MutableMap<String, SyncStateEntity>, row: SyncStateEntity) { state[row.key] = row; db.syncState().upsert(row) }
@@ -208,7 +223,7 @@ class SyncEngine(
     /** The stays this phone is responsible for, by wire source: what it recorded and the export it imported. */
     private suspend fun ownSources(): Map<String, List<VisitEntity>> {
         val out = LinkedHashMap<String, List<VisitEntity>>()
-        out[Wire.deviceSource(identity.keys().deviceId)] = db.visits().bySource(SOURCE_DEVICE)
+        out[Wire.deviceSource(store.installId())] = db.visits().bySource(SOURCE_DEVICE)
         db.importMeta().get()?.takeIf { it.sourceSha256.isNotBlank() }?.let { out[Wire.importSource(it.sourceSha256)] = db.visits().bySource(SOURCE_IMPORT) }
         return out
     }
@@ -217,19 +232,23 @@ class SyncEngine(
      * Start fresh: the worker's copy and the Drive key go, a new key is made and the vault re-sealed under it, this
      * phone forgets what it had pushed and sends its record again. Stays already on the phone stay.
      */
-    override suspend fun startFresh(activity: Context) {
-        val session = store.state.first().session?.session ?: return
-        _status.value = SyncStatus.Syncing
-        try {
-            api.deleteAll(session)
-            linker.replace(activity)
-            db.syncState().clear()
-            lastRun = 0L
-        } catch (e: IOException) { _status.value = SyncStatus.Error(SyncError.Network); retry(); return }
-        run(force = true)
+    override fun startFresh(activity: Context) {
+        scope.launch {
+            val session = store.state.first().session?.session ?: return@launch
+            _status.value = SyncStatus.Syncing
+            try {
+                lock.withLock { db.syncState().clear(); lastRun = 0L }
+                api.deleteAll(session)
+                linker.replace(activity)
+            } catch (e: IOException) { pending = true; _status.value = SyncStatus.Error(SyncError.Network); retry(); return@launch }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { _status.value = SyncStatus.Error(SyncError.Server); return@launch }
+            run(force = true)
+        }
     }
 
-    private fun localId(stayId: String): Int = ByteBuffer.wrap(Crypto.unhex(stayId.take(8))).int
+    /** Pulled stays take negative ids, out of the way of the recorder's `start`-based ones, so a collision can never replace a device stay. */
+    private fun localId(stayId: String): Int = ByteBuffer.wrap(Crypto.unhex(stayId.take(8))).int or Int.MIN_VALUE
 
     /** Whole hours from the longitude: close enough to place a stay on its local day. */
     private fun tzGuess(lng: Double): Int = (lng / 15.0).roundToInt() * 60

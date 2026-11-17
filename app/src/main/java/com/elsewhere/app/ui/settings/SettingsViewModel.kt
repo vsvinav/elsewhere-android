@@ -153,7 +153,7 @@ class SettingsViewModel @Inject constructor(
 
     override fun syncNow() = syncer.syncNow()
 
-    override fun startFresh(activity: Context) { viewModelScope.launch { syncer.startFresh(activity) } }
+    override fun startFresh(activity: Context) = syncer.startFresh(activity)
 
     private fun accountCall(block: suspend () -> Unit) {
         accountError.value = null

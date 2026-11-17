@@ -126,8 +126,8 @@ object AppModule {
     @Provides fun accountApi(c: AccountClient): AccountApi = c
     @Provides fun syncer(e: SyncEngine): Syncer = e
     @Provides fun syncApi(c: AccountClient): SyncApi = c
-    @Provides @Singleton fun syncEngine(@ApplicationContext ctx: Context, api: SyncApi, db: ElsewhereDb, store: AccountStore, repo: RecordRepository, crew: CrewStore, linker: DriveLinker, scope: CoroutineScope): SyncEngine =
-        SyncEngine(ctx, api, db, store, repo, crew, linker, scope, retry = { SyncWorker.schedule(ctx) })
+    @Provides @Singleton fun syncEngine(@ApplicationContext ctx: Context, api: SyncApi, db: ElsewhereDb, store: AccountStore, repo: RecordRepository, linker: DriveLinker, scope: CoroutineScope): SyncEngine =
+        SyncEngine(ctx, api, db, store, repo, linker, scope, retry = { SyncWorker.schedule(ctx) })
     @Provides fun identity(crew: CrewStore): Identity = crew
     @Provides @Singleton fun accountRepository(api: AccountApi, store: AccountStore, repo: RecordRepository, settings: SettingsStore, crew: CrewStore, scope: CoroutineScope): AccountRepository =
         AccountRepository(api, store, repo, settings, crew, scope)

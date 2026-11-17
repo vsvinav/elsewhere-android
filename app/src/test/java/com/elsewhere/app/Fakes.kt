@@ -122,7 +122,7 @@ object Fakes {
         override val status = MutableStateFlow(initial)
         var nows = 0; var fresh = 0
         override fun syncNow() { nows++; status.value = SyncStatus.Syncing }
-        override suspend fun startFresh(activity: android.content.Context) { fresh++; status.value = SyncStatus.Idle(1L) }
+        override fun startFresh(activity: android.content.Context) { fresh++; status.value = SyncStatus.Idle(1L) }
     }
 
     class Maps : MapsSettings {

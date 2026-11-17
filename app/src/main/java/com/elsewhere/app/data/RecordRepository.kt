@@ -259,7 +259,7 @@ class RecordRepository @Inject constructor(
 
     private suspend fun clearRows() {
         db.visits().clear(); db.activities().clear(); db.paths().clear(); db.rawFixes().clear(); db.memories().clear()
-        db.frequentPlaces().clear(); db.placeEnrichment().clear(); db.importMeta().clear(); db.photos().clear()
+        db.frequentPlaces().clear(); db.placeEnrichment().clear(); db.importMeta().clear(); db.photos().clear(); db.syncState().clear()
     }
 
     override suspend fun saveProfile(p: Profile) = settings.saveProfile(p, clock())
