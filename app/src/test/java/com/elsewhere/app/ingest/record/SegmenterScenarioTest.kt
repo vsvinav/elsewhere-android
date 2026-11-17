@@ -227,6 +227,34 @@ class SegmenterScenarioTest {
         assertEquals(sB, b.start); assertEquals(sB + 3600, b.end); assertNear(airportB, b.lat, b.lng)
     }
 
+    @Test fun `the flight survives the stale sweep closing the airport stay before landing`() {
+        val eA = t0 + 3600; val sB = eA + 5 * 3600
+        val before = Stream().stay(airportA, 3600).fixes
+        val after = Stream().stay(airportA, 3600).gap(5 * 3600).land(airportB, 3600).fixes.drop(before.size)
+        val s = Segmenter(tzAt = { -300 })
+        val out = ArrayList<Emission>()
+        for (f in before) out += s.feed(f)
+        // An hour of silence and the sweep closes the stay, as RecordWorker does; the leg must still appear on landing.
+        out += s.close()
+        assertEquals(listOf("visit"), out.kinds())
+        val restored = Segmenter(Json.decodeFromString(SegmenterState.serializer(), Json.encodeToString(SegmenterState.serializer(), s.state)), tzAt = { -300 })
+        for (f in after) out += restored.feed(f)
+        out += restored.close()
+        assertEquals(listOf("visit", "activity", "visit"), out.kinds())
+        val a = out.visit(0); val f = out.leg(1); val b = out.visit(2)
+        assertEquals(eA, a.end)
+        assertEquals("FLYING", f.mode); assertEquals(0.8, f.p)
+        assertEquals(a.end, f.start); assertEquals(sB, f.end)
+        assertEquals(a.lat, f.sLat); assertEquals(a.lng, f.sLng)
+        assertNear(airportB, f.eLat, f.eLng)
+        assertEquals(sB, b.start); assertNear(airportB, b.lat, b.lng)
+    }
+
+    @Test fun `state saved before the flight-leg field existed still restores`() {
+        val old = Json.decodeFromString(SegmenterState.serializer(), """{"lastTs":${t0}}""")
+        assertEquals(t0, old.lastTs); assertEquals(null, old.last)
+    }
+
     @Test fun `a flight across time zones, each visit keeps the zone it was in, the flight the one it left`() {
         val eA = t0 + 3600; val sB = eA + 5 * 3600
         val fixes = Stream().stay(airportA, 3600).gap(5 * 3600).land(airportB, 3600).fixes

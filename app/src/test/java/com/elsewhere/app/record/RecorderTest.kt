@@ -122,6 +122,23 @@ class RecorderTest {
         assertEquals(0, db.rawFixes().countAll())
     }
 
+    @Test fun `a flight slept through is still a leg when the sweep closed the airport stay first`() = runTest {
+        val r = recorder()
+        val lisbon = 38.7813 to -9.1359
+        for (i in 0..20) r.onFix(fix(t0 + i * 180, boston))
+        r.sweep(now = t0 + 20 * 180 + 2 * 3600)
+        assertEquals(1, db.visits().count()); assertEquals(0, db.activities().all().size)
+        val land = t0 + 20 * 180 + 7 * 3600
+        for (i in 0..3) r.onFix(fix(land + i * 180, lisbon))
+        val flight = db.activities().all().single()
+        assertEquals("FLYING", flight.mode); assertEquals(0.8, flight.p, 0.0)
+        assertEquals(t0 + 20 * 180, flight.start); assertEquals(land, flight.end)
+        assertEquals(boston.first, flight.sLat, 1e-6); assertEquals(lisbon.first, flight.eLat, 1e-6)
+        r.sweep(now = land + 3 * 3600)
+        assertEquals(2, db.visits().count())
+        assertEquals(land, db.visits().all().maxBy { it.start }.start)
+    }
+
     @Test fun `stats count fixes and stays`() = runTest {
         val r = recorder()
         for (i in 0..10) r.onFix(fix(t0 + i * 60, boston))

@@ -33,9 +33,12 @@ data class SPt(val ts: Long, val lat: Double, val lng: Double, val speed: Float?
 @Serializable
 data class Moving(val start: Long, val sLat: Double, val sLng: Double, val pts: List<SPt>)
 
-/** Everything the recorder must keep across process death, in one serializable value. */
+/**
+ * Everything the recorder must keep across process death, in one serializable value. `last` is where the phone was
+ * last placed, kept even after a stale sweep closes the stay, so a landing hours later still knows where it took off.
+ */
 @Serializable
-data class SegmenterState(val stay: Stay? = null, val moving: Moving? = null, val lastTs: Long? = null)
+data class SegmenterState(val stay: Stay? = null, val moving: Moving? = null, val lastTs: Long? = null, val last: SPt? = null)
 
 class Segmenter(state: SegmenterState = SegmenterState(), private val tzAt: (Long) -> Int) {
     var state: SegmenterState = state
@@ -66,7 +69,7 @@ class Segmenter(state: SegmenterState = SegmenterState(), private val tzAt: (Lon
         if (last != null && f.ts - last >= GAP_S && !(stay0 != null && metres(stay0.lat, stay0.lng, f.lat, f.lng) <= RADIUS_M)) {
             stay0?.takeIf { it.confirmed }?.let { out += visitOf(it) }
             // Dark for hours and now hundreds of kilometres away: a flight in airplane mode, not a hole in the record.
-            val from = stay0?.let { SPt(last, it.lat, it.lng) } ?: state.moving?.pts?.lastOrNull()?.copy(ts = last)
+            val from = stay0?.let { SPt(last, it.lat, it.lng) } ?: state.last?.copy(ts = last)
             if (from != null && metres(from.lat, from.lng, f.lat, f.lng) >= JUMP_M) out += flightOf(from, f)
             state = SegmenterState()
         }
@@ -98,13 +101,18 @@ class Segmenter(state: SegmenterState = SegmenterState(), private val tzAt: (Lon
                 state = SegmenterState(stay = Stay(f.ts, f.ts, f.lat, f.lng, 1), moving = leg, lastTs = f.ts)
             }
         }
+        state = state.copy(last = SPt(f.ts, f.lat, f.lng, f.speed, f.activityHint))
         return out
     }
 
-    /** Closes a confirmed stay (end = its last fix) and forgets any half leg; for shutdown and stale sweeps. */
+    /**
+     * Closes a confirmed stay (end = its last fix) and forgets any half leg; for shutdown and stale sweeps. The stay's
+     * centre stays on as the last known place, so a flight that starts in the dark starts from the visit it left.
+     */
     fun close(): List<Emission> {
-        val out = state.stay?.takeIf { it.confirmed }?.let { listOf(visitOf(it)) } ?: emptyList()
-        state = SegmenterState(lastTs = state.lastTs)
+        val stay = state.stay
+        val out = stay?.takeIf { it.confirmed }?.let { listOf(visitOf(it)) } ?: emptyList()
+        state = SegmenterState(lastTs = state.lastTs, last = stay?.let { SPt(it.lastTs, it.lat, it.lng) } ?: state.last)
         return out
     }
 
