@@ -15,6 +15,7 @@ import com.elsewhere.app.ui.world.LocalPhotoSources
 import com.elsewhere.app.ui.world.PhotoSources
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import com.elsewhere.app.auth.PlayDriveAuth
 import javax.inject.Inject
 import com.elsewhere.app.ui.Root
 import com.elsewhere.app.ui.world.ElsewhereTheme
@@ -39,9 +40,11 @@ import dagger.hilt.android.AndroidEntryPoint
     override fun onStop() { hub.foreground(false); super.onStop() }
     @Inject lateinit var wikimedia: Wikimedia
     @Inject lateinit var appScope: CoroutineScope
+    @Inject lateinit var driveAuth: PlayDriveAuth
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        driveAuth.attach(this)
         // The sheet is always light, so bar icons must stay dark whatever the system theme says.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),

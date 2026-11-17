@@ -23,11 +23,11 @@ class DriveException(val code: Int, detail: String) : IOException("drive $code $
  * The one file in the user's Drive app folder, `elsewhere.key`: base64 of 32 random bytes. When two devices race and both
  * create one, everyone keeps the oldest by `createdTime` and deletes the rest, so they converge on a single key.
  */
-class DriveKey(private val http: OkHttpClient, private val base: String = "https://www.googleapis.com") {
+class DriveKey(private val http: OkHttpClient, private val base: String = "https://www.googleapis.com") : DriveKeys {
     private val json = Json { ignoreUnknownKeys = true }
     private val random = SecureRandom()
 
-    suspend fun fetchOrCreate(token: String): ByteArray {
+    override suspend fun fetchOrCreate(token: String): ByteArray {
         val files = list(token).sortedBy { it.createdTime }
         if (files.isEmpty()) return create(token)
         val bytes = Base64.getDecoder().decode(call(token, "GET", "/drive/v3/files/${files[0].id}?alt=media").trim())
@@ -35,7 +35,7 @@ class DriveKey(private val http: OkHttpClient, private val base: String = "https
         return bytes
     }
 
-    suspend fun delete(token: String) { for (f in list(token)) call(token, "DELETE", "/drive/v3/files/${f.id}") }
+    override suspend fun delete(token: String) { for (f in list(token)) call(token, "DELETE", "/drive/v3/files/${f.id}") }
 
     private suspend fun list(token: String): List<DriveFile> =
         json.decodeFromString(DriveList.serializer(), call(token, "GET", "/drive/v3/files?spaces=appDataFolder&q=name%3D'$NAME'&fields=files(id,createdTime)")).files

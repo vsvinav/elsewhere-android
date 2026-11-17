@@ -3,10 +3,14 @@ package com.elsewhere.app
 import com.elsewhere.app.account.AccountInfo
 import com.elsewhere.app.account.AccountState
 import com.elsewhere.app.account.Accounts
+import com.elsewhere.app.account.DriveLink
 import com.elsewhere.app.account.Session
 import com.elsewhere.app.account.VaultState
 import com.elsewhere.app.account.WrongPassphrase
+import com.elsewhere.app.auth.DriveAuth
 import com.elsewhere.app.auth.GoogleAuth
+import com.elsewhere.app.sync.DriveKeys
+import com.elsewhere.app.sync.DriveLinker
 import com.elsewhere.app.ask.LlmClient
 import com.elsewhere.app.ask.LlmConfig
 import com.elsewhere.app.data.Counters
@@ -87,6 +91,10 @@ object Fakes {
         override suspend fun setPassphrase(passphrase: String) { fail?.let { throw it }; passphrasesSet += passphrase; vaultState.value = VaultState.UpToDate }
         override suspend fun restore(passphrase: String) { fail?.let { throw it }; if (passphrase != this.passphrase) throw WrongPassphrase(); restored += passphrase }
         override suspend fun unlock(passphrase: String) { fail?.let { throw it }; if (passphrase != this.passphrase) throw WrongPassphrase(); unlocked += passphrase; vaultState.value = VaultState.UpToDate }
+        var driveLink = DriveLink.Ready
+        var driveFail: Throwable? = null
+        val driveKeys = mutableListOf<String>()
+        override suspend fun useDriveKey(b64: String, fresh: Boolean): DriveLink { fail?.let { throw it }; driveKeys += b64; driveFail?.let { throw it }; account.value = account.value!!.copy(driveKey = b64); return driveLink }
         override suspend fun logOut() { fail?.let { throw it }; logOuts++; account.value = account.value!!.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) }
         override suspend fun deleteAccount() { fail?.let { throw it }; deletes++; account.value = account.value!!.copy(session = null, salt = null, vaultAt = 0L, vaultHash = null) }
     }
@@ -95,6 +103,18 @@ object Fakes {
         var asked = 0
         override suspend fun idToken(activity: android.content.Context): String { asked++; fail?.let { throw it }; return "id.tok" }
     }
+
+    /** Drive access and the key file in one: hands out a token, then the same key until it is deleted. */
+    class Drive(var fail: Throwable? = null, var keyFail: Throwable? = null) : DriveAuth, DriveKeys {
+        var key: ByteArray? = null
+        var deletes = 0
+        var created = 0
+        override suspend fun accessToken(activity: android.content.Context): String { fail?.let { throw it }; return "drive.tok" }
+        override suspend fun fetchOrCreate(token: String): ByteArray { keyFail?.let { throw it }; return key ?: ByteArray(32) { (created + 1).toByte() }.also { key = it; created++ } }
+        override suspend fun delete(token: String) { deletes++; key = null }
+    }
+
+    fun linker(acct: Accounts, drive: Drive = Drive()) = DriveLinker(drive, drive, acct)
 
     class Maps : MapsSettings {
         val cur = MutableStateFlow(Settings())

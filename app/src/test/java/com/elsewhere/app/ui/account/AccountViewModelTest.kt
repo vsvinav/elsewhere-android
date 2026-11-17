@@ -24,7 +24,7 @@ class AccountViewModelTest {
     @AfterEach fun down() = Dispatchers.resetMain()
 
     @Test fun `sign up walks email, code, then a new passphrase`() = runTest(dispatcher) {
-        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google())
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct))
         vm.begin(AccountEntry.SignUp)
         vm.sendCode("  Ana@Example.COM ")
         advanceUntilIdle()
@@ -52,7 +52,7 @@ class AccountViewModelTest {
     }
 
     @Test fun `logging in to an account with a vault asks to unlock it, and a wrong passphrase says so`() = runTest(dispatcher) {
-        val acct = Fakes.Account(hasVault = true); val vm = AccountViewModel(acct, Fakes.Google())
+        val acct = Fakes.Account(hasVault = true); val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct))
         vm.begin(AccountEntry.LogIn)
         vm.sendCode("ana@example.com"); advanceUntilIdle()
         vm.submitCode("654321"); advanceUntilIdle()
@@ -66,7 +66,7 @@ class AccountViewModelTest {
     }
 
     @Test fun `begin is idempotent for the same entry until the flow is done`() = runTest(dispatcher) {
-        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google())
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct))
         vm.begin(AccountEntry.LogIn)
         vm.sendCode("ana@example.com"); advanceUntilIdle()
         vm.begin(AccountEntry.LogIn)
@@ -76,7 +76,7 @@ class AccountViewModelTest {
     }
 
     @Test fun `cancelling resets the flow so the next begin starts at Email without stale state`() = runTest(dispatcher) {
-        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google())
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct))
         vm.begin(AccountEntry.LogIn)
         vm.sendCode("ana@example.com"); advanceUntilIdle()
         acct.fail = AccountException(400, "wrong code")
@@ -90,7 +90,7 @@ class AccountViewModelTest {
     }
 
     @Test fun `a rate-limited finish prints the same copy as a rate-limited start`() = runTest(dispatcher) {
-        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google())
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct))
         vm.begin(AccountEntry.LogIn)
         vm.sendCode("ana@example.com"); advanceUntilIdle()
         acct.fail = AccountException(429, "slow down")
@@ -100,7 +100,7 @@ class AccountViewModelTest {
     }
 
     @Test fun `start over keeps the session and leaves the vault alone`() = runTest(dispatcher) {
-        val acct = Fakes.Account(hasVault = true); val vm = AccountViewModel(acct, Fakes.Google())
+        val acct = Fakes.Account(hasVault = true); val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct))
         vm.begin(AccountEntry.LogIn)
         vm.sendCode("ana@example.com"); advanceUntilIdle()
         vm.submitCode("654321"); advanceUntilIdle()
@@ -111,7 +111,7 @@ class AccountViewModelTest {
     }
 
     @Test fun `update from settings goes straight to the passphrase and re-sends the vault`() = runTest(dispatcher) {
-        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google())
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct))
         vm.begin(AccountEntry.Update)
         assertEquals(AccountStep.Unlock, vm.ui.value.step)
         vm.unlock("secret-pass"); advanceUntilIdle()
@@ -120,7 +120,7 @@ class AccountViewModelTest {
     }
 
     @Test fun `service errors print the parity copy and a bad email never leaves the phone`() = runTest(dispatcher) {
-        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google())
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct))
         vm.begin(AccountEntry.LogIn)
         vm.sendCode("not an email"); advanceUntilIdle()
         assertEquals(NOT_AN_EMAIL, vm.ui.value.error)

@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.elsewhere.app.Fakes
 import com.elsewhere.app.account.AccountException
+import com.elsewhere.app.account.DriveLink
+import com.elsewhere.app.account.VaultLocked
+import com.elsewhere.app.auth.DriveAuthFailed
 import com.elsewhere.app.auth.GoogleSignInFailed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -33,19 +36,52 @@ class AccountViewModelGoogleTest {
     @Before fun up() = Dispatchers.setMain(dispatcher)
     @After fun down() = Dispatchers.resetMain()
 
-    @Test fun `continue with Google lands on the vault step like a finished code`() = runTest(dispatcher) {
-        val acct = Fakes.Account(hasVault = true); val google = Fakes.Google(); val vm = AccountViewModel(acct, google)
+    @Test fun `continue with Google takes the Drive key as the passphrase and is done`() = runTest(dispatcher) {
+        val acct = Fakes.Account(hasVault = true); val google = Fakes.Google(); val drive = Fakes.Drive()
+        val vm = AccountViewModel(acct, google, Fakes.linker(acct, drive))
         vm.begin(AccountEntry.LogIn)
         vm.google(context); advanceUntilIdle()
         assertEquals(1, google.asked)
         assertEquals(listOf("id.tok"), acct.googleTokens)
-        assertEquals(AccountStep.Unlock, vm.ui.value.step)
+        assertEquals(1, drive.created)
+        assertEquals(1, acct.driveKeys.size)
+        assertTrue(vm.ui.value.done)
         assertEquals("google@example.com", acct.account.value?.session?.email)
         assertNull(vm.ui.value.error)
     }
 
+    @Test fun `an old passphrase vault asks for the passphrase once more`() = runTest(dispatcher) {
+        val acct = Fakes.Account(hasVault = true).apply { driveLink = DriveLink.NeedsPassphrase }
+        val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct))
+        vm.begin(AccountEntry.LogIn)
+        vm.google(context); advanceUntilIdle()
+        assertEquals(AccountStep.Unlock, vm.ui.value.step)
+        assertFalse(vm.ui.value.done)
+        vm.unlock("secret-pass"); advanceUntilIdle()
+        assertEquals(listOf("secret-pass"), acct.restored)
+        assertTrue(vm.ui.value.done)
+    }
+
+    @Test fun `when Drive is refused the passphrase pages take over, as after a code`() = runTest(dispatcher) {
+        val acct = Fakes.Account(hasVault = false)
+        val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct, Fakes.Drive(fail = DriveAuthFailed())))
+        vm.begin(AccountEntry.SignUp)
+        vm.google(context); advanceUntilIdle()
+        assertEquals(AccountStep.SetPassphrase, vm.ui.value.step)
+        assertNull(vm.ui.value.error)
+        assertTrue(acct.driveKeys.isEmpty())
+    }
+
+    @Test fun `a vault under another Drive key still lets the user in`() = runTest(dispatcher) {
+        val acct = Fakes.Account(hasVault = true).apply { driveFail = VaultLocked() }
+        val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct))
+        vm.begin(AccountEntry.LogIn)
+        vm.google(context); advanceUntilIdle()
+        assertTrue(vm.ui.value.done)
+    }
+
     @Test fun `a dismissed sheet or a refused token prints the Google line and stays on the page`() = runTest(dispatcher) {
-        val acct = Fakes.Account(); val google = Fakes.Google(fail = GoogleSignInFailed()); val vm = AccountViewModel(acct, google)
+        val acct = Fakes.Account(); val google = Fakes.Google(fail = GoogleSignInFailed()); val vm = AccountViewModel(acct, google, Fakes.linker(acct))
         vm.begin(AccountEntry.SignUp)
         vm.google(context); advanceUntilIdle()
         assertEquals(GOOGLE_FAIL, vm.ui.value.error)
@@ -60,7 +96,7 @@ class AccountViewModelGoogleTest {
     }
 
     @Test fun `a service fault is the Google line, but a limiter or a dead network keep their own words`() = runTest(dispatcher) {
-        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google())
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google(), Fakes.linker(acct))
         vm.begin(AccountEntry.LogIn)
         acct.fail = AccountException(500, "boom")
         vm.google(context); advanceUntilIdle()

@@ -53,7 +53,11 @@ import com.elsewhere.app.account.AccountRepository
 import com.elsewhere.app.account.AccountStore
 import com.elsewhere.app.account.Accounts
 import com.elsewhere.app.auth.CredentialGoogleAuth
+import com.elsewhere.app.auth.DriveAuth
 import com.elsewhere.app.auth.GoogleAuth
+import com.elsewhere.app.auth.PlayDriveAuth
+import com.elsewhere.app.sync.DriveKey
+import com.elsewhere.app.sync.DriveKeys
 import com.elsewhere.app.crew.CrewPublisher
 import com.elsewhere.app.crew.Identity
 import com.elsewhere.app.crew.CrewStore
@@ -119,6 +123,8 @@ object AppModule {
         AccountRepository(api, store, repo, settings, crew, scope)
     @Provides fun accounts(r: AccountRepository): Accounts = r
     @Provides fun googleAuth(): GoogleAuth = CredentialGoogleAuth(BuildConfig.GOOGLE_CLIENT_ID)
+    @Provides fun driveAuth(p: PlayDriveAuth): DriveAuth = p
+    @Provides @Singleton fun driveKeys(http: OkHttpClient): DriveKeys = DriveKey(http)
 
     @Provides fun visits(db: ElsewhereDb) = db.visits()
     @Provides fun activities(db: ElsewhereDb) = db.activities()

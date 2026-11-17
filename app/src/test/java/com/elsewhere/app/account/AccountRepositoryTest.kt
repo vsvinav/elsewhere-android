@@ -237,4 +237,64 @@ class AccountRepositoryTest {
         w.repo.start(" Ada@Example.org ")
         assertEquals(listOf("start ada@example.org"), w.api.calls)
     }
+
+    private val driveKey = ByteArray(32) { (it + 1).toByte() }
+
+    @Test fun `a Google user with no vault gets one sealed under the Drive key, without a salt`() = runTest {
+        val w = world()
+        advanceTimeBy(1)
+        w.repo.google("id.tok")
+        assertEquals(DriveLink.Ready, w.repo.useDriveKey(Vault.b64(driveKey)))
+        advanceTimeBy(1)
+        assertEquals(1, w.api.calls.count { it == "put" })
+        assertEquals(2, w.api.vault!!.v)
+        assertNull(w.api.vault!!.salt)
+        assertEquals(profile, contentsOf(w, driveKey).profile)
+        assertEquals(VaultState.UpToDate, w.vault())
+        w.record.saveProfile(profile.copy(name = "Ada L."))
+        advanceTimeBy(2_001)
+        assertEquals("Ada L.", contentsOf(w, driveKey).profile.name)
+    }
+
+    @Test fun `a Google user whose vault is already under the Drive key is restored from it straight away`() = runTest {
+        val other = DeviceKeys.fromSeeds(ByteArray(32) { 7 }, ByteArray(32) { 8 })
+        val contents = VaultContents(signPriv = Crypto.hex(other.signPriv), kxPriv = Crypto.hex(other.kxPriv), profile = profile.copy(name = "Grace"), settings = VaultSettings("km", "https://relay.example.org", null))
+        val w = world(withProfile = false)
+        w.api.vault = com.elsewhere.app.sync.Wire.sealVault(driveKey, contents.encode())
+        w.repo.google("id.tok")
+        assertEquals(DriveLink.Ready, w.repo.useDriveKey(Vault.b64(driveKey)))
+        assertEquals("Grace", w.record.saved!!.name)
+        assertEquals(1, w.identity.replaced)
+        assertEquals("https://relay.example.org", w.maps.cur.value.relayUrl)
+        advanceTimeBy(3_000)
+        assertEquals("Grace", contentsOf(w, driveKey).profile.name)
+        assertEquals(VaultState.UpToDate, w.vault())
+    }
+
+    @Test fun `a Google user with a passphrase vault is asked for it once, then it is re-sealed under the Drive key`() = runTest {
+        val other = DeviceKeys.fromSeeds(ByteArray(32) { 7 }, ByteArray(32) { 8 })
+        val contents = VaultContents(signPriv = Crypto.hex(other.signPriv), kxPriv = Crypto.hex(other.kxPriv), profile = profile.copy(name = "Grace"))
+        val salt = Vault.newSalt()
+        val w = world(withProfile = false)
+        w.api.vault = Vault.seal(Vault.deriveKey("correct horse battery staple", salt), contents.encode(), salt)
+        w.repo.google("id.tok")
+        assertEquals(DriveLink.NeedsPassphrase, w.repo.useDriveKey(Vault.b64(driveKey)))
+        assertEquals(0, w.identity.replaced)
+        w.repo.restore("correct horse battery staple")
+        assertEquals(1, w.identity.replaced)
+        assertEquals("Grace", w.record.saved!!.name)
+        assertEquals(1, w.api.calls.count { it == "put" })
+        assertEquals(2, w.api.vault!!.v)
+        assertNull(w.store.state.value.salt)
+        assertEquals("Grace", contentsOf(w, driveKey).profile.name)
+        assertEquals(VaultState.UpToDate, w.vault())
+    }
+
+    @Test fun `a vault under another Drive key cannot be opened and says so`() = runTest {
+        val w = world(withProfile = false)
+        w.api.vault = com.elsewhere.app.sync.Wire.sealVault(ByteArray(32) { 9 }, "{}")
+        w.repo.google("id.tok")
+        assertTrue(runCatching { w.repo.useDriveKey(Vault.b64(driveKey)) }.exceptionOrNull() is VaultLocked)
+        assertEquals(Vault.b64(driveKey), w.store.state.value.driveKey, "the key is kept so Settings can say the record is locked")
+    }
 }
