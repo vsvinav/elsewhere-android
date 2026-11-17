@@ -34,6 +34,19 @@ class TourUiTest {
         assertTrue(ui.trail.lines.isNotEmpty() && ui.trail.flights.size == 2)
     }
 
+    @Test fun `the setlist sings one Other row for every unnamed mode, with its own door`() {
+        val rec = SampleRecord.record
+        val day = rec.meta.range.first + 40 * Fx.D
+        val legs = listOf("IN_VEHICLE" to 30_000.0, "UNKNOWN" to 20_000.0, "FLYING" to 5_000.0, "IN_TAXI" to 5_000.0)
+            .mapIndexed { i, (m, metres) -> Fx.act(day + i * Fx.H, day + i * Fx.H + Fx.H / 2, m, metres) }
+        val ui = tourUi(rec.copy(activities = rec.activities + legs), rec, SampleRecord.profile, null)
+        val rows = ui.facts.kmByMode
+        assertEquals(1, rows.count { it.first == "Other" })
+        assertEquals(55.0, rows.first { it.first == "Other" }.second, 1e-6)
+        assertEquals(rows.map { it.first }.toSet(), ui.doors.modes.keys)
+        assertEquals("Other · ${n0(rows.first { it.first == "Other" }.second)} km", ui.doors.modes.getValue("Other").label)
+    }
+
     @Test fun `days recorded on this phone are counted from device place ids`() {
         val d0 = Fx.utc(2024, 0, 1)
         val rec = Fx.record(

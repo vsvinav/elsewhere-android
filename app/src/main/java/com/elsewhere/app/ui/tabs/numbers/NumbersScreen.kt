@@ -147,15 +147,16 @@ private fun MonthsPass(ui: NumbersUi) {
         val top = ui.modes
         Columns(
             s.months.map { m ->
-                val other = m.total - top.sumOf { m.byMode[it] ?: 0.0 }
-                listOf((other / ui.maxMonth).toFloat() to Poster.Stock2) + top.indices.reversed().map { i -> ((m.byMode[top[i]] ?: 0.0) / ui.maxMonth).toFloat() to CLS[i] }
+                val byLabel = ui.monthByLabel(m)
+                val other = m.total - top.sumOf { byLabel[it] ?: 0.0 }
+                listOf((other / ui.maxMonth).toFloat() to Poster.Stock2) + top.indices.reversed().map { i -> ((byLabel[top[i]] ?: 0.0) / ui.maxMonth).toFloat() to CLS[i] }
             },
             "Distance per month, stacked by mode",
             doors = ui.doors.monthColumns,
         )
         Axis(s.months.firstOrNull()?.let { month(it.key) }, s.months.lastOrNull()?.let { month(it.key) })
         Spacer(Modifier.height(14.dp))
-        Legend(top.mapIndexed { i, k -> modeLabel(k) to CLS[i] } + ("Other" to Poster.Stock2))
+        Legend(top.mapIndexed { i, k -> k to CLS[i] } + ("Other" to Poster.Stock2))
     }
 }
 

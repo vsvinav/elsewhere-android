@@ -14,6 +14,7 @@ import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordStore
 import com.elsewhere.app.data.SURE_P
+import com.elsewhere.app.data.kmByLabel
 import com.elsewhere.app.data.Trip
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ingest.PlaceLookups
@@ -34,7 +35,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * One trip as its pass prints it closed: nights, flights, the modes that carried it. `prompts` are the recorded legs the
+ * One trip as its pass prints it closed: nights, flights, the modes (by printed name) that carried it. `prompts` are the recorded legs the
  * phone only guessed at, longest first, that the open card asks about.
  */
 data class TripUi(val trip: Trip, val flights: Int, val modes: List<Pair<String, Double>>, val totalKm: Double, val prompts: List<Activity> = emptyList())
@@ -60,8 +61,7 @@ fun datesUi(data: Record, raw: Record, profile: Profile?, land: FeatureCollectio
     val strip = bedStrip(raw, data.meta.range)
     val cards = deckCards(data)
     val trips = data.trips.sortedByDescending { it.start }.mapIndexed { i, t ->
-        val km = t.totalKmByMode.entries.sortedByDescending { it.value }.map { it.key to it.value }
-        TripUi(trip = t, flights = cards[i].flights, modes = km.take(4), totalKm = cards[i].km, prompts = legPrompts(data, t))
+        TripUi(trip = t, flights = cards[i].flights, modes = kmByLabel(t.totalKmByMode).take(4), totalKm = cards[i].km, prompts = legPrompts(data, t))
     }
     return DatesUi(
         nights = nightsUi(strip, data.meta.range, profile?.name ?: ""),

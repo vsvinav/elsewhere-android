@@ -75,7 +75,7 @@ class InsightsTest {
     @Test fun `homeFacts totals the export, excludes home work from third places, and rolls up years`() {
         val f = homeFacts(data)
         assertEquals(512.0, f.totalKm, 1e-9)
-        assertEquals("FLYING" to 500.0, f.kmByMode[0])
+        assertEquals("Flight" to 500.0, f.kmByMode[0])
         assertEquals(5, f.places)
         assertEquals(2, f.countries)
         assertEquals("Boston", f.topCities[0])

@@ -3,6 +3,7 @@ package com.elsewhere.app.analytics
 import com.elsewhere.app.data.Place
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.Trip
+import com.elsewhere.app.data.kmByLabel
 import com.elsewhere.app.ingest.jsRound
 
 // Port of web/src/analytics/home.ts
@@ -19,6 +20,7 @@ data class HomeFacts(
     val days: Int,
     val range: LongRange,
     val totalKm: Double,
+    /** Kilometres by printed mode name, biggest first; every unnamed mode is one `Other`. */
     val kmByMode: List<Pair<String, Double>>,
     val places: Int,
     val cities: Int,
@@ -39,7 +41,7 @@ private class YearAcc(val year: Int) { var km = 0.0; var trips = 0; var flights 
 
 fun homeFacts(data: Record): HomeFacts {
     val visits = data.visits.filter { it.lvl == 0 }
-    val kmByMode = kmByMode(data.activities).entries.sortedByDescending { it.value }.map { it.key to it.value }
+    val kmByMode = kmByLabel(kmByMode(data.activities))
     val totalKm = kmByMode.sumOf { it.second }
 
     // Places, cities and countries count the whole place book, the same rule the Stops tab prints.
