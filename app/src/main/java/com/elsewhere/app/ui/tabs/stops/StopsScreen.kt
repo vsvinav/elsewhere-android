@@ -178,13 +178,13 @@ private fun Chip(label: String, n: String?, on: Boolean, role: Role = Role.Check
 
 /**
  * One luggage tag: photo, what and where, three quick figures, a strip of tape across the top. The street, from Places
- * or `nominatim`, takes the sub-line, and the name line too when the stop has no name; until it is known the card reads as before.
+ * or `nominatim`, takes the sub-line, and the name line too when the stop has neither a name nor a label; until it is known the card reads as before.
  */
 @Composable
 internal fun Tag(s: Stop, index: Int, open: Boolean, modifier: Modifier = Modifier, nominatim: String? = null, onClick: () -> Unit) {
     val tilt = listOf(-1.2f, 0.9f, -0.6f, 1.4f)[index % 4]
     val address = s.address(nominatim)
-    val title = s.place.name ?: address ?: s.name
+    val title = s.place.name ?: s.place.label ?: address ?: s.name
     Box(modifier.rotate(tilt)) {
         Column(
             Modifier.fillMaxWidth().background(if (open) Poster.Stock2 else Color.White).border(2.dp, Poster.Ink)

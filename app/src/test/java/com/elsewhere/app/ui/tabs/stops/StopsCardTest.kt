@@ -1,5 +1,6 @@
 package com.elsewhere.app.ui.tabs.stops
 
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import com.elsewhere.app.Fx
 import com.elsewhere.app.data.Place
+import com.elsewhere.app.data.Role
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -42,6 +44,13 @@ class StopsCardTest {
         rule.onNodeWithText("TRIDENT BOOKSELLERS").assertIsDisplayed()
         rule.onNodeWithText("338 Newbury St, Boston").assertIsDisplayed()
         rule.onNodeWithText("Boston, US").assertDoesNotExist()
+    }
+
+    @Test fun `a labelled home keeps its label and shows the street under it`() {
+        show("h" to Fx.place(role = Role.HOME, label = "Home", city = "Boston", cc = "US"), addresses = mapOf("h" to "1 Main St, Beacon Hill"))
+        // The lab line says Home and so does the title; the street never climbs up to replace it.
+        val lines = rule.onNodeWithContentDescription("Open Home").assertIsDisplayed().fetchSemanticsNode().config[SemanticsProperties.Text].map { it.text }
+        assertEquals(listOf("HOME", "HOME", "1 Main St, Beacon Hill"), lines.drop(1).take(3))
     }
 
     @Test fun `without an address the card reads as before and asks for one once on screen`() {

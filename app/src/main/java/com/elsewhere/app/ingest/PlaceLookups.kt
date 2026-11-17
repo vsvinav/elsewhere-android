@@ -156,6 +156,12 @@ class PlaceLookups(
         }
     }
 
+    /** Whether a lookup for this id is still to come: waiting, in flight, or held until the settings have been read. */
+    fun pending(id: String): Boolean = synchronized(lock) { !settled || id in queued }
+
+    /** What Places said for this id, once it has landed here; the record catches up a batch later. */
+    fun known(id: String): Enrichment? = synchronized(lock) { cache[id] }
+
     /** The key lookups pay with (blank: none). A new key clears a stopped pool and picks up whatever is still waiting. */
     fun setKey(k: String, places: Boolean = true) {
         synchronized(lock) { key = k; keyPlaces = places; stopped = false; settled = true; if (!canSpend()) dropQueue() }

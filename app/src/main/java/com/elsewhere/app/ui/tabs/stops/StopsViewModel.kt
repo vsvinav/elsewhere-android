@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -60,6 +61,8 @@ fun stopsUi(data: Record, filter: StopsFilter): StopsUi {
 class StopsViewModel @Inject constructor(private val range: RangeStore, private val lookups: PlaceLookups, private val geocoder: Geocoder) : ViewModel() {
     private val filter = MutableStateFlow(StopsFilter())
     private val asked = HashSet<String>()
+    /** Tags on screen whose Places lookup has not settled yet; Nominatim is only asked once it has. */
+    private val waiting = LinkedHashSet<String>()
     private val streets = MutableStateFlow<Map<String, String?>>(emptyMap())
     /** What Nominatim said per place id, asked only once a tag without a Places street was on screen; null means it had nothing. */
     val addresses: StateFlow<Map<String, String?>> = streets
@@ -67,14 +70,36 @@ class StopsViewModel @Inject constructor(private val range: RangeStore, private 
         .mapLatest { it?.let { (d, f) -> stopsUi(d, f) } }
         .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    init { viewModelScope.launch { merge(range.filtered, lookups.progress).collect { sweep() } } }
+
     fun setFilter(f: StopsFilter) = filter.update { f }
 
-    /** A tag has scrolled into view: ask for its name and photo, and for its street when Places has none. */
+    /** A tag has scrolled into view: ask for its name and photo, and for its street once Places has had its say. */
     fun seen(id: String) {
         val places = range.filtered.value?.places ?: return
         lookups.need(listOf(id), places)
-        val p = places[id] ?: return
-        if (stopAddress(p.address, p.city, null) != null || !asked.add(id)) return
-        viewModelScope.launch { val a = geocoder.address(p.lat, p.lng); streets.update { it + (id to a) } }
+        if (places[id] == null || !asked.add(id)) return
+        waiting += id
+        sweep()
+    }
+
+    /** The Places street, from what has landed in the lookups or in the record. */
+    private fun street(id: String, p: Place) = stopAddress(lookups.known(id)?.address ?: p.address, p.city, null)
+
+    /** Tags whose Places lookup is over, or never ran, go to Nominatim if they still have no street. */
+    private fun sweep() {
+        val places = range.filtered.value?.places ?: return
+        for (id in waiting.toList()) {
+            if (lookups.pending(id)) continue
+            waiting -= id
+            val p = places[id] ?: continue
+            if (street(id, p) != null) continue
+            viewModelScope.launch {
+                val now = range.filtered.value?.places?.get(id) ?: p
+                if (street(id, now) != null) return@launch
+                val a = geocoder.address(now.lat, now.lng)
+                streets.update { it + (id to a) }
+            }
+        }
     }
 }
