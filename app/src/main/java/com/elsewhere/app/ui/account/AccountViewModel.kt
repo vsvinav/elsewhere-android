@@ -74,9 +74,9 @@ class AccountViewModel @Inject constructor(private val accounts: Accounts, priva
         _ui.value = AccountUi(entry = entry, step = if (entry == AccountEntry.Update) AccountStep.Unlock else AccountStep.Email)
     }
 
-    /** The token goes to the service; from there it is the same road as a finished code. */
+    /** The token goes to the service; from there it is the same road as a finished code. The limiter and a dead network keep their own words. */
     override fun google(activity: Context) = run(after = { it }) {
-        val account = try { accounts.google(google.idToken(activity)) } catch (e: AccountException) { if (e.code == 401) throw GoogleSignInFailed(e) else throw e }
+        val account = try { accounts.google(google.idToken(activity)) } catch (e: AccountException) { if (e.error == "slow down") throw e else throw GoogleSignInFailed(e) }
         _ui.update { it.copy(step = if (account.hasVault) AccountStep.Unlock else AccountStep.SetPassphrase) }
     }
 

@@ -58,4 +58,19 @@ class AccountViewModelGoogleTest {
         assertFalse(vm.ui.value.busy)
         assertFalse(vm.ui.value.done)
     }
+
+    @Test fun `a service fault is the Google line, but a limiter or a dead network keep their own words`() = runTest(dispatcher) {
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google())
+        vm.begin(AccountEntry.LogIn)
+        acct.fail = AccountException(500, "boom")
+        vm.google(context); advanceUntilIdle()
+        assertEquals(GOOGLE_FAIL, vm.ui.value.error)
+        acct.fail = AccountException(429, "slow down")
+        vm.google(context); advanceUntilIdle()
+        assertEquals("Too many tries. Give it an hour.", vm.ui.value.error)
+        acct.fail = java.io.IOException("offline")
+        vm.google(context); advanceUntilIdle()
+        assertEquals("Couldn't reach the account service. Check your connection.", vm.ui.value.error)
+        assertEquals(AccountStep.Email, vm.ui.value.step)
+    }
 }

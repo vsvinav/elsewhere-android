@@ -46,7 +46,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["mapsSdkKey"] = mapsSdkKey
         buildConfigField("boolean", "HAS_MAPS_SDK", mapsSdkKey.isNotBlank().toString())
-        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"$googleClientId\"")
+        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${googleClientId.replace("\"", "\\\"")}\"")
     }
     signingConfigs {
         if (keystorePath != null) create("elsewhere") {
