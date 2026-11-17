@@ -63,8 +63,11 @@ class Segmenter(state: SegmenterState = SegmenterState(), private val tzAt: (Lon
         val stay0 = state.stay
         // Android stops delivering fixes to a phone that isn't moving, so a long silence at the same spot is the stay
         // going on, not the phone going dark.
-        if (last != null && f.ts - last > GAP_S && !(stay0 != null && metres(stay0.lat, stay0.lng, f.lat, f.lng) <= RADIUS_M)) {
+        if (last != null && f.ts - last >= GAP_S && !(stay0 != null && metres(stay0.lat, stay0.lng, f.lat, f.lng) <= RADIUS_M)) {
             stay0?.takeIf { it.confirmed }?.let { out += visitOf(it) }
+            // Dark for hours and now hundreds of kilometres away: a flight in airplane mode, not a hole in the record.
+            val from = stay0?.let { SPt(last, it.lat, it.lng) } ?: state.moving?.pts?.lastOrNull()?.copy(ts = last)
+            if (from != null && metres(from.lat, from.lng, f.lat, f.lng) >= JUMP_M) out += flightOf(from, f)
             state = SegmenterState()
         }
         val stay = state.stay
@@ -114,11 +117,21 @@ class Segmenter(state: SegmenterState = SegmenterState(), private val tzAt: (Lon
         val end = arrival.start
         val pts = m.pts.filter { it.ts < end } + SPt(end, arrival.lat, arrival.lng)
         val metres = pts.zipWithNext().sumOf { (a, b) -> metres(a.lat, a.lng, b.lat, b.lng) }
+        val (mode, p) = modeOf(pts, metres, end - m.start)
         val activity = PActivity(
             id = m.start.toInt(), start = m.start, end = end, tz = tzAt(m.start), sLat = m.sLat, sLng = m.sLng, eLat = arrival.lat, eLng = arrival.lng,
-            m = Math.rint(metres), mode = modeOf(pts, metres, end - m.start), p = 1.0,
+            m = Math.rint(metres), mode = mode, p = p,
         )
         return Emission.Activity(activity, PPath(m.start, end, pts.map { Pt(it.lat, it.lng, it.ts) }))
+    }
+
+    /** The leg nobody saw: a great-circle hop from the last fix before the dark to the first after it. */
+    private fun flightOf(from: SPt, f: Fix): Emission.Activity {
+        val activity = PActivity(
+            id = from.ts.toInt(), start = from.ts, end = f.ts, tz = tzAt(from.ts), sLat = from.lat, sLng = from.lng, eLat = f.lat, eLng = f.lng,
+            m = Math.rint(metres(from.lat, from.lng, f.lat, f.lng)), mode = "FLYING", p = FLIGHT_GAP_P,
+        )
+        return Emission.Activity(activity, PPath(from.ts, f.ts, listOf(Pt(from.lat, from.lng, from.ts), Pt(f.lat, f.lng, f.ts))))
     }
 
     private fun Moving.plus(f: Fix): Moving {
@@ -134,28 +147,35 @@ class Segmenter(state: SegmenterState = SegmenterState(), private val tzAt: (Lon
         const val GAP_S = 2 * 3600L
         const val MIN_SPACING_M = 25.0
         const val MIN_GAP_S = 30L
+        /** A gap that lands this far away was a flight. */
+        const val JUMP_M = 300_000.0
+        const val FLIGHT_GAP_P = 0.8
 
         fun metres(lat1: Double, lng1: Double, lat2: Double, lng2: Double) = haversineKm(lat1, lng1, lat2, lng2) * 1000
 
-        /** Timeline mode names: Activity Recognition's word for it when it spoke, else the speed. */
-        fun modeOf(pts: List<SPt>, metres: Double, seconds: Long): String {
+        /**
+         * Timeline mode names with how sure we are: Activity Recognition's word for it when it spoke, else the speed.
+         * `IN_VEHICLE` cannot tell a car from a train, so a vehicle is a guess (0.6) unless the fast end of its speeds
+         * says train (0.7); a hint on foot or on a bike is certain, a speed alone is a fair guess (0.8).
+         */
+        fun modeOf(pts: List<SPt>, metres: Double, seconds: Long): Pair<String, Double> {
             val speeds = pts.mapNotNull { it.speed }.sorted()
-            val mps = if (speeds.isNotEmpty()) speeds[speeds.size / 2].toDouble() else if (seconds > 0) metres / seconds else 0.0
+            val fallback = if (seconds > 0) metres / seconds else 0.0
+            val mps = if (speeds.isNotEmpty()) speeds[speeds.size / 2].toDouble() else fallback
+            val mps90 = if (speeds.isNotEmpty()) speeds[(speeds.size * 9 / 10).coerceAtMost(speeds.size - 1)].toDouble() else fallback
             val kmh = mps * 3.6
-            if (kmh > 180) return "FLYING"
+            val kmh90 = mps90 * 3.6
+            if (kmh > 180) return "FLYING" to 1.0
             val hint = pts.mapNotNull { it.hint }.filter { it != "STILL" && it != "UNKNOWN" && it != "TILTING" }
                 .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
             when (hint) {
-                "WALKING", "ON_FOOT" -> return "WALKING"
-                "RUNNING" -> return "RUNNING"
-                "ON_BICYCLE" -> return "CYCLING"
-                "IN_VEHICLE" -> return "IN_PASSENGER_VEHICLE"
+                "WALKING", "ON_FOOT" -> return "WALKING" to 1.0
+                "RUNNING" -> return "RUNNING" to 1.0
+                "ON_BICYCLE" -> return "CYCLING" to 1.0
             }
-            return when {
-                kmh > 25 -> "IN_PASSENGER_VEHICLE"
-                kmh > 6 -> "CYCLING"
-                else -> "WALKING"
-            }
+            if (kmh90 > 140) return "IN_TRAIN" to 0.7
+            if (hint == "IN_VEHICLE" || kmh > 25) return "IN_PASSENGER_VEHICLE" to 0.6
+            return (if (kmh > 6) "CYCLING" else "WALKING") to 0.8
         }
     }
 }

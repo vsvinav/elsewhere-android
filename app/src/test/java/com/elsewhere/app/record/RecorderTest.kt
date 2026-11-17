@@ -82,6 +82,34 @@ class RecorderTest {
         assertEquals(t0, db.visits().all().single().start)
     }
 
+    @Test fun `a vehicle leg lands as the guess it is, a walk as a certainty`() = runTest {
+        val r = recorder()
+        for (i in 0..10) r.onFix(fix(t0 + i * 60, boston))
+        for (i in 1..13) r.onFix(Fix(t0 + 10 * 60 + i * 60, boston.first + 0.0007 * i, boston.second, 10f, 15f, "IN_VEHICLE"))
+        for (i in 0..10) r.onFix(fix(t0 + 25 * 60, north, dLat = 0.0).copy(ts = t0 + 25 * 60 + i * 60))
+        for (i in 1..13) r.onFix(Fix(t0 + 35 * 60 + i * 60, north.first + 0.0007 * i, north.second, 10f, 1.4f, "WALKING"))
+        for (i in 0..10) r.onFix(Fix(t0 + 50 * 60 + i * 60, north.first + 0.01, north.second, 10f))
+        val legs = db.activities().all()
+        assertEquals(listOf("IN_PASSENGER_VEHICLE" to 0.6, "WALKING" to 1.0), legs.map { it.mode to it.p })
+    }
+
+    @Test fun `replaying the same fixes into a restarted recorder adds no stays or legs`() = runTest {
+        val fixes = ArrayList<Fix>()
+        for (i in 0..10) fixes += fix(t0 + i * 60, boston)
+        for (i in 1..13) fixes += fix(t0 + 10 * 60 + i * 60, boston, dLat = 0.0007 * i)
+        for (i in 0..10) fixes += fix(t0 + 25 * 60 + i * 60, north)
+        val r = recorder()
+        for (f in fixes) r.onFix(f)
+        assertEquals(1, db.visits().count()); assertEquals(1, db.activities().all().size); assertEquals(1, db.paths().all().size)
+        val r2 = recorder()
+        for (f in fixes) r2.onFix(f)
+        for (f in fixes) r.onFix(f)
+        assertEquals(1, db.visits().count()); assertEquals(1, db.activities().all().size); assertEquals(1, db.paths().all().size)
+        // The open stay is still live and closes once, on whichever recorder is asked.
+        assertEquals(t0 + 25 * 60, r2.let { it.close(); db.visits().all().last().start })
+        assertEquals(2, db.visits().count())
+    }
+
     @Test fun `sweep closes a stale stay and prunes old raw fixes`() = runTest {
         val r = recorder()
         for (i in 0..10) r.onFix(fix(t0 + i * 60, boston))

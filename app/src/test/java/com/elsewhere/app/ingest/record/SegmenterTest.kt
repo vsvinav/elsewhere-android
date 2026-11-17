@@ -168,6 +168,104 @@ class SegmenterTest {
     }
 
     private fun List<Emission>.mode() = filterIsInstance<Emission.Activity>().single().activity.mode
+    private fun List<Emission>.p() = filterIsInstance<Emission.Activity>().single().activity.p
+
+    @Test fun `a hint is sure of itself, a speed alone is a guess, and a vehicle is always a guess`() {
+        assertEquals(1.0, dayOut(seg(), speed = 1.4f, hint = "WALKING").p())
+        assertEquals(1.0, dayOut(seg(), speed = 4f, hint = "ON_BICYCLE").p())
+        assertEquals(0.8, dayOut(seg(), speed = 1.4f).p())
+        assertEquals(0.8, dayOut(seg(), speed = 4f).p())
+        assertEquals(0.6, dayOut(seg(), speed = 15f, hint = "IN_VEHICLE").p())
+        assertEquals(0.6, dayOut(seg(), speed = 15f).p())
+        assertEquals(1.0, dayOut(seg(), speed = 60f).p())
+    }
+
+    private fun pts(kmh: Double, hint: String? = null, n: Int = 10) = (0 until n).map { SPt(t0 + it * 60L, home.first + it * 0.001, home.second, (kmh / 3.6).toFloat(), hint) }
+
+    @Test fun `modeOf tells a train from a car by the fast end of its speeds`() {
+        assertEquals("IN_TRAIN" to 0.7, Segmenter.modeOf(pts(160.0, "IN_VEHICLE"), 0.0, 0))
+        assertEquals("IN_PASSENGER_VEHICLE" to 0.6, Segmenter.modeOf(pts(60.0, "IN_VEHICLE"), 0.0, 0))
+        assertEquals("IN_PASSENGER_VEHICLE" to 0.6, Segmenter.modeOf(pts(60.0), 0.0, 0))
+        assertEquals("WALKING" to 1.0, Segmenter.modeOf(pts(4.0, "WALKING"), 0.0, 0))
+        assertEquals("WALKING" to 0.8, Segmenter.modeOf(pts(4.0), 0.0, 0))
+        assertEquals("WALKING" to 1.0, Segmenter.modeOf(pts(4.0, "ON_FOOT"), 0.0, 0))
+        assertEquals("RUNNING" to 1.0, Segmenter.modeOf(pts(10.0, "RUNNING"), 0.0, 0))
+        assertEquals("CYCLING" to 0.8, Segmenter.modeOf(pts(15.0), 0.0, 0))
+        assertEquals("FLYING" to 1.0, Segmenter.modeOf(pts(500.0, "IN_VEHICLE"), 0.0, 0))
+    }
+
+    @Test fun `modeOf reads the 90th percentile, so a train that stops at every station is still a train`() {
+        // Nine slow readings for each fast one: the median says car, the fast tenth says train.
+        val mixed = (0 until 40).map { SPt(t0 + it * 60L, home.first, home.second, if (it % 10 == 9) 45f else 15f, "IN_VEHICLE") }
+        assertEquals("IN_TRAIN" to 0.7, Segmenter.modeOf(mixed, 0.0, 0))
+        val mostlySlow = (0 until 40).map { SPt(t0 + it * 60L, home.first, home.second, if (it % 20 == 19) 45f else 15f, "IN_VEHICLE") }
+        assertEquals("IN_PASSENGER_VEHICLE" to 0.6, Segmenter.modeOf(mostlySlow, 0.0, 0))
+    }
+
+    @Test fun `modeOf without speeds falls back to distance over time`() {
+        val bare = listOf(SPt(t0, home.first, home.second), SPt(t0 + 600, home.first + 0.01, home.second))
+        assertEquals("WALKING" to 0.8, Segmenter.modeOf(bare, 1112.0, 900))
+        assertEquals("IN_PASSENGER_VEHICLE" to 0.6, Segmenter.modeOf(bare, 11_120.0, 600))
+        assertEquals("IN_TRAIN" to 0.7, Segmenter.modeOf(bare, 30_000.0, 600))
+        assertEquals("FLYING" to 1.0, Segmenter.modeOf(bare, 60_000.0, 600))
+    }
+
+    private val lisbon = 38.7223 to -9.1393 // ~5 400 km from Boston
+
+    @Test fun `a long gap that lands far away is a flight the phone slept through`() {
+        val s = seg()
+        for (i in 0..10) s.feed(fix(t0 + i * 60, home))
+        val out = s.feed(fix(t0 + 10 * 60 + 3 * 3600, lisbon))
+        assertEquals(listOf("visit", "activity"), out.map { it.kind })
+        val v = (out[0] as Emission.Visit).visit
+        val a = (out[1] as Emission.Activity).activity
+        val path = (out[1] as Emission.Activity).path
+        assertEquals(t0, v.start); assertEquals(t0 + 10 * 60, v.end)
+        assertEquals("FLYING", a.mode); assertEquals(0.8, a.p)
+        assertEquals(v.end, a.start); assertEquals(t0 + 10 * 60 + 3 * 3600, a.end)
+        assertEquals(a.start.toInt(), a.id)
+        assertEquals(home.first, a.sLat, 1e-6); assertEquals(lisbon.first, a.eLat, 1e-6)
+        assertEquals(Math.rint(haversineKm(home.first, home.second, lisbon.first, lisbon.second) * 1000), a.m)
+        assertEquals(2, path.pts.size)
+        assertEquals(a.start, path.pts[0].ts); assertEquals(a.end, path.pts[1].ts)
+        // The next stay opens at the landing fix, with nothing of the flight hanging off it.
+        assertEquals(a.end, s.state.stay!!.start); assertNull(s.state.moving)
+        val later = ArrayList<Emission>()
+        for (i in 1..10) later += s.feed(fix(a.end + i * 60, lisbon))
+        later += s.feed(fix(a.end + 11 * 60, lisbon, dLat = 0.01))
+        assertEquals(listOf("visit"), later.map { it.kind })
+        assertEquals(a.end, (later[0] as Emission.Visit).visit.start)
+    }
+
+    @Test fun `a long gap that lands nearby is still just a gap`() {
+        val s = seg()
+        for (i in 0..10) s.feed(fix(t0 + i * 60, home))
+        val out = s.feed(fix(t0 + 10 * 60 + 3 * 3600, shop))
+        assertEquals(listOf("visit"), out.map { it.kind })
+    }
+
+    @Test fun `a long gap from an unfinished stay still records the flight`() {
+        val s = seg()
+        for (i in 0..10) s.feed(fix(t0 + i * 60, home))
+        for (i in 1..3) s.feed(fix(t0 + 10 * 60 + i * 60, home, dLat = 0.002 * i))
+        // The home visit went out with the first step away; the half leg since is dropped, the flight starts from its last fix.
+        val out = s.feed(fix(t0 + 13 * 60 + 3 * 3600, lisbon))
+        assertEquals(listOf("activity"), out.map { it.kind })
+        val a = (out[0] as Emission.Activity).activity
+        assertEquals(t0 + 13 * 60, a.start); assertEquals("FLYING", a.mode); assertEquals(0.8, a.p)
+        assertEquals(home.first + 0.006, a.sLat, 1e-6)
+    }
+
+    @Test fun `a short gap that lands far away is a flight by speed, as before`() {
+        val s = seg()
+        for (i in 0..10) s.feed(fix(t0 + i * 60, home))
+        val out = ArrayList<Emission>()
+        for (i in 0..10) out += s.feed(fix(t0 + 10 * 60 + 3600 + i * 60, lisbon))
+        assertEquals(listOf("visit", "activity"), out.map { it.kind })
+        val a = (out[1] as Emission.Activity).activity
+        assertEquals("FLYING", a.mode); assertEquals(1.0, a.p)
+        assertEquals(t0 + 10 * 60, a.start); assertEquals(t0 + 10 * 60 + 3600, a.end)
+    }
 
     @Test fun `the path is downsampled to 25 m or 30 s`() {
         val s = seg()
