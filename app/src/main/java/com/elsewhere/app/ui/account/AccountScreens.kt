@@ -1,6 +1,7 @@
 package com.elsewhere.app.ui.account
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,11 +25,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.elsewhere.app.BuildConfig
+import com.elsewhere.app.R
 import com.elsewhere.app.ui.onboard.OnboardFrame
 import com.elsewhere.app.ui.world.CapsText
 import com.elsewhere.app.ui.world.DisplayText
@@ -41,6 +46,7 @@ const val WELCOME_LINE = "Your life, mapped as you live it."
 const val PASSPHRASE_NOTE = "Only you know this. We can't reset it."
 const val MAIL_LINK_NOTE = "Opening the link in the mail works too."
 const val START_OVER = "Start over without my vault"
+const val GOOGLE_BUTTON = "Continue with Google"
 
 /**
  * The first page a fresh install sees: the sketch, then sign up, log in, or carry on as before.
@@ -65,12 +71,15 @@ fun WelcomeScreen(onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit,
     }
 }
 
-/** The whole Email → Code → Passphrase/Unlock flow on one page frame; `onClose` is the Cancel when there is somewhere to go back to. */
+/**
+ * The whole Email → Code → Passphrase/Unlock flow on one page frame; `onClose` is the Cancel when there is somewhere to go back to.
+ * An empty `googleClientId` leaves "Continue with Google" off the email page.
+ */
 @Composable
-fun AccountFlow(ui: AccountUi, actions: AccountActions, onClose: (() -> Unit)?) {
+fun AccountFlow(ui: AccountUi, actions: AccountActions, onClose: (() -> Unit)?, googleClientId: String = BuildConfig.GOOGLE_CLIENT_ID) {
     OnboardFrame(question = null, onCancel = onClose) {
         when (ui.step) {
-            AccountStep.Email -> EmailPage(ui, actions)
+            AccountStep.Email -> EmailPage(ui, actions, googleClientId.isNotEmpty())
             AccountStep.Code -> CodePage(ui, actions)
             AccountStep.SetPassphrase -> SetPassphrasePage(ui, actions)
             AccountStep.Unlock -> UnlockPage(ui, actions)
@@ -79,12 +88,17 @@ fun AccountFlow(ui: AccountUi, actions: AccountActions, onClose: (() -> Unit)?) 
 }
 
 @Composable
-private fun EmailPage(ui: AccountUi, actions: AccountActions) {
+private fun EmailPage(ui: AccountUi, actions: AccountActions, google: Boolean) {
     var email by rememberSaveable { mutableStateOf(ui.email) }
+    val activity = LocalContext.current
     DisplayText(if (ui.entry == AccountEntry.SignUp) "Sign up" else "Log in", 64.sp)
     Spacer(Modifier.height(28.dp))
     Text("We'll send a six-digit code to your email. No password.", color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 18.sp))
     Spacer(Modifier.height(32.dp))
+    if (google) {
+        InkButton(GOOGLE_BUTTON, { actions.google(activity) }, Modifier.fillMaxWidth(), quiet = true, enabled = !ui.busy, icon = { Image(painterResource(R.drawable.ic_google_g), null, Modifier.size(18.dp)) })
+        Spacer(Modifier.height(28.dp))
+    }
     PosterTextField(email, { email = it }, Modifier.fillMaxWidth().testTag("account.email"), placeholder = "you@example.com", label = "Your email")
     ErrorLine(ui.error)
     Spacer(Modifier.height(36.dp))

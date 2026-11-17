@@ -36,14 +36,30 @@ class AccountFlowTest {
     /** The tag sits on the printed field; the editable node is inside it. */
     private fun field(tag: String) = rule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(tag)))
 
-    private fun show(acct: Fakes.Account, entry: AccountEntry) {
+    private fun show(acct: Fakes.Account, entry: AccountEntry, google: Fakes.Google = Fakes.Google(), googleClientId: String = "") {
         rule.setContent {
-            val vm = remember { AccountViewModel(acct) }
+            val vm = remember { AccountViewModel(acct, google) }
             val ui by vm.ui.collectAsStateWithLifecycle()
             remember { vm.begin(entry); true }
             if (ui.done) done++
-            ElsewhereTheme { AccountFlow(ui, vm, onClose = { closed++ }) }
+            ElsewhereTheme { AccountFlow(ui, vm, onClose = { closed++ }, googleClientId = googleClientId) }
         }
+    }
+
+    @Test fun `with a client id the email page offers Google first and a token lands on the passphrase step`() {
+        val acct = Fakes.Account(); val google = Fakes.Google()
+        show(acct, AccountEntry.LogIn, google, googleClientId = "123.apps.googleusercontent.com")
+        rule.onNodeWithText(GOOGLE_BUTTON.uppercase()).performClick()
+        rule.waitForIdle()
+        assertEquals(1, google.asked)
+        assertEquals(listOf("id.tok"), acct.googleTokens)
+        rule.onNodeWithText("Set a recovery passphrase".uppercase()).assertIsDisplayed()
+    }
+
+    @Test fun `without a client id the email page has no Google button`() {
+        show(Fakes.Account(), AccountEntry.LogIn)
+        rule.onNodeWithText(GOOGLE_BUTTON.uppercase()).assertDoesNotExist()
+        field("account.email").assertIsDisplayed()
     }
 
     @Test fun `six digits submit on their own and a new account sets a passphrase`() {
@@ -89,7 +105,7 @@ class AccountFlowTest {
 
     /** The Activity comes back after a rotation with the same view model; the page it was on must still be there. */
     @Test fun `recreating the activity at the Code step stays on the Code step`() {
-        val acct = Fakes.Account(); val vm = AccountViewModel(acct)
+        val acct = Fakes.Account(); val vm = AccountViewModel(acct, Fakes.Google())
         val restorer = StateRestorationTester(rule)
         restorer.setContent { ElsewhereTheme { AccountRoute(AccountEntry.LogIn, onDone = { done++ }, onClose = null, vm = vm) } }
         field("account.email").performTextInput("ana@example.com")

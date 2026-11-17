@@ -41,6 +41,16 @@ class AccountClientTest {
         assertEquals(AccountInfo("acct_0123456789abcdef", "ada@example.org", 1700000000000L, true), login.account)
     }
 
+    @Test fun `a Google ID token goes to auth google and comes back as the same login`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"session":"s3cret","account":{"id":"acct_0123456789abcdef","email":"ada@example.org","created":1700000000000,"hasVault":false}}"""))
+        val login = client.google("eyJ.id.token")
+        val req = server.takeRequest()
+        assertEquals("POST", req.method); assertEquals("/auth/google", req.path)
+        assertEquals("""{"idToken":"eyJ.id.token"}""", req.body.readUtf8())
+        assertEquals("s3cret", login.session)
+        assertEquals("ada@example.org", login.account.email)
+    }
+
     @Test fun `the server's error word rides on the exception`() = runTest {
         server.enqueue(MockResponse().setResponseCode(429).setBody("""{"error":"slow down"}"""))
         val e = runCatching { client.start("a@b.co") }.exceptionOrNull() as AccountException

@@ -1,12 +1,16 @@
 package com.elsewhere.app.ui.account
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.elsewhere.app.account.AccountException
 import com.elsewhere.app.account.Accounts
 import com.elsewhere.app.account.NoVault
 import com.elsewhere.app.account.Vault
 import com.elsewhere.app.account.WrongPassphrase
 import com.elsewhere.app.account.userMessage
+import com.elsewhere.app.auth.GoogleAuth
+import com.elsewhere.app.auth.GoogleSignInFailed
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +39,8 @@ data class AccountUi(
 interface AccountActions {
     fun begin(entry: AccountEntry)
     fun sendCode(email: String)
+    /** The Google sheet over `activity` instead of an emailed code; `activity` must be the foreground Activity. */
+    fun google(activity: Context)
     fun resend()
     fun submitCode(code: String)
     fun setPassphrase(passphrase: String, confirm: String)
@@ -52,9 +58,10 @@ const val PASSPHRASES_DIFFER = "Those don't match."
 const val NOT_AN_EMAIL = "That doesn't look like an email."
 const val WRONG_PASSPHRASE = "That's not it"
 const val NO_VAULT = "This account has no vault yet. Set a passphrase instead."
+const val GOOGLE_FAIL = "Google sign-in didn't finish. Try again."
 
 @HiltViewModel
-class AccountViewModel @Inject constructor(private val accounts: Accounts) : ViewModel(), AccountActions {
+class AccountViewModel @Inject constructor(private val accounts: Accounts, private val google: GoogleAuth) : ViewModel(), AccountActions {
     private val _ui = MutableStateFlow(AccountUi())
     val ui: StateFlow<AccountUi> = _ui
 
@@ -65,6 +72,12 @@ class AccountViewModel @Inject constructor(private val accounts: Accounts) : Vie
         if (begun && _ui.value.entry == entry && !_ui.value.done) return
         begun = true
         _ui.value = AccountUi(entry = entry, step = if (entry == AccountEntry.Update) AccountStep.Unlock else AccountStep.Email)
+    }
+
+    /** The token goes to the service; from there it is the same road as a finished code. The limiter and a dead network keep their own words. */
+    override fun google(activity: Context) = run(after = { it }) {
+        val account = try { accounts.google(google.idToken(activity)) } catch (e: AccountException) { if (e.error == "slow down") throw e else throw GoogleSignInFailed(e) }
+        _ui.update { it.copy(step = if (account.hasVault) AccountStep.Unlock else AccountStep.SetPassphrase) }
     }
 
     override fun sendCode(email: String) {
@@ -124,6 +137,7 @@ class AccountViewModel @Inject constructor(private val accounts: Accounts) : Vie
     private fun messageOf(e: Throwable): String = when (e) {
         is WrongPassphrase -> WRONG_PASSPHRASE
         is NoVault -> NO_VAULT
+        is GoogleSignInFailed -> GOOGLE_FAIL
         else -> e.userMessage()
     }
 

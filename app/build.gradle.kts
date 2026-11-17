@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -27,6 +29,11 @@ val keystorePath: String? = System.getenv("ELSEWHERE_KEYSTORE")?.takeIf { File(i
 // -Pelsewhere.mapsSdkKey=… or MAPS_SDK_KEY (CI). Without one the map falls back to tiles or the free style.
 val mapsSdkKey: String = (findProperty("elsewhere.mapsSdkKey") as String?)?.takeIf { it.isNotBlank() } ?: System.getenv("MAPS_SDK_KEY").orEmpty()
 
+// The web OAuth client ID, as the token audience the account service checks; `googleClientId` in local.properties (CI: GOOGLE_CLIENT_ID).
+// Empty hides "Continue with Google", so a plain checkout still builds and runs.
+val googleClientId: String = Properties().apply { rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) } }
+    .getProperty("googleClientId")?.trim()?.takeIf { it.isNotEmpty() } ?: System.getenv("GOOGLE_CLIENT_ID").orEmpty()
+
 android {
     namespace = "com.elsewhere.app"
     compileSdk = 35
@@ -39,6 +46,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["mapsSdkKey"] = mapsSdkKey
         buildConfigField("boolean", "HAS_MAPS_SDK", mapsSdkKey.isNotBlank().toString())
+        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${googleClientId.replace("\"", "\\\"")}\"")
     }
     signingConfigs {
         if (keystorePath != null) create("elsewhere") {
@@ -80,6 +88,7 @@ dependencies {
     implementation(libs.maplibre.compose); implementation(libs.play.location)
     implementation(libs.play.maps); implementation(libs.maps.compose)
     implementation(libs.tink.android); implementation(libs.zxing.core); implementation(libs.play.code.scanner)
+    implementation(libs.credentials); implementation(libs.credentials.play); implementation(libs.googleid)
     testImplementation(libs.junit5.api); testImplementation(libs.junit5.params); testRuntimeOnly(libs.junit5.engine)
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.3")
     testImplementation(libs.coroutines.test); testImplementation(libs.okhttp.mockwebserver)

@@ -41,6 +41,8 @@ fun Throwable.userMessage(): String = when {
 interface AccountApi {
     suspend fun start(email: String)
     suspend fun finish(email: String, code: String): Login
+    /** A Google ID token for the same `{ session, account }`; 401 when Google would not vouch for it. */
+    suspend fun google(idToken: String): Login
     suspend fun me(session: String): AccountInfo
     suspend fun logout(session: String)
     suspend fun putVault(session: String, body: VaultBody)
@@ -60,6 +62,9 @@ class AccountClient(private val http: OkHttpClient, private val baseUrl: () -> S
 
     override suspend fun finish(email: String, code: String): Login =
         json.decodeFromString(Login.serializer(), call("POST", "/auth/finish", """{"email":${quote(normalizeEmail(email))},"code":${quote(code)}}""")!!)
+
+    override suspend fun google(idToken: String): Login =
+        json.decodeFromString(Login.serializer(), call("POST", "/auth/google", """{"idToken":${quote(idToken)}}""")!!)
 
     override suspend fun me(session: String): AccountInfo = json.decodeFromString(AccountInfo.serializer(), call("GET", "/me", null, session)!!)
     override suspend fun logout(session: String) { call("DELETE", "/session", "", session) }
