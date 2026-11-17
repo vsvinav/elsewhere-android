@@ -45,8 +45,9 @@ class AccountRepositoryTest {
         override suspend fun deleteMe(session: String) { calls += "deleteMe $session"; check() }
     }
 
-    class FakeStorage(initial: AccountState = AccountState()) : AccountStorage {
+    class FakeStorage(initial: AccountState = AccountState(), var installId: String = "install00000001") : AccountStorage {
         override val state = MutableStateFlow(initial)
+        override suspend fun installId(): String = installId
         override suspend fun saveSession(s: Session) = state.update { it.copy(session = s) }
         override suspend fun saveSalt(salt: String?) = state.update { it.copy(salt = salt) }
         override suspend fun saveVault(at: Long, hash: String?) = state.update { it.copy(vaultAt = at, vaultHash = hash) }
@@ -288,6 +289,20 @@ class AccountRepositoryTest {
         assertNull(w.store.state.value.salt)
         assertEquals("Grace", contentsOf(w, driveKey).profile.name)
         assertEquals(VaultState.UpToDate, w.vault())
+    }
+
+    @Test fun `while the passphrase is still owed, nothing goes up and the Drive key is not kept`() = runTest {
+        val salt = Vault.newSalt()
+        val w = world(withProfile = false)
+        val v1 = Vault.seal(Vault.deriveKey("correct horse battery staple", salt), VaultContents(signPriv = "aa", kxPriv = "bb", profile = profile).encode(), salt)
+        w.api.vault = v1
+        w.repo.google("id.tok")
+        assertEquals(DriveLink.NeedsPassphrase, w.repo.useDriveKey(Vault.b64(driveKey)))
+        assertNull(w.store.state.value.driveKey)
+        w.record.profile.value = profile.copy(name = "Edited here")
+        advanceTimeBy(AccountRepository.DEBOUNCE_MS + 10)
+        assertEquals(v1, w.api.vault, "the passphrase vault must not be written over")
+        assertEquals(0, w.api.calls.count { it == "put" })
     }
 
     @Test fun `a vault under another Drive key cannot be opened and says so`() = runTest {

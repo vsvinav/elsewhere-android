@@ -82,6 +82,8 @@ class AccountRepository(
 
     private val key = MutableStateFlow<ByteArray?>(null)
     private var pending: Job? = null
+    /** A Drive key waiting on the passphrase that opens the old vault; it becomes the account's only once [restore] has moved the vault over. */
+    private var owedDrive: String? = null
 
     override val account: StateFlow<AccountState?> = store.state.stateIn(scope, SharingStarted.Eagerly, null)
 
@@ -127,7 +129,8 @@ class AccountRepository(
     override suspend fun restore(passphrase: String) {
         val (k, body, contents) = open(passphrase) ?: throw NoVault()
         adopt(contents)
-        if (store.state.first().driveKey != null) { store.saveVault(0L, null); uploadNow(); return }
+        val drive = owedDrive
+        if (drive != null) { owedDrive = null; store.saveDriveKey(drive); store.saveSalt(null); store.saveVault(0L, null); uploadNow(); return }
         store.saveSalt(body.salt); store.saveVault(clock(), hash(contents.encode()))
         key.value = k
     }
@@ -150,14 +153,16 @@ class AccountRepository(
 
     override suspend fun useDriveKey(b64: String, fresh: Boolean): DriveLink {
         val k = Vault.unb64(b64)
-        store.saveDriveKey(b64); store.saveSalt(null)
-        if (fresh) { store.saveVault(0L, null); schedule(0L); return DriveLink.Ready }
+        owedDrive = null
+        if (fresh) { store.saveDriveKey(b64); store.saveSalt(null); store.saveVault(0L, null); schedule(0L); return DriveLink.Ready }
         val session = session() ?: throw AccountException(401, "signed out")
         val body = authed { api.getVault(session) }
         when {
-            body == null -> { store.saveVault(0L, null); schedule(0L) }
-            body.v < 2 -> return DriveLink.NeedsPassphrase
+            body == null -> { store.saveDriveKey(b64); store.saveSalt(null); store.saveVault(0L, null); schedule(0L) }
+            // The passphrase vault stays whole until the passphrase has opened it; a Drive key kept now would write a new one over it.
+            body.v < 2 -> { owedDrive = b64; return DriveLink.NeedsPassphrase }
             else -> {
+                store.saveDriveKey(b64); store.saveSalt(null)
                 val plaintext = try { withContext(crypto) { Vault.open(k, body) } } catch (e: GeneralSecurityException) { throw VaultLocked() }
                 adopt(VaultContents.decode(plaintext))
                 store.saveVault(clock(), hash(plaintext))
@@ -218,7 +223,7 @@ class AccountRepository(
 
     /** The store first: cancelling `pending` from inside the scheduled upload would otherwise cut this short. */
     private suspend fun signOutLocally() {
-        key.value = null
+        key.value = null; owedDrive = null
         store.clearSession()
         val job = pending
         if (job != null && job !== coroutineContext[Job]) job.cancel()

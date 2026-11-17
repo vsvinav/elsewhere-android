@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.elsewhere.app.data.SecretBox
 import com.elsewhere.app.data.sealLegacy
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import javax.inject.Inject
@@ -37,6 +38,8 @@ interface AccountStorage {
     suspend fun markWelcomed()
     /** Sign out: forget the session, the salt and the vault stamp, but stay welcomed. */
     suspend fun clearSession()
+    /** This install's name on the wire, `[a-z0-9]{16}`, made once and kept through sign-outs; never in the vault, so two phones restored from one never share it. */
+    suspend fun installId(): String
 }
 
 @Singleton
@@ -50,6 +53,7 @@ class AccountStore @Inject constructor(private val store: DataStore<Preferences>
         val vaultHash = stringPreferencesKey("account.vaultHash")
         val driveKey = stringPreferencesKey("account.driveKey")
         val welcomed = booleanPreferencesKey("account.welcomed")
+        val installId = stringPreferencesKey("account.installId")
     }
 
     private var sealed = false
@@ -71,6 +75,14 @@ class AccountStore @Inject constructor(private val store: DataStore<Preferences>
     override suspend fun saveVault(at: Long, hash: String?) { store.edit { it[K.vaultAt] = at; if (hash == null) it.remove(K.vaultHash) else it[K.vaultHash] = hash } }
     override suspend fun saveDriveKey(b64: String?) { store.edit { if (b64 == null) it.remove(K.driveKey) else it[K.driveKey] = box.seal(b64) } }
     override suspend fun markWelcomed() { store.edit { it[K.welcomed] = true } }
+    override suspend fun installId(): String {
+        store.data.first()[K.installId]?.let { return it }
+        val alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+        val rnd = java.security.SecureRandom()
+        val fresh = String(CharArray(16) { alphabet[rnd.nextInt(alphabet.length)] })
+        return store.edit { if (it[K.installId] == null) it[K.installId] = fresh }[K.installId]!!
+    }
+
     override suspend fun clearSession() {
         store.edit { it.remove(K.session); it.remove(K.id); it.remove(K.email); it.remove(K.salt); it.remove(K.vaultAt); it.remove(K.vaultHash); it.remove(K.driveKey) }
     }
