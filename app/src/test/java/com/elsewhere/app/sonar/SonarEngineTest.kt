@@ -136,14 +136,17 @@ class SonarEngineTest {
         assertEquals(1, alerts.names.size)
     }
 
-    @Test fun `city pings, friends without sonar and no share stay quiet`() = runTest {
+    @Test fun `city pings and friends without sonar stay quiet`() = runTest {
         assertEquals(Decision.Quiet, engine.evaluate(ping(grade = Grade.city)))
         store.setGrants("M", Grants(livePrecise = true))
         assertEquals(Decision.Quiet, engine.evaluate(ping(grade = Grade.precise)))
-        store.setGrants("M", Grants(sonar = true))
-        store.stopShare()
-        assertEquals(Decision.Quiet, engine.evaluate(ping()))
         assertTrue(alerts.names.isEmpty())
+    }
+
+    @Test fun `a sonar friend fires without any share running`() = runTest {
+        store.stopShare()
+        assertTrue(engine.evaluate(ping()) is Decision.Fire)
+        assertEquals(listOf("Marta"), alerts.names)
     }
 
     @Test fun `my own habitat around the friend keeps it quiet`() = runTest {

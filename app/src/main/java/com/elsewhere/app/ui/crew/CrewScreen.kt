@@ -66,7 +66,7 @@ fun CrewRoute(onBack: () -> Unit, vm: CrewViewModel = hiltViewModel(), inset: Bo
     val pending by PendingCrew.code.collectAsStateWithLifecycle()
     var prefill by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(ui?.relaySet) { if (ui?.relaySet == true) vm.ensureCode() }
-    DisposableEffect(vm) { onDispose { vm.unwatch() } }
+    DisposableEffect(vm) { vm.onVisible(); onDispose { vm.unwatch() } }
     // A pair link only fills the code in; the visitor still taps Pair, so a stray link can't claim on its own.
     LaunchedEffect(pending) { pending?.let { PendingCrew.code.value = null; prefill = it } }
     CrewScreen(

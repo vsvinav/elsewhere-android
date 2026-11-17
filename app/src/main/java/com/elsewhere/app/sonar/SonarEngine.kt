@@ -75,7 +75,6 @@ class SonarEngine(
         val now = clock()
         if (p.test) return decideTest(incomingHit).also { if (it is Decision.Echo) land(friend, it.hitId, now, test = true) }
         if (p.lat == null || p.lng == null) return Decision.Quiet
-        val share = store.shareNow()?.takeIf { it.active(now) && m.from in it.friendIds } ?: return Decision.Quiet
         val mine = db.rawFixes().latest()?.toSonarFix() ?: return Decision.Quiet
         val friendFix = Fix(p.t * 1000, p.lat, p.lng)
         val decision = withContext(Dispatchers.Default) {

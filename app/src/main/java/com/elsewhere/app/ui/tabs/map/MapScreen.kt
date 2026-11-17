@@ -197,6 +197,7 @@ fun MapTab(vm: MapViewModel = hiltViewModel(), crew: CrewViewModel = hiltViewMod
     val hits by crew.hits.collectAsStateWithLifecycle()
     val pendingMap by PendingCrew.map.collectAsStateWithLifecycle()
     LaunchedEffect(pendingMap) { if (pendingMap) { crew.setLayer(true); PendingCrew.map.value = false } }
+    LaunchedEffect(crew) { crew.onVisible() }
     val friends = remember(crewUi, layerOn, friendSel, hits, live) {
         val c = crewUi ?: return@remember null
         if (c.friends.isEmpty()) null

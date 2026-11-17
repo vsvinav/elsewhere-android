@@ -16,6 +16,7 @@ import com.elsewhere.app.crew.ShareLength
 import com.elsewhere.app.crew.ShareSession
 import com.elsewhere.app.data.Recording
 import com.elsewhere.app.data.SettingsStore
+import com.elsewhere.app.record.FreshFix
 import com.elsewhere.app.record.RecordControl
 import com.elsewhere.app.sonar.SonarEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -87,6 +88,7 @@ class CrewViewModel @Inject constructor(
     private val engine: SonarEngine,
     settings: SettingsStore,
     private val record: RecordControl,
+    private val fresh: FreshFix = FreshFix { null },
 ) : ViewModel(), CrewActions {
     var clock: () -> Long = System::currentTimeMillis
     var io: CoroutineDispatcher = Dispatchers.IO
@@ -124,6 +126,14 @@ class CrewViewModel @Inject constructor(
                 hitsFlow.update { it + h.friend.deviceId }
                 launch { delay(RING_MS.toLong() + 300); hitsFlow.update { it - h.friend.deviceId } }
             }
+        }
+    }
+
+    /** The Crew or Map tab has come into view: while recording, fetch one fresh fix and publish it at once. */
+    fun onVisible() {
+        viewModelScope.launch {
+            if (!record.recording.first().enabled) return@launch
+            withContext(io) { publisher.demand { fresh.get() } }
         }
     }
 

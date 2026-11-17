@@ -19,6 +19,8 @@ import com.elsewhere.app.data.SettingsStore
 import com.elsewhere.app.data.db.ElsewhereDb
 import com.elsewhere.app.data.db.MIGRATIONS
 import com.elsewhere.app.record.AndroidPermissionGate
+import com.elsewhere.app.record.FreshFix
+import com.elsewhere.app.record.FusedFreshFix
 import com.elsewhere.app.record.PermissionGate
 import com.elsewhere.app.record.RecordControl
 import com.elsewhere.app.record.AndroidServiceLink
@@ -108,6 +110,7 @@ object AppModule {
     @Provides fun tileService(t: GoogleTiles): TileService = t
     @Provides fun landSource(loader: LandLoader): LandSource = loader
     @Provides fun permissionGate(gate: AndroidPermissionGate): PermissionGate = gate
+    @Provides fun freshFix(f: FusedFreshFix): FreshFix = f
     @Provides fun recordControl(c: RecordController): RecordControl = c
     @Provides fun serviceLink(l: AndroidServiceLink): ServiceLink = l
 

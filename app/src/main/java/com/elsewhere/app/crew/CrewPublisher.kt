@@ -19,7 +19,7 @@ import kotlinx.coroutines.sync.withLock
 import com.elsewhere.app.ingest.record.Fix as RecordFix
 
 /**
- * Turns the recorder's fixes into pings for whoever we are sharing with, and ends the share on time.
+ * Turns the recorder's fixes into pings for every friend with a grant, and ends a timed share on time.
  * Habitat and absence around my own spot are recomputed at most every 30 s, from visits and recent fixes.
  */
 class CrewPublisher(
@@ -36,6 +36,7 @@ class CrewPublisher(
     private var job: Job? = null
     private var lastFix: RecordFix? = null
     private var selfAt = 0L
+    private var demandAt: Long? = null
     private var self: Pair<Boolean, Int?> = false to null
 
     val share: Flow<ShareSession?> get() = store.share
@@ -47,19 +48,33 @@ class CrewPublisher(
 
     private suspend fun planner(): PublishPlanner = planner ?: PublishPlanner(runCatching { cities() }.getOrNull()).also { planner = it }
 
-    suspend fun onFix(fix: RecordFix) = lock.withLock {
-        lastFix = fix
-        val now = clock()
-        val session = store.shareNow() ?: return
-        if (!session.active(now)) { endShare(session); return }
-        publish(fix, session, now)
+    suspend fun onFix(fix: RecordFix) = lock.withLock { publishNow(fix, force = false) }
+
+    /**
+     * A fix asked for on purpose, when a tab that shows the crew comes into view: fetched at most once a minute and
+     * published straight away, outside the cadence. A fetch that comes back empty leaves the minute open.
+     */
+    suspend fun demand(fresh: suspend () -> RecordFix?) {
+        val asked = clock()
+        if (demandAt?.let { asked - it < DEMAND_MS } == true) return
+        val fix = fresh() ?: return
+        demandAt = asked
+        lock.withLock { publishNow(fix, force = true) }
     }
 
-    private suspend fun publish(fix: RecordFix, session: ShareSession, now: Long) {
+    private suspend fun publishNow(fix: RecordFix, force: Boolean) {
+        lastFix = fix
+        val now = clock()
+        val session = store.shareNow()
+        if (session != null && !session.active(now)) endShare(session)
+        publish(fix, session?.takeIf { it.active(now) }, now, force)
+    }
+
+    private suspend fun publish(fix: RecordFix, session: ShareSession?, now: Long, force: Boolean = false) {
         val (habitat, absence) = selfJudgement(fix, now)
         val my = MyFix(fix.ts, fix.lat, fix.lng, habitat, absence)
         val friends = store.friendsNow()
-        for ((friend, ping) in planner().plan(my, friends, session, now)) hub.send(friend, ping.encode())
+        for ((friend, ping) in planner().plan(my, friends, session, now, force)) hub.send(friend, ping.encode())
     }
 
     private suspend fun selfJudgement(fix: RecordFix, now: Long): Pair<Boolean, Int?> {
@@ -92,8 +107,7 @@ class CrewPublisher(
         planner().carryHit(friend.deviceId, hit)
         val fix = lastFix ?: db.rawFixes().latest()?.let { RecordFix(it.ts, it.lat, it.lng, it.accuracyM) } ?: return@withLock
         val now = clock()
-        val session = store.shareNow()?.takeIf { it.active(now) } ?: return@withLock
-        publish(fix, session, now)
+        publish(fix, store.shareNow()?.takeIf { it.active(now) }, now)
     }
 
     /** A test hit goes straight to the friend's room, share or not, and never with a position: nothing is placed or recorded. */
@@ -110,6 +124,8 @@ class CrewPublisher(
     }
 
     companion object {
+        const val DEMAND_MS = 60_000L
+
         fun forApp(store: CrewStore, hub: RoomHub, recorder: Recorder, db: ElsewhereDb, cities: CitiesLoader, scope: CoroutineScope) =
             CrewPublisher(store, hub, recorder.fixes, db, { CityLookup(cities.get()) }, scope)
     }
