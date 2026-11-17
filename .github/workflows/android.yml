@@ -22,6 +22,7 @@ jobs:
       - env:
           ELSEWHERE_KEYSTORE_PASSWORD: ${{ secrets.ELSEWHERE_KEYSTORE_PASSWORD }}
           MAPS_SDK_KEY: ${{ secrets.MAPS_SDK_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
         run: ./gradlew testDebugUnitTest verifyPaparazziDebug assembleRelease --no-daemon $VERSION_ARG
       - uses: actions/upload-artifact@v4
         with: { name: elsewhere-release.apk, path: app/build/outputs/apk/release/app-release.apk }

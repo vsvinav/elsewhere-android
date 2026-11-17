@@ -92,7 +92,7 @@ class AccountRepositoryTest {
         assertEquals(Crypto.hex(w.identity.keys.signPriv), c.signPriv)
         assertEquals(Crypto.hex(w.identity.keys.kxPriv), c.kxPriv)
         assertEquals(profile, c.profile)
-        assertEquals(VaultSettings("km", "https://relay.elsewhere.app", "https://account.elsewhere.app"), c.settings)
+        assertEquals(VaultSettings("km", "https://elsewhere-relay.vinav.workers.dev", "https://elsewhere-account.vinav.workers.dev"), c.settings)
         assertEquals(1_000L, w.store.state.value.vaultAt)
         assertEquals(VaultState.UpToDate, w.vault())
     }
@@ -171,7 +171,7 @@ class AccountRepositoryTest {
         assertEquals(theirs, w.identity.keys)
         assertEquals("Vault Ada", w.record.saved!!.name)
         assertEquals("https://relay.example.org", w.maps.cur.value.relayUrl)
-        assertEquals("https://account.elsewhere.app", w.maps.cur.value.accountUrl, "the URL that just worked stays")
+        assertEquals("https://elsewhere-account.vinav.workers.dev", w.maps.cur.value.accountUrl, "the URL that just worked stays")
         assertEquals(Vault.b64(salt), w.store.state.value.salt)
         advanceTimeBy(3_000)
         assertEquals(VaultState.UpToDate, w.vault())

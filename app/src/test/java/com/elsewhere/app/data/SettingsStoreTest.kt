@@ -51,7 +51,7 @@ class SettingsStoreTest {
     }
 
     @Test fun `the account service URL defaults and round-trips trimmed`() = runTest {
-        assertEquals("https://account.elsewhere.app", store.settings.first().accountUrl)
+        assertEquals("https://elsewhere-account.vinav.workers.dev", store.settings.first().accountUrl)
         store.saveSettings(store.settings.first().copy(accountUrl = " https://acct.example.org "))
         assertEquals("https://acct.example.org", store.settings.first().accountUrl)
         store.saveSettings(store.settings.first().copy(accountUrl = "   "))

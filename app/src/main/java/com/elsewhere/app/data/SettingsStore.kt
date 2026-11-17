@@ -36,8 +36,8 @@ data class Settings(
     val accountUrl: String = DEFAULT_ACCOUNT,
 ) {
     companion object {
-        const val DEFAULT_RELAY = "https://relay.elsewhere.app"
-        const val DEFAULT_ACCOUNT = "https://account.elsewhere.app"
+        const val DEFAULT_RELAY = "https://elsewhere-relay.vinav.workers.dev"
+        const val DEFAULT_ACCOUNT = "https://elsewhere-account.vinav.workers.dev"
     }
 }
 
