@@ -56,6 +56,14 @@ class SettingsStoreTest {
         assertEquals(1_763_222_520_000L, store.settings.first().rehearsalUntil)
     }
 
+    @Test fun `the retired placeholder hosts read as the live defaults`() = runTest {
+        prefs.edit { it[stringPreferencesKey("relayUrl")] = "https://relay.elsewhere.app"; it[stringPreferencesKey("accountUrl")] = "https://account.elsewhere.app/" }
+        assertEquals(Settings.DEFAULT_RELAY, store.settings.first().relayUrl)
+        assertEquals(Settings.DEFAULT_ACCOUNT, store.settings.first().accountUrl)
+        store.saveSettings(store.settings.first().copy(relayUrl = "https://relay.example.org"))
+        assertEquals("https://relay.example.org", store.settings.first().relayUrl)
+    }
+
     @Test fun `the account service URL defaults and round-trips trimmed`() = runTest {
         assertEquals("https://elsewhere-account.vinav.workers.dev", store.settings.first().accountUrl)
         store.saveSettings(store.settings.first().copy(accountUrl = " https://acct.example.org "))

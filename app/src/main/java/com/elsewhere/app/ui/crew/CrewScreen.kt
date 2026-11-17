@@ -227,7 +227,9 @@ private fun PairBill(ui: CrewUi, actions: CrewActions, onShowQr: () -> Unit, onS
     val code = ui.code
     CapsText("Your share code", color = Poster.Ink, size = 11.sp)
     Spacer(Modifier.height(6.dp))
-    CapsText(if (code != null) "Expires in ${code.remaining(ui.now)}" else "Minting…", size = 9.sp)
+    val failed = (ui.pair as? PairState.Failed)?.takeIf { code == null }
+    if (failed != null) Text(failed.message, color = Poster.Red, style = PosterType.Label)
+    else CapsText(if (code != null) "Expires in ${code.remaining(ui.now)}" else "Minting…", size = 9.sp)
     Spacer(Modifier.height(8.dp))
     Box(Modifier.fillMaxWidth().border(3.dp, Poster.Ink).padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
         DisplayText(code?.code ?: "PT-···-····", 40.sp, Modifier.alpha(if (code == null) 0.4f else 1f))
@@ -239,7 +241,7 @@ private fun PairBill(ui: CrewUi, actions: CrewActions, onShowQr: () -> Unit, onS
         InkButton("Scan", { onScan?.invoke() }, Modifier.weight(1f), quiet = true, enabled = onScan != null)
     }
     Spacer(Modifier.height(8.dp))
-    Text("New code", Modifier.clickable(role = Role.Button, onClick = actions::newCode).padding(vertical = 4.dp), color = Poster.Ink3, style = PosterType.Label)
+    Text(if (failed != null) "Try again" else "New code", Modifier.clickable(role = Role.Button, onClick = actions::newCode).padding(vertical = 4.dp), color = Poster.Ink3, style = PosterType.Label)
     Spacer(Modifier.height(28.dp))
     PosterTextField(typed, { typed = it }, Modifier.fillMaxWidth(), placeholder = "PT-XXX-XXXX", label = "Enter a friend's code", mono = true)
     Spacer(Modifier.height(16.dp))
@@ -247,7 +249,7 @@ private fun PairBill(ui: CrewUi, actions: CrewActions, onShowQr: () -> Unit, onS
         InkButton("Pair", { actions.claim(typed) }, enabled = ui.pair !is PairState.Working && ShareCode.parse(typed) != null)
         when (val p = ui.pair) {
             PairState.Working -> Text("Asking the relay…", color = Poster.Ink3, style = PosterType.Label)
-            is PairState.Failed -> Text(p.message, color = Poster.Red, style = PosterType.Label)
+            is PairState.Failed -> if (failed == null) Text(p.message, color = Poster.Red, style = PosterType.Label)
             else -> {}
         }
     }

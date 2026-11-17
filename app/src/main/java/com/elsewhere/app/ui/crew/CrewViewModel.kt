@@ -164,7 +164,9 @@ class CrewViewModel @Inject constructor(
     fun ensureCode() {
         watching.value = true
         viewModelScope.launch {
-            if (store.code.first()?.takeIf { !it.expired(clock()) } == null) withContext(io) { runCatching { pairing.openCode() } }
+            if (store.code.first()?.takeIf { !it.expired(clock()) } == null) {
+                withContext(io) { runCatching { pairing.openCode() } }.onFailure { pair.value = PairState.Failed(it.pairMessage()) }
+            }
         }
     }
 

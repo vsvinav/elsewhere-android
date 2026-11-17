@@ -211,6 +211,15 @@ class CrewFlowTest {
         assertEquals(RELAY_DOWN, (vm.ui.value?.pair as PairState.Failed).message)
     }
 
+    @Test fun `a code that cannot be minted says why on the bill instead of minting forever`() {
+        server.shutdown()
+        setContent()
+        await { vm.ui.value?.pair is PairState.Failed }
+        rule.onNodeWithText("Minting…").assertDoesNotExist()
+        node(RELAY_DOWN).assertIsDisplayed()
+        node("Try again").assertIsDisplayed()
+    }
+
     @Test fun `the header wears a REHEARSAL tag only while rehearsing`() {
         setContent()
         await { vm.ui.value != null }

@@ -40,6 +40,10 @@ data class Settings(
     companion object {
         const val DEFAULT_RELAY = "https://elsewhere-relay.vinav.workers.dev"
         const val DEFAULT_ACCOUNT = "https://elsewhere-account.vinav.workers.dev"
+        /** Placeholder hosts an early build shipped and the vault may still carry; they never resolved to a service. */
+        private val RETIRED = setOf("relay.elsewhere.app", "account.elsewhere.app")
+        /** A stored URL, unless it points at a retired host, in which case the live default. */
+        fun live(url: String?, default: String): String? = url?.let { u -> if (u.trim().removePrefix("https://").removePrefix("http://").trimEnd('/') in RETIRED) default else u }
     }
 }
 
@@ -101,8 +105,8 @@ class SettingsStore @Inject constructor(private val store: DataStore<Preferences
             mapProvider = MapProvider.parse(p[K.mapProvider]),
             keyPlaces = p[K.keyPlaces] ?: false, keyTiles = p[K.keyTiles] ?: false, keyCheckedAt = p[K.keyCheckedAt] ?: 0,
             limitedAccepted = p[K.limitedAccepted] ?: false,
-            relayUrl = p[K.relayUrl] ?: Settings.DEFAULT_RELAY,
-            accountUrl = p[K.accountUrl]?.takeIf { it.isNotBlank() } ?: Settings.DEFAULT_ACCOUNT,
+            relayUrl = Settings.live(p[K.relayUrl], Settings.DEFAULT_RELAY) ?: Settings.DEFAULT_RELAY,
+            accountUrl = Settings.live(p[K.accountUrl], Settings.DEFAULT_ACCOUNT)?.takeIf { it.isNotBlank() } ?: Settings.DEFAULT_ACCOUNT,
             rehearsalUntil = p[K.rehearsalUntil] ?: 0L,
         )
     }
