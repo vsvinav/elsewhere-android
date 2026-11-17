@@ -27,6 +27,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -318,7 +321,8 @@ class SyncEngineTest {
         assertEquals(4, db.syncState().all().size)
 
         engine.startFresh(ApplicationProvider.getApplicationContext())
-        engine.status.first { it is SyncStatus.Idle }
+        // The launch lands on a real dispatcher and the status was already Idle, so wait for the round's result, in real time.
+        withContext(Dispatchers.Default) { withTimeout(10_000) { while (api.blobs.keys != setOf("$mySource:2024-01") || engine.status.value !is SyncStatus.Idle) delay(20) } }
         assertEquals(1, api.deletes)
         assertEquals(1, drive.deletes)
         assertEquals(1, accounts.driveKeys.size)
