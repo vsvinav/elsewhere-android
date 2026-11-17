@@ -55,7 +55,7 @@ import com.elsewhere.app.ui.world.countUp
 import com.elsewhere.app.ui.world.cv
 import com.elsewhere.app.ui.world.date
 import com.elsewhere.app.ui.world.dateISO
-import com.elsewhere.app.ui.world.label
+import com.elsewhere.app.data.modeLabel
 import com.elsewhere.app.ui.world.n0
 import com.elsewhere.app.ui.world.plural
 import com.elsewhere.app.analytics.toFixed
@@ -180,7 +180,7 @@ internal fun SetlistBill(ui: TourUi) {
         Spacer(Modifier.height(28.dp))
         val top = f.kmByMode.firstOrNull()?.second ?: 1.0
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            for ((m, km) in f.kmByMode) SetlistRow(label(m), (km / top).toFloat(), lensColor(m), n0(u.cv(km)), u.u, door = ui.doors.modes[m])
+            for ((m, km) in f.kmByMode) SetlistRow(modeLabel(m), (km / top).toFloat(), lensColor(m), n0(u.cv(km)), u.u, door = ui.doors.modes[m])
         }
         Spacer(Modifier.height(40.dp))
         Foot(listOf(span("${toFixed(f.totalKm / 40075, 1)}× around the Earth", ui.doors.laps)), listOf(span("${f.flights} ${plural(f.flights, "flight")}", ui.doors.flights)))

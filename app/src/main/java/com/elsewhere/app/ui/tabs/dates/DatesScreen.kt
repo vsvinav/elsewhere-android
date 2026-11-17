@@ -59,7 +59,7 @@ import com.elsewhere.app.ui.world.countUp
 import com.elsewhere.app.ui.world.cv
 import com.elsewhere.app.ui.world.date
 import com.elsewhere.app.ui.world.figures.Beds
-import com.elsewhere.app.ui.world.label
+import com.elsewhere.app.data.modeLabel
 import com.elsewhere.app.ui.world.n0
 import com.elsewhere.app.ui.world.u
 import kotlinx.coroutines.Dispatchers
@@ -175,7 +175,7 @@ internal fun TripPass(t: TripUi, units: Units, open: Boolean, detail: TripDetail
                         val top = t.modes.firstOrNull()?.second ?: 1.0
                         t.modes.forEachIndexed { j, (m, v) ->
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(label(m).uppercase(), Modifier.width(72.dp), color = Poster.Ink3, style = PosterType.Caps.copy(fontSize = 11.sp))
+                                Text(modeLabel(m).uppercase(), Modifier.width(72.dp), color = Poster.Ink3, style = PosterType.Caps.copy(fontSize = 11.sp))
                                 Box(Modifier.weight(1f).height(22.dp).background(Poster.Stock2)) {
                                     Box(Modifier.fillMaxWidth((v / top).toFloat().coerceIn(0f, 1f)).height(22.dp).background(when (j) { 0 -> Poster.Red; 1 -> Poster.Mustard; else -> Poster.Ink }))
                                 }

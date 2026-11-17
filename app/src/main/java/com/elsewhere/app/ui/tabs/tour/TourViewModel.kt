@@ -27,7 +27,7 @@ import com.elsewhere.app.ui.nav.yearDoor
 import com.elsewhere.app.ui.shell.RangeStore
 import com.elsewhere.app.ui.world.cv
 import com.elsewhere.app.ui.world.date
-import com.elsewhere.app.ui.world.label
+import com.elsewhere.app.data.modeLabel
 import com.elsewhere.app.ui.world.n0
 import com.elsewhere.app.ui.world.plural
 import com.elsewhere.app.analytics.toFixed
@@ -89,7 +89,7 @@ class TourDoors(data: Record, private val units: Units, facts: HomeFacts = homeF
     val trips: Door = whole("${facts.trips} ${plural(facts.trips, "trip")}")
     val laps: Door = whole("${toFixed(facts.totalKm / 40075, 1)}× around the Earth")
     val flights: Door = whole("${facts.flights} ${plural(facts.flights, "flight")}")
-    val modes: Map<String, Door> = facts.kmByMode.associate { (m, km) -> m to whole("${label(m)} · ${cv(km)} $u") }
+    val modes: Map<String, Door> = facts.kmByMode.associate { (m, km) -> m to whole("${modeLabel(m)} · ${cv(km)} $u") }
     val hoursOut: Door = whole("${n0(facts.hours.other)} hours out")
     val thirdPlaces: List<Door> = facts.thirdPlaces.map { Door.Place(it.id, label = "${it.name} · ${it.place.nVisits} visits") }
     val longestDay: Door? = facts.records.longestDay?.let { day(it.date, "Longest day · ${cv(it.km)} $u") }

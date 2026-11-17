@@ -1,6 +1,5 @@
 package com.elsewhere.app.ui.world
 
-import com.elsewhere.app.analytics.MODE_LABEL
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ingest.jsRound
 import java.time.Instant
@@ -27,9 +26,6 @@ fun month(key: String): String = MONTH.format(LocalDate.parse("$key-01")).upperc
 /** `May 2024`, for the nights span. */
 fun monthLong(ts: Long): String = MONTH_LONG.format(Instant.ofEpochSecond(ts).atOffset(ZoneOffset.UTC))
 fun yearOf(ts: Long): Int = Instant.ofEpochSecond(ts).atOffset(ZoneOffset.UTC).year
-
-fun label(mode: String): String = MODE_LABEL[mode]
-    ?: mode.removePrefix("IN_").replace('_', ' ').lowercase(Locale.US).replaceFirstChar { it.uppercaseChar() }
 
 fun hours(h: Double): String = if (h >= 48) "${jsRound(h / 24).toLong()} d" else "${jsRound(h).toLong()} h"
 
