@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -48,15 +49,12 @@ const val START_OVER = "Start over without my vault"
 const val GOOGLE_BUTTON = "Continue with Google"
 
 /**
- * The first page a fresh install sees: the sketch, then Google, sign up, log in, or carry on as before.
- * Shown again from Settings once `welcomed`, where the last way out is just "Not now".
- * `sketchAt` pins the panel to one frame for snapshots; an empty `googleClientId` leaves the Google button out.
+ * The first page a fresh install sees: the sketch, then sign up, log in, or carry on as before.
+ * Shown again from Settings once `welcomed`, where the third way out is just "Not now".
+ * `sketchAt` pins the panel to one frame for snapshots.
  */
 @Composable
-fun WelcomeScreen(
-    onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit, onGoogle: () -> Unit = {}, welcomed: Boolean = false, sketchAt: Long? = null,
-    googleClientId: String = BuildConfig.GOOGLE_CLIENT_ID,
-) {
+fun WelcomeScreen(onSignUp: () -> Unit, onLogIn: () -> Unit, onSkip: () -> Unit, welcomed: Boolean = false, sketchAt: Long? = null) {
     OnboardFrame(question = null, onCancel = null) {
         DisplayText("Elsewhere", 72.sp)
         Spacer(Modifier.height(20.dp))
@@ -65,9 +63,6 @@ fun WelcomeScreen(
         Text(WELCOME_LINE, color = Poster.Ink, style = PosterType.Lede.copy(fontSize = 22.sp))
         Spacer(Modifier.height(32.dp))
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (googleClientId.isNotEmpty()) {
-                InkButton(GOOGLE_BUTTON, onGoogle, Modifier.fillMaxWidth(), quiet = true, icon = { Image(painterResource(R.drawable.ic_google_g), null, Modifier.size(18.dp)) })
-            }
             InkButton("Sign up", onSignUp, Modifier.fillMaxWidth())
             InkButton("Log in", onLogIn, Modifier.fillMaxWidth(), quiet = true)
         }
@@ -76,12 +71,15 @@ fun WelcomeScreen(
     }
 }
 
-/** The whole Email → Code → Passphrase/Unlock flow on one page frame; `onClose` is the Cancel when there is somewhere to go back to. */
+/**
+ * The whole Email → Code → Passphrase/Unlock flow on one page frame; `onClose` is the Cancel when there is somewhere to go back to.
+ * An empty `googleClientId` leaves "Continue with Google" off the email page.
+ */
 @Composable
-fun AccountFlow(ui: AccountUi, actions: AccountActions, onClose: (() -> Unit)?) {
+fun AccountFlow(ui: AccountUi, actions: AccountActions, onClose: (() -> Unit)?, googleClientId: String = BuildConfig.GOOGLE_CLIENT_ID) {
     OnboardFrame(question = null, onCancel = onClose) {
         when (ui.step) {
-            AccountStep.Email -> EmailPage(ui, actions)
+            AccountStep.Email -> EmailPage(ui, actions, googleClientId.isNotEmpty())
             AccountStep.Code -> CodePage(ui, actions)
             AccountStep.SetPassphrase -> SetPassphrasePage(ui, actions)
             AccountStep.Unlock -> UnlockPage(ui, actions)
@@ -90,12 +88,17 @@ fun AccountFlow(ui: AccountUi, actions: AccountActions, onClose: (() -> Unit)?) 
 }
 
 @Composable
-private fun EmailPage(ui: AccountUi, actions: AccountActions) {
+private fun EmailPage(ui: AccountUi, actions: AccountActions, google: Boolean) {
     var email by rememberSaveable { mutableStateOf(ui.email) }
+    val activity = LocalContext.current
     DisplayText(if (ui.entry == AccountEntry.SignUp) "Sign up" else "Log in", 64.sp)
     Spacer(Modifier.height(28.dp))
     Text("We'll send a six-digit code to your email. No password.", color = Poster.Ink2, style = PosterType.Lede.copy(fontSize = 18.sp))
     Spacer(Modifier.height(32.dp))
+    if (google) {
+        InkButton(GOOGLE_BUTTON, { actions.google(activity) }, Modifier.fillMaxWidth(), quiet = true, enabled = !ui.busy, icon = { Image(painterResource(R.drawable.ic_google_g), null, Modifier.size(18.dp)) })
+        Spacer(Modifier.height(28.dp))
+    }
     PosterTextField(email, { email = it }, Modifier.fillMaxWidth().testTag("account.email"), placeholder = "you@example.com", label = "Your email")
     ErrorLine(ui.error)
     Spacer(Modifier.height(36.dp))

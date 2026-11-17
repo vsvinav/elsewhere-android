@@ -82,7 +82,7 @@ fun SettingsRoute(
     val pick = rememberTimelinePicker { uri, name -> vm.import({ resolver.openInputStream(uri) ?: throw IllegalStateException("Couldn't open that file") }, name) }
     when {
         entry != null -> account(entry!!, { entry = null }, { entry = null })
-        welcome -> WelcomeScreen({ welcome = false; entry = AccountEntry.SignUp }, { welcome = false; entry = AccountEntry.LogIn }, { welcome = false }, { welcome = false; entry = AccountEntry.Google }, welcomed = true)
+        welcome -> WelcomeScreen({ welcome = false; entry = AccountEntry.SignUp }, { welcome = false; entry = AccountEntry.LogIn }, { welcome = false }, welcomed = true)
         else -> SettingsScreen(ui, vm, onBack, onAccount = { if (it == AccountEntry.LogIn) welcome = true else entry = it }, onAddExport = pick)
     }
 }

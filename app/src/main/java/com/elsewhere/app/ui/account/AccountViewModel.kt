@@ -18,8 +18,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Why the flow opened: Welcome's three buttons, Settings' "Log in or sign up", or Settings' "Update" on a stale vault. */
-enum class AccountEntry { SignUp, LogIn, Google, Update }
+/** Why the flow opened: the two Welcome buttons, Settings' "Log in or sign up", or Settings' "Update" on a stale vault. */
+enum class AccountEntry { SignUp, LogIn, Update }
 
 enum class AccountStep { Email, Code, SetPassphrase, Unlock }
 
@@ -37,9 +37,10 @@ data class AccountUi(
 
 /** Everything the account pages can do; the view model is the real one, snapshots pass a no-op. */
 interface AccountActions {
-    /** True when the flow (re)started from its first page; a recreated Activity gets false and must not start anything again. */
-    fun begin(entry: AccountEntry): Boolean
+    fun begin(entry: AccountEntry)
     fun sendCode(email: String)
+    /** The Google sheet over `activity` instead of an emailed code; `activity` must be the foreground Activity. */
+    fun google(activity: Context)
     fun resend()
     fun submitCode(code: String)
     fun setPassphrase(passphrase: String, confirm: String)
@@ -67,15 +68,14 @@ class AccountViewModel @Inject constructor(private val accounts: Accounts, priva
     private var begun = false
 
     /** Idempotent: a recreated Activity calls this again and must not throw the visitor back to the first page. */
-    override fun begin(entry: AccountEntry): Boolean {
-        if (begun && _ui.value.entry == entry && !_ui.value.done) return false
+    override fun begin(entry: AccountEntry) {
+        if (begun && _ui.value.entry == entry && !_ui.value.done) return
         begun = true
         _ui.value = AccountUi(entry = entry, step = if (entry == AccountEntry.Update) AccountStep.Unlock else AccountStep.Email)
-        return true
     }
 
-    /** The Google sheet over `activity`, then the token to the service; from there it is the same road as a finished code. */
-    fun google(activity: Context) = run(after = { it }) {
+    /** The token goes to the service; from there it is the same road as a finished code. */
+    override fun google(activity: Context) = run(after = { it }) {
         val account = try { accounts.google(google.idToken(activity)) } catch (e: AccountException) { if (e.code == 401) throw GoogleSignInFailed(e) else throw e }
         _ui.update { it.copy(step = if (account.hasVault) AccountStep.Unlock else AccountStep.SetPassphrase) }
     }

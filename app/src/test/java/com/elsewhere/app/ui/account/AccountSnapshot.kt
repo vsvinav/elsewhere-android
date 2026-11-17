@@ -12,8 +12,9 @@ class AccountSnapshot {
     @get:Rule val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, theme = "android:Theme.Material.Light.NoActionBar")
 
     private object NoOp : AccountActions {
-        override fun begin(entry: AccountEntry) = true
+        override fun begin(entry: AccountEntry) {}
         override fun sendCode(email: String) {}
+        override fun google(activity: android.content.Context) {}
         override fun resend() {}
         override fun submitCode(code: String) {}
         override fun setPassphrase(passphrase: String, confirm: String) {}
@@ -23,23 +24,21 @@ class AccountSnapshot {
         override fun reset() {}
     }
 
-    private fun shoot(ui: AccountUi, close: Boolean = true) = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { AccountFlow(ui, NoOp, onClose = if (close) ({}) else null) } }
+    private fun shoot(ui: AccountUi, close: Boolean = true, google: Boolean = false) = paparazzi.snapshot {
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { AccountFlow(ui, NoOp, onClose = if (close) ({}) else null, googleClientId = if (google) "web-client" else "") } }
     }
 
     @Test fun welcomeStart() = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = false, sketchAt = 0L, googleClientId = "") } }
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = false, sketchAt = 0L) } }
     }
 
     @Test fun welcomeRest() = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = true, sketchAt = SKETCH_TOTAL, googleClientId = "") } }
-    }
-
-    @Test fun welcomeGoogle() = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = false, sketchAt = 0L, googleClientId = "web-client") } }
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { WelcomeScreen({}, {}, {}, welcomed = true, sketchAt = SKETCH_TOTAL) } }
     }
 
     @Test fun email() = shoot(AccountUi(entry = AccountEntry.SignUp, step = AccountStep.Email), close = false)
+
+    @Test fun emailGoogle() = shoot(AccountUi(entry = AccountEntry.LogIn, step = AccountStep.Email), google = true)
 
     @Test fun code() = shoot(AccountUi(step = AccountStep.Code, email = "ana@example.com", error = "That code isn't right."))
 

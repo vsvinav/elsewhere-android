@@ -23,7 +23,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Robolectric only because the Credential Manager sheet wants an Activity-ish Context; the fakes never look at it. */
+/** Robolectric only for a Context to hand the fake sheet; it never looks at it. */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -35,7 +35,7 @@ class AccountViewModelGoogleTest {
 
     @Test fun `continue with Google lands on the vault step like a finished code`() = runTest(dispatcher) {
         val acct = Fakes.Account(hasVault = true); val google = Fakes.Google(); val vm = AccountViewModel(acct, google)
-        assertTrue(vm.begin(AccountEntry.Google))
+        vm.begin(AccountEntry.LogIn)
         vm.google(context); advanceUntilIdle()
         assertEquals(1, google.asked)
         assertEquals(listOf("id.tok"), acct.googleTokens)
@@ -46,7 +46,7 @@ class AccountViewModelGoogleTest {
 
     @Test fun `a dismissed sheet or a refused token prints the Google line and stays on the page`() = runTest(dispatcher) {
         val acct = Fakes.Account(); val google = Fakes.Google(fail = GoogleSignInFailed()); val vm = AccountViewModel(acct, google)
-        vm.begin(AccountEntry.Google)
+        vm.begin(AccountEntry.SignUp)
         vm.google(context); advanceUntilIdle()
         assertEquals(GOOGLE_FAIL, vm.ui.value.error)
         assertEquals(AccountStep.Email, vm.ui.value.step)
