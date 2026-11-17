@@ -159,8 +159,11 @@ class RecordRepositoryTest {
         assertEquals(mapOf("IN_TRAIN" to 50.0), after.trips.single().totalKmByMode)
         val a = after.activities.single { it.id == (t + 7200).toInt() }
         assertEquals("IN_TRAIN", a.mode); assertEquals(1.0, a.p, 0.0); assertTrue(a.recorded)
-        // The imported leg was not touched.
+        // The imported leg was not touched, and cannot be: its answer came with the export.
         assertEquals(0.6, db.activities().all().single { it.id == (t - 100_000).toInt() }.p, 0.0)
+        repo.confirmMode((t - 100_000).toInt(), "IN_BUS")
+        val imported = db.activities().all().single { it.id == (t - 100_000).toInt() }
+        assertEquals("IN_PASSENGER_VEHICLE", imported.mode); assertEquals(0.6, imported.p, 0.0)
     }
 
     @Test fun `re-import keeps device-recorded rows and drops the old import`() = runTest {
