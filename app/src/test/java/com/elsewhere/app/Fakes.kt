@@ -11,6 +11,7 @@ import com.elsewhere.app.auth.DriveAuth
 import com.elsewhere.app.auth.GoogleAuth
 import com.elsewhere.app.sync.DriveKeys
 import com.elsewhere.app.sync.DriveLinker
+import com.elsewhere.app.sync.SyncStatus
 import com.elsewhere.app.ask.LlmClient
 import com.elsewhere.app.ask.LlmConfig
 import com.elsewhere.app.data.Counters
@@ -115,6 +116,13 @@ object Fakes {
     }
 
     fun linker(acct: Accounts, drive: Drive = Drive()) = DriveLinker(drive, drive, acct)
+
+    class Syncer(initial: SyncStatus = SyncStatus.Off) : com.elsewhere.app.sync.Syncer {
+        override val status = MutableStateFlow(initial)
+        var nows = 0; var fresh = 0
+        override fun syncNow() { nows++; status.value = SyncStatus.Syncing }
+        override suspend fun startFresh(activity: android.content.Context) { fresh++; status.value = SyncStatus.Idle(1L) }
+    }
 
     class Maps : MapsSettings {
         val cur = MutableStateFlow(Settings())

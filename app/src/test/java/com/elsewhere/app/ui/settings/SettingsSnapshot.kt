@@ -12,6 +12,7 @@ import com.elsewhere.app.data.Settings
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import com.elsewhere.app.ui.world.LocalMotion
+import com.elsewhere.app.sync.SyncStatus
 import org.junit.Rule
 import org.junit.Test
 
@@ -29,11 +30,21 @@ class SettingsSnapshot {
         override fun logOut() {}
         override fun deleteAccount() {}
         override fun import(open: () -> java.io.InputStream, fileName: String) {}
+        override fun syncNow() {}
+        override fun startFresh(activity: android.content.Context) {}
     }
 
     private fun shoot(ui: SettingsUi) = paparazzi.snapshot {
-        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { SettingsScreen(ui, NoOp, onBack = {}, scroll = false, sdk = false) } }
+        ElsewhereTheme { CompositionLocalProvider(LocalMotion provides false) { SettingsScreen(ui, NoOp, onBack = {}, scroll = false, sdk = false, now = { 1_700_000_000_000L + 3 * 3_600_000L }) } }
     }
+
+    /** A Google user whose record synced three hours ago: the Sync section with its two buttons. */
+    @Test fun settingsSync() = shoot(
+        SettingsUi(
+            Settings(), LlmConfig(LlmProvider.OPENAI, key = "sk-example"), Units.KM,
+            account = AccountUi(Session("s", "acct_1", "ana@example.com"), VaultState.UpToDate), sync = SyncStatus.Idle(1_700_000_000_000L),
+        ),
+    )
 
     @Test fun openai() = shoot(
         SettingsUi(

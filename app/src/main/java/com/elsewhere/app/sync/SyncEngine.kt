@@ -39,6 +39,14 @@ sealed interface SyncStatus {
 /** `Locked`: a blob on the worker would not open under our Drive key; only Start fresh gets out of it. */
 enum class SyncError { Network, Locked, Server }
 
+/** What Settings needs of sync; [SyncEngine] is the real one, tests hand in a fake. */
+interface Syncer {
+    val status: StateFlow<SyncStatus>
+    fun syncNow()
+    /** `activity` must be the foreground Activity: Drive may ask for consent over it. */
+    suspend fun startFresh(activity: Context)
+}
+
 /**
  * Keeps this phone's record and the worker's copy in step. Pushes month chunks of the stays recorded here and of the
  * export imported here, plus the profile; pulls every other device's chunks as `sync` stays and the profile when
@@ -56,7 +64,7 @@ class SyncEngine(
     private val clock: () -> Long = System::currentTimeMillis,
     private val retry: () -> Unit = {},
     private val minIntervalMs: Long = MIN_INTERVAL_MS,
-) {
+) : Syncer {
     companion object {
         const val MIN_INTERVAL_MS = 15 * 60_000L
         /** Local bookkeeping row: when the last round finished; not a worker key. */
@@ -64,7 +72,7 @@ class SyncEngine(
     }
 
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Off)
-    val status: StateFlow<SyncStatus> = _status
+    override val status: StateFlow<SyncStatus> = _status
     private val lock = Mutex()
     private var lastRun = 0L
 
@@ -77,7 +85,7 @@ class SyncEngine(
         }
     }
 
-    fun syncNow() = sync(force = true)
+    override fun syncNow() = sync(force = true)
 
     /** The app came to the front: a round if the last was long enough ago. */
     fun foreground() = sync(force = false)
@@ -188,7 +196,7 @@ class SyncEngine(
      * Start fresh: the worker's copy and the Drive key go, a new key is made and the vault re-sealed under it, this
      * phone forgets what it had pushed and sends its record again. Stays already on the phone stay.
      */
-    suspend fun startFresh(activity: Context) {
+    override suspend fun startFresh(activity: Context) {
         val session = store.state.first().session?.session ?: return
         _status.value = SyncStatus.Syncing
         try {

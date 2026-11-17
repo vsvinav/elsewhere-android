@@ -61,6 +61,7 @@ import com.elsewhere.app.sync.DriveLinker
 import com.elsewhere.app.sync.SyncApi
 import com.elsewhere.app.sync.SyncEngine
 import com.elsewhere.app.sync.SyncWorker
+import com.elsewhere.app.sync.Syncer
 import com.elsewhere.app.sync.DriveKeys
 import com.elsewhere.app.crew.CrewPublisher
 import com.elsewhere.app.crew.Identity
@@ -123,6 +124,7 @@ object AppModule {
     @Provides @Singleton fun accountClient(http: OkHttpClient, settings: SettingsStore): AccountClient =
         AccountClient(http, { runBlocking { settings.settings.first().accountUrl } })
     @Provides fun accountApi(c: AccountClient): AccountApi = c
+    @Provides fun syncer(e: SyncEngine): Syncer = e
     @Provides fun syncApi(c: AccountClient): SyncApi = c
     @Provides @Singleton fun syncEngine(@ApplicationContext ctx: Context, api: SyncApi, db: ElsewhereDb, store: AccountStore, repo: RecordRepository, crew: CrewStore, linker: DriveLinker, scope: CoroutineScope): SyncEngine =
         SyncEngine(api, db, store, repo, crew, linker, scope, retry = { SyncWorker.schedule(ctx) })
