@@ -4,6 +4,7 @@ import com.elsewhere.app.data.Home
 import com.elsewhere.app.data.Profile
 import com.elsewhere.app.data.Units
 import com.elsewhere.app.data.Work
+import com.elsewhere.app.sync.Wire
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
@@ -28,12 +29,13 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
-/** What the account service stores: the salt and iv the client chose, and the sealed contents. All base64. */
+/** What the account service stores: the iv the client chose, the salt when a passphrase derived the key (v1), and the sealed contents. All base64. */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-data class VaultBody(val v: Int = 1, val salt: String, val iv: String, val ct: String) {
+data class VaultBody(val v: Int = 1, val salt: String? = null, val iv: String, val ct: String) {
     fun encode(): String = wire.encodeToString(serializer(), this)
     companion object {
-        private val wire = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+        private val wire = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
         fun decode(s: String): VaultBody = wire.decodeFromString(serializer(), s)
     }
 }
@@ -131,8 +133,9 @@ object Vault {
         return VaultBody(salt = b64(salt), iv = b64(iv), ct = b64(cipher.doFinal(plaintext.toByteArray())))
     }
 
-    /** The plaintext, or a [GeneralSecurityException] when the key is not the one that sealed it. */
+    /** The plaintext, or a [GeneralSecurityException] when the key is not the one that sealed it; v2 is the Drive key's seal. */
     fun open(key: ByteArray, body: VaultBody): String {
+        if (body.v == 2) return Wire.openVault(key, body)
         if (body.v != 1) throw GeneralSecurityException("vault v${body.v}")
         val iv = unb64(body.iv)
         if (iv.size != 12) throw GeneralSecurityException("iv")

@@ -133,7 +133,7 @@ class AccountRepository(
     private suspend fun open(passphrase: String): Triple<ByteArray, VaultBody, VaultContents>? {
         val session = session() ?: throw AccountException(401, "signed out")
         val body = authed { api.getVault(session) } ?: return null
-        val k = withContext(crypto) { Vault.deriveKey(passphrase, Vault.unb64(body.salt)) }
+        val k = withContext(crypto) { Vault.deriveKey(passphrase, Vault.unb64(body.salt ?: throw NoVault())) }
         val plaintext = try { Vault.open(k, body) } catch (e: GeneralSecurityException) { throw WrongPassphrase() }
         return Triple(k, body, VaultContents.decode(plaintext))
     }
