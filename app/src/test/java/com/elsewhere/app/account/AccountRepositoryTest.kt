@@ -305,6 +305,20 @@ class AccountRepositoryTest {
         assertEquals(0, w.api.calls.count { it == "put" })
     }
 
+    @Test fun `a Drive key owed to one login is forgotten when another account signs in`() = runTest {
+        val salt = Vault.newSalt()
+        val w = world(withProfile = false)
+        val other = DeviceKeys.fromSeeds(ByteArray(32) { 7 }, ByteArray(32) { 8 })
+        w.api.vault = Vault.seal(Vault.deriveKey("correct horse battery staple", salt), VaultContents(signPriv = Crypto.hex(other.signPriv), kxPriv = Crypto.hex(other.kxPriv), profile = profile).encode(), salt)
+        w.repo.google("id.tok")
+        assertEquals(DriveLink.NeedsPassphrase, w.repo.useDriveKey(Vault.b64(driveKey)))
+        w.repo.finish("other@example.com", "123456")
+        w.repo.restore("correct horse battery staple")
+        assertNull(w.store.state.value.driveKey, "the first account's key must not seal the second's vault")
+        assertEquals(1, w.api.vault!!.v)
+        assertEquals(Vault.b64(salt), w.store.state.value.salt)
+    }
+
     @Test fun `a vault under another Drive key cannot be opened and says so`() = runTest {
         val w = world(withProfile = false)
         w.api.vault = com.elsewhere.app.sync.Wire.sealVault(ByteArray(32) { 9 }, "{}")

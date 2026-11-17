@@ -110,7 +110,7 @@ class AccountRepository(
 
     /** A new session: whatever vault stamp the last account left is wrong for this one. */
     private suspend fun signedIn(login: Login): AccountInfo {
-        key.value = null
+        key.value = null; owedDrive = null
         store.saveSalt(null); store.saveVault(0L, null); store.saveDriveKey(null)
         store.saveSession(Session(login.session, login.account.id, login.account.email))
         return login.account
