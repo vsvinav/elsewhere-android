@@ -12,6 +12,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
@@ -32,6 +34,21 @@ interface SonarAlerts {
 /** A hit as the Map wants it: who, when it landed on this phone (ms), and whether it was fired on purpose. */
 data class SonarHit(val friend: Friend, val hitId: String, val at: Long, val test: Boolean = false, val rehearsal: Boolean = false)
 
+/** The one Sonar sheet the app raises over whatever is on screen; the engine is the real one, tests pass a stand-in. */
+interface SonarSheets {
+    val sheet: StateFlow<SonarHit?>
+    /** Dismiss puts the sheet away and keeps this friend's sheets quiet for a while. */
+    fun dismissSheet()
+    /** Snap from the sheet: the hit is remembered as seen, but the sheet stays up until Dismiss, as the camera may take a while. */
+    fun sheetSnapped()
+
+    object None : SonarSheets {
+        override val sheet: StateFlow<SonarHit?> = MutableStateFlow(null)
+        override fun dismissSheet() = Unit
+        override fun sheetSnapped() = Unit
+    }
+}
+
 /**
  * Listens to the rooms and runs [decide] once per incoming ping — never on a timer, never per frame.
  * Fire posts the alert and sends the hit straight back; Echo mirrors a friend's hit so both phones agree.
@@ -47,9 +64,15 @@ class SonarEngine(
     private val zone: () -> ZoneId = ZoneId::systemDefault,
     /** When Sonar rehearsal lapses (epoch ms); 0 or past means off. */
     private val rehearsalUntil: suspend () -> Long = { 0L },
-) {
+) : SonarSheets {
     private val hitsFlow = MutableSharedFlow<SonarHit>(extraBufferCapacity = 8)
     val hits: SharedFlow<SonarHit> = hitsFlow.asSharedFlow()
+    private val sheetFlow = MutableStateFlow<SonarHit?>(null)
+    override val sheet: StateFlow<SonarHit?> = sheetFlow
+    /** Per friend, when a dismissed sheet may be followed by another. */
+    private val sheetQuietUntil = HashMap<String, Long>()
+    /** Per pair, the last rehearsal hit acted on; rehearsal pings arrive every 30 s and must not each ring. */
+    private val rehearsalFiredAt = HashMap<String, Long>()
     private var job: Job? = null
 
     fun start() {
@@ -87,22 +110,51 @@ class SonarEngine(
             val them = Side(friendFix, p.habitat, p.absenceDays)
             decide(me, them, friend.pairId, now, store.debounce(listOf(friend.pairId)), incomingHit, rehearsal)
         }
+        if (rehearsal && decision !is Decision.Quiet) {
+            val last = rehearsalFiredAt[friend.pairId]
+            if (last != null && now - last < REHEARSAL_GAP_MS) return Decision.Quiet
+            rehearsalFiredAt[friend.pairId] = now
+        }
         when (decision) {
             is Decision.Fire -> {
                 seenLock.withLock { seenHits[decision.hitId] = Unit }
                 store.recordHit(friend.pairId, now)
-                publisher.carryHit(friend, Ping.Hit(decision.hitId, now / 1000))
+                publisher.carryHit(friend, Ping.Hit(decision.hitId, now / 1000, rehearsal))
                 land(friend, decision.hitId, now, rehearsal = rehearsal)
             }
-            is Decision.Echo -> { store.recordHit(friend.pairId, now); land(friend, decision.hitId, now, rehearsal = rehearsal) }
+            // The firing phone says whether it was rehearsing; both sheets then read the same.
+            is Decision.Echo -> { store.recordHit(friend.pairId, now); land(friend, decision.hitId, now, rehearsal = p.hit?.rehearsal == true) }
             Decision.Quiet -> Unit
         }
         return decision
     }
 
     private suspend fun land(friend: Friend, hitId: String, now: Long, test: Boolean = false, sent: Boolean = false, rehearsal: Boolean = false) {
-        hitsFlow.emit(SonarHit(friend, hitId, now, test, rehearsal))
-        if (!friend.muted(now)) alerts.nearby(friend, test, sent)
+        val hit = SonarHit(friend, hitId, now, test, rehearsal)
+        hitsFlow.emit(hit)
+        if (friend.muted(now)) return
+        alerts.nearby(friend, test, sent)
+        raiseSheet(hit, now)
+    }
+
+    /** One sheet at a time, never swapped under the person, and none for a friend whose sheet was just put away. */
+    private suspend fun raiseSheet(hit: SonarHit, now: Long) {
+        if (sheetFlow.value != null) return
+        if ((sheetQuietUntil[hit.friend.deviceId] ?: 0L) > now) return
+        if (hit.hitId in store.sheetSeen()) return
+        sheetFlow.value = hit
+    }
+
+    override fun dismissSheet() {
+        val h = sheetFlow.value ?: return
+        sheetFlow.value = null
+        sheetQuietUntil[h.friend.deviceId] = clock() + SHEET_QUIET_MS
+        scope.launch { store.markSheetSeen(h.hitId) }
+    }
+
+    override fun sheetSnapped() {
+        val h = sheetFlow.value ?: return
+        scope.launch { store.markSheetSeen(h.hitId) }
     }
 
     /** Fire on purpose: ring here as if [decide] had fired, and send the hit to the friend, who echoes it the same way. */
@@ -125,5 +177,11 @@ class SonarEngine(
 
     suspend fun unmute(deviceId: String) = store.mute(deviceId, null)
 
-    companion object { const val SEEN_HITS = 64 }
+    companion object {
+        const val SEEN_HITS = 64
+        /** In rehearsal, one hit per pair per this long. */
+        const val REHEARSAL_GAP_MS = 10 * 60_000L
+        /** After a dismiss, no sheet for that friend for this long. */
+        const val SHEET_QUIET_MS = 5 * 60_000L
+    }
 }

@@ -224,12 +224,12 @@ class CrewFlowTest {
         val marta = Friend("M", "Marta", Crypto.hex(ByteArray(32) { 1 }), Crypto.hex(ByteArray(32) { 2 }), "PAIRM", Crypto.b64(ByteArray(32)), 0L, Grants(sonar = true))
         runBlocking { store.addFriend(marta) }
         await { vm.ui.value?.friends?.size == 1 }
-        assertNull(vm.sheet.value)
+        assertNull(engine.sheet.value)
         val id = runBlocking { engine.testFire("M") }!!
-        await { vm.sheet.value?.hitId == id }
-        assertEquals("Marta", vm.sheet.value!!.friend.name)
-        vm.dismissSheet()
-        await { vm.sheet.value == null && runBlocking { store.sheetSeen() }.contains(id) }
+        await { engine.sheet.value?.hitId == id }
+        assertEquals("Marta", engine.sheet.value!!.friend.name)
+        engine.dismissSheet()
+        await { engine.sheet.value == null && runBlocking { store.sheetSeen() }.contains(id) }
     }
 
     @Test fun `without a relay the code bill tells you where to set one`() {

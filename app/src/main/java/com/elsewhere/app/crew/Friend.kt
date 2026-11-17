@@ -56,7 +56,8 @@ data class Ping(
 ) {
     val placed: Boolean get() = lat != null && lng != null
 
-    @Serializable data class Hit(val id: String, val t: Long)
+    /** [rehearsal] says the firing phone was rehearsing, so the other side can show the hit the same way. */
+    @Serializable data class Hit(val id: String, val t: Long, @EncodeDefault val rehearsal: Boolean = false)
 
     fun encode(): String = json.encodeToString(serializer(), this)
 

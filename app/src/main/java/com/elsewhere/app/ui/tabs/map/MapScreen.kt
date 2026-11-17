@@ -127,7 +127,6 @@ import com.elsewhere.app.ui.crew.FriendMark
 import com.elsewhere.app.ui.crew.FriendStamps
 import com.elsewhere.app.ui.crew.FriendsUi
 import com.elsewhere.app.ui.crew.ShareSheet
-import com.elsewhere.app.ui.crew.SonarSheet
 import com.elsewhere.app.ui.crew.SharingBanner
 import com.elsewhere.app.ui.crew.friendOffsets
 
@@ -217,8 +216,6 @@ fun MapTab(vm: MapViewModel = hiltViewModel(), crew: CrewViewModel = hiltViewMod
         }
     }
     if (sheet) crewUi?.let { ShareSheet(it, crew, onClose = { sheet = false }) }
-    val sonar by crew.sheet.collectAsStateWithLifecycle()
-    sonar?.let { SonarSheet(it, live, onDismiss = crew::dismissSheet) }
 }
 
 /** Chips and search above the map, the pin HUD below it, the open pin's card over its bottom edge, a door's stub over its top. */
