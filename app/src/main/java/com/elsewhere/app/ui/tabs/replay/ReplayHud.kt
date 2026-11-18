@@ -35,6 +35,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -43,8 +45,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.elsewhere.app.analytics.Grain
 import com.elsewhere.app.analytics.LENSES
 import com.elsewhere.app.analytics.Lens
+import com.elsewhere.app.analytics.Rail
 import com.elsewhere.app.analytics.fmtTime
 import com.elsewhere.app.analytics.lensOf
 import com.elsewhere.app.analytics.placeName
@@ -76,6 +80,8 @@ data class HudInfo(
     val dow: String, val day: String, val monthYear: String, val time: String,
     /** True inside a stop: the label reads "At"; otherwise "Now" with the ink of the movement. */
     val atStop: Boolean, val where: String, val sub: String, val ink: Color?,
+    /** Minutes east of UTC where the playhead stands, so the headline prints the same local date. */
+    val tz: Int = 0,
 )
 
 fun hudInfo(data: Record, playhead: Long): HudInfo {
@@ -91,7 +97,20 @@ fun hudInfo(data: Record, playhead: Long): HudInfo {
         where = if (visit != null) placeName(place, visit.placeId) else w?.let { modeLabel(it.mode) } ?: "—",
         sub = if (visit != null) place?.city ?: "city not on record" else if (w != null) "in motion" else "no record",
         ink = if (visit == null && w != null) ink(lensOf(w.mode)) else null,
+        tz = tz,
     )
+}
+
+private val MONTH_FULL = listOf("JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER")
+
+/** The headline over the strip: the playhead named at the grain in force, a year, a month or a day. */
+fun headline(grain: Grain, playhead: Long, tz: Int): String {
+    val d = Instant.ofEpochSecond(playhead + tz * 60L).atOffset(ZoneOffset.UTC)
+    return when (grain) {
+        Grain.YEAR -> d.year.toString()
+        Grain.MONTH -> "${MONTH_FULL[d.monthValue - 1]} ${d.year}"
+        Grain.DAY -> "${WEEKDAY[d.get(ChronoField.DAY_OF_WEEK) % 7]} ${d.dayOfMonth.toString().padStart(2, '0')} ${MONTH[d.monthValue - 1]} ${d.year}"
+    }
 }
 
 fun ink(lens: Lens): Color = Color(android.graphics.Color.parseColor(lens.color))
@@ -131,11 +150,33 @@ fun LensChips(lens: Lens, onLens: (Lens) -> Unit) {
     }
 }
 
-/** The stub under the map: the date, where you are, play and speed; then the scrub with its years. */
+/** Year, Month, Day: the grain the map draws at; dead when the window has nothing to show at it. */
+@Composable
+fun GrainChips(grain: Grain, allowed: List<Grain>, onGrain: (Grain) -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    Row(Modifier.selectableGroup().semantics { contentDescription = "Time grain" }, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (g in Grain.entries) {
+            val on = g == grain; val enabled = g in allowed
+            Text(
+                g.label.uppercase(), color = if (on) Poster.Stock else if (enabled) Poster.Ink else Poster.Ghost, style = ChipStyle, softWrap = false,
+                modifier = Modifier.background(if (on) Poster.Ink else Poster.Stock).border(2.dp, if (enabled) Poster.Ink else Poster.Ghost)
+                    .selectable(selected = on, enabled = enabled, role = Role.RadioButton) { onGrain(g); haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                    .padding(horizontal = 9.dp, vertical = 5.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The stub under the map: the date, where you are, play and speed; the rail while a finger holds the strip; then the
+ * grain chips and headline over the scrub with its years.
+ */
 @Composable
 fun ReplayHud(
     info: HudInfo, range: LongRange, playhead: Double, playing: Boolean, speed: Double, follow: Boolean,
+    grain: Grain, allowed: List<Grain>, scrubbing: Boolean, rail: Rail, noHome: Boolean = false,
     onPlay: () -> Unit, onSpeed: (Double) -> Unit, onScrub: (Double) -> Unit, onFollow: () -> Unit,
+    onGrain: (Grain) -> Unit, onScrubbing: (Boolean) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -164,7 +205,20 @@ fun ReplayHud(
             )
             if (!follow) { Spacer(Modifier.width(8.dp)); InkButton("Follow", onFollow, quiet = true) }
         }
-        Scrub(range, playhead, onScrub, {}, {})
+        Rail(rail, visible = scrubbing, noHome = noHome, modifier = Modifier.padding(top = 6.dp))
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            GrainChips(grain, allowed, onGrain)
+            Spacer(Modifier.weight(1f))
+            Text(
+                headline(grain, (if (playhead.isNaN()) range.first.toDouble() else playhead).toLong(), info.tz), color = Poster.Ink,
+                style = PosterType.Caps.copy(fontSize = 11.sp), maxLines = 1, softWrap = false,
+            )
+        }
+        Scrub(range, playhead, onScrub, onScrubbing) { dir ->
+            val i = allowed.indexOf(grain); val j = (i + dir).coerceIn(0, allowed.lastIndex)
+            if (j != i) onGrain(allowed[j])
+        }
     }
 }
 

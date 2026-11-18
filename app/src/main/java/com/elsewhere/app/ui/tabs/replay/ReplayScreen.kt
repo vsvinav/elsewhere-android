@@ -46,7 +46,12 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.elsewhere.app.analytics.Grain
 import com.elsewhere.app.analytics.Lens
+import com.elsewhere.app.analytics.atPlayhead
+import com.elsewhere.app.analytics.bedStrip
+import com.elsewhere.app.analytics.cumulative
+import com.elsewhere.app.analytics.resolveGrain
 import com.elsewhere.app.analytics.SegmentKind
 import com.elsewhere.app.analytics.lensOf
 import com.elsewhere.app.analytics.segmentAt
@@ -81,6 +86,8 @@ import com.elsewhere.app.map.wakeLength
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -94,7 +101,7 @@ import kotlin.math.sqrt
 /** What the chrome can do; the tab binds these to the view model, the snapshot to no-ops. */
 data class ReplayActions(
     val play: () -> Unit = {}, val speed: (Double) -> Unit = {}, val scrub: (Double) -> Unit = {},
-    val follow: () -> Unit = {}, val lens: (Lens) -> Unit = {},
+    val follow: () -> Unit = {}, val lens: (Lens) -> Unit = {}, val grain: (Grain) -> Unit = {}, val scrubbing: (Boolean) -> Unit = {},
 )
 
 @Composable
@@ -102,7 +109,10 @@ fun ReplayTab(vm: PlaybackViewModel = hiltViewModel()) {
     val data by vm.data.collectAsStateWithLifecycle()
     val trails by vm.trails.collectAsStateWithLifecycle()
     // The chrome sees the clock a few times a second; the canvas reads vm.state itself every frame.
-    val state by vm.chrome.collectAsStateWithLifecycle()
+    val gated by vm.chrome.collectAsStateWithLifecycle()
+    // While a finger holds the strip the rail and stub follow the raw clock, not the chrome's beat.
+    val held by remember { vm.state.map { if (it.scrubbing) it.playhead else Double.NaN }.distinctUntilChanged() }.collectAsStateWithLifecycle(Double.NaN)
+    val state = if (held.isNaN()) gated else gated.copy(playhead = held)
     val basemap by vm.basemap.collectAsStateWithLifecycle()
     val copyright by vm.copyright.collectAsStateWithLifecycle()
     val tilesError by vm.tilesError.collectAsStateWithLifecycle()
@@ -152,6 +162,7 @@ fun ReplayTab(vm: PlaybackViewModel = hiltViewModel()) {
 
     val acts = ReplayActions(
         play = { vm.setPlaying(!vm.state.value.playing) }, speed = vm::setSpeed, scrub = vm::scrub, follow = { vm.setFollow(true) }, lens = vm::setLens,
+        grain = vm::setGrain, scrubbing = vm::setScrubbing,
     )
     ReplayScreen(rec, state, tags, acts, snackbar = snackbar) { m ->
         host.Content(m, basemap, copyright) {
@@ -170,6 +181,10 @@ fun ReplayScreen(
     val range = data.meta.range
     val playhead = if (state.playhead.isNaN()) range.first.toDouble() else state.playhead
     val info = remember(data, playhead.toLong() / 60) { hudInfo(data, playhead.toLong()) }
+    val (grain, allowed) = remember(data, state.grain) { resolveGrain(data, state.grain) }
+    val cum = remember(data) { cumulative(data) }
+    val noHome = remember(data) { bedStrip(data).isEmpty() }
+    val rail = atPlayhead(cum, playhead)
     Column(modifier.fillMaxSize().background(Poster.Stock)) {
         LensChips(state.lens, acts.lens)
         Box(Modifier.fillMaxWidth().weight(1f).border(2.dp, Poster.Ink)) {
@@ -177,7 +192,10 @@ fun ReplayScreen(
             ArrivalTags(tags, data.places, Modifier.align(Alignment.TopStart).padding(10.dp))
             if (snackbar != null) SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
         }
-        ReplayHud(info, range, playhead, state.playing, state.speed, state.follow, acts.play, acts.speed, acts.scrub, acts.follow)
+        ReplayHud(
+            info, range, playhead, state.playing, state.speed, state.follow, grain, allowed, state.scrubbing, rail, noHome,
+            acts.play, acts.speed, acts.scrub, acts.follow, acts.grain, acts.scrubbing,
+        )
     }
 }
 
