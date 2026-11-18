@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.elsewhere.app.analytics.Grain
 import com.elsewhere.app.analytics.LENSES
+import com.elsewhere.app.analytics.NightKind
+import com.elsewhere.app.analytics.bedStrip
 import com.elsewhere.app.analytics.Lens
 import com.elsewhere.app.analytics.Rail
 import com.elsewhere.app.analytics.fmtTime
@@ -75,22 +77,36 @@ import kotlin.math.roundToInt
 private val WEEKDAY = listOf("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT")
 private val MONTH = listOf("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
 
-/** What the HUD's stub prints for one playhead: the local date and where you are. */
+/** What the HUD's stub prints for one playhead: the local date and, at the grain, where you are or what adds up. */
 data class HudInfo(
     val dow: String, val day: String, val monthYear: String, val time: String,
     /** True inside a stop: the label reads "At"; otherwise "Now" with the ink of the movement. */
     val atStop: Boolean, val where: String, val sub: String, val ink: Color?,
+    /** The small caption over `where`: AT / NOW by day, SO FAR by year, THIS MONTH by month. */
+    val lab: String = if (atStop) "AT" else "NOW",
     /** Minutes east of UTC where the playhead stands, so the headline prints the same local date. */
     val tz: Int = 0,
 )
 
-fun hudInfo(data: Record, playhead: Long): HudInfo {
+/** What the year and month headlines count, worked out once per record: when each country was first seen, and the nights away. */
+class GrainIndex(val countryFirst: LongArray, val nightsAway: List<String>)
+
+fun grainIndex(data: Record): GrainIndex {
+    val first = LinkedHashMap<String, Long>()
+    for (v in data.visits) if (v.lvl == 0) data.places[v.placeId]?.countryCode?.let { cc -> if (cc !in first) first[cc] = v.start }
+    val nights = bedStrip(data).filter { it.kind == NightKind.NEW || it.kind == NightKind.REPEAT }.map { it.date }
+    return GrainIndex(first.values.sorted().toLongArray(), nights)
+}
+
+private fun plural(n: Int, one: String, many: String = one + "s") = "$n ${if (n == 1) one else many}"
+
+fun hudInfo(data: Record, playhead: Long, grain: Grain = Grain.DAY, idx: GrainIndex? = null): HudInfo {
     val w = whereaboutsAt(data, playhead)
     val visit = if (w?.mode == "STILL") visitAt(data, playhead) else null
     val tz = visit?.tz ?: data.activities.firstOrNull { it.start <= playhead && playhead <= it.end }?.tz ?: 0
     val d = Instant.ofEpochSecond(playhead + tz * 60L).atOffset(ZoneOffset.UTC)
     val place = visit?.let { data.places[it.placeId] }
-    return HudInfo(
+    val day = HudInfo(
         dow = WEEKDAY[d.get(ChronoField.DAY_OF_WEEK) % 7], day = d.dayOfMonth.toString().padStart(2, '0'),
         monthYear = "${MONTH[d.monthValue - 1]} ${d.year}", time = fmtTime(playhead, tz),
         atStop = visit != null,
@@ -99,7 +115,29 @@ fun hudInfo(data: Record, playhead: Long): HudInfo {
         ink = if (visit == null && w != null) ink(lensOf(w.mode)) else null,
         tz = tz,
     )
+    val ix = idx ?: if (grain == Grain.DAY) null else grainIndex(data)
+    return when (grain) {
+        Grain.DAY -> day
+        // Trips begun and countries first seen by the playhead.
+        Grain.YEAR -> day.copy(
+            lab = "SO FAR", where = plural(data.trips.count { it.start <= playhead }, "trip"),
+            sub = plural(ix!!.countryFirst.count { it <= playhead }, "country", "countries"), ink = null,
+        )
+        // Cities visited and nights away in the playhead's calendar month, in plain UTC.
+        Grain.MONTH -> {
+            val u = Instant.ofEpochSecond(playhead).atOffset(ZoneOffset.UTC)
+            val a = java.time.LocalDate.of(u.year, u.monthValue, 1); val b = a.plusMonths(1)
+            val a0 = a.atStartOfDay(ZoneOffset.UTC).toEpochSecond(); val b0 = b.atStartOfDay(ZoneOffset.UTC).toEpochSecond()
+            val ym = "%04d-%02d".format(u.year, u.monthValue)
+            val cities = HashSet<String>()
+            for (v in data.visits) if (v.lvl == 0 && v.end >= a0 && v.start < b0) data.places[v.placeId]?.city?.let(cities::add)
+            day.copy(lab = "THIS MONTH", where = plural(cities.size, "city", "cities"), sub = plural(ix!!.nightsAway.count { it.startsWith(ym) }, "night away", "nights away"), ink = null)
+        }
+    }
 }
+
+/** The web's test for a record with nobody home: no declared home and no place playing one. */
+fun noHome(data: Record): Boolean = data.profile.homes.isEmpty() && data.places.values.none { it.role == com.elsewhere.app.data.Role.HOME }
 
 private val MONTH_FULL = listOf("JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER")
 
@@ -160,7 +198,7 @@ fun GrainChips(grain: Grain, allowed: List<Grain>, onGrain: (Grain) -> Unit) {
             Text(
                 g.label.uppercase(), color = if (on) Poster.Stock else if (enabled) Poster.Ink else Poster.Ghost, style = ChipStyle, softWrap = false,
                 modifier = Modifier.background(if (on) Poster.Ink else Poster.Stock).border(2.dp, if (enabled) Poster.Ink else Poster.Ghost)
-                    .selectable(selected = on, enabled = enabled, role = Role.RadioButton) { onGrain(g); haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                    .selectable(selected = on, enabled = enabled, role = Role.RadioButton) { if (!on) { onGrain(g); haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) } }
                     .padding(horizontal = 9.dp, vertical = 5.dp),
             )
         }
@@ -185,7 +223,7 @@ fun ReplayHud(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (info.ink != null) { Box(Modifier.size(8.dp).background(info.ink)); Spacer(Modifier.width(5.dp)) }
-                    Text(if (info.atStop) "AT" else "NOW", color = Poster.Ink3, style = PosterType.Caps.copy(fontSize = 10.sp))
+                    Text(info.lab, color = Poster.Ink3, style = PosterType.Caps.copy(fontSize = 10.sp))
                 }
                 Text(
                     info.where.uppercase(), color = Poster.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis,

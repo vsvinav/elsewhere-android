@@ -1,5 +1,8 @@
 package com.elsewhere.app.ui.tabs.replay
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -41,6 +44,15 @@ class ScrubGestureTest {
         rule.onNodeWithTag("scrub").performTouchInput { up() }
         rule.waitForIdle(); assertTrue(scrubbing)
         rule.mainClock.advanceTimeBy(700); rule.waitForIdle()
+        assertFalse(scrubbing)
+    }
+
+    @Test fun `leaving the screen mid-linger lets go at once`() {
+        var scrubbing = false; var shown by mutableStateOf(true)
+        rule.setContent { if (shown) Scrub(0L..10_000L, 0.0, onScrub = {}, onScrubbing = { scrubbing = it }, onGrainStep = {}) }
+        rule.onNodeWithTag("scrub").performTouchInput { down(Offset(width / 2f, height / 2f)); up() }
+        rule.waitForIdle(); assertTrue(scrubbing)
+        shown = false; rule.waitForIdle()
         assertFalse(scrubbing)
     }
 

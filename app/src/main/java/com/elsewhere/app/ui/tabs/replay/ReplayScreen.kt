@@ -49,7 +49,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elsewhere.app.analytics.Grain
 import com.elsewhere.app.analytics.Lens
 import com.elsewhere.app.analytics.atPlayhead
-import com.elsewhere.app.analytics.bedStrip
 import com.elsewhere.app.analytics.cumulative
 import com.elsewhere.app.analytics.resolveGrain
 import com.elsewhere.app.analytics.SegmentKind
@@ -180,10 +179,11 @@ fun ReplayScreen(
 ) {
     val range = data.meta.range
     val playhead = if (state.playhead.isNaN()) range.first.toDouble() else state.playhead
-    val info = remember(data, playhead.toLong() / 60) { hudInfo(data, playhead.toLong()) }
     val (grain, allowed) = remember(data, state.grain) { resolveGrain(data, state.grain) }
+    val idx = remember(data) { grainIndex(data) }
+    val info = remember(data, grain, playhead.toLong() / 60) { hudInfo(data, playhead.toLong(), grain, idx) }
     val cum = remember(data) { cumulative(data) }
-    val noHome = remember(data) { bedStrip(data).isEmpty() }
+    val noHome = remember(data) { noHome(data) }
     val rail = atPlayhead(cum, playhead)
     Column(modifier.fillMaxSize().background(Poster.Stock)) {
         LensChips(state.lens, acts.lens)

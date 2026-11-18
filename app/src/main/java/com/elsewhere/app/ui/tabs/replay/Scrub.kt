@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -75,7 +78,11 @@ fun Scrub(range: LongRange, playhead: Double, onScrub: (Double) -> Unit, onScrub
     val haptic = LocalHapticFeedback.current
     // The time of the last lift; the rail lingers a beat after it before the strip lets go.
     var lifted by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(lifted) { if (lifted != 0L) { delay(SCRUB_LINGER_MS); onScrubbing(false) } }
+    // Whether the strip has told the clock it is held and not yet let go; leaving the screen lets go at once.
+    var held by remember { mutableStateOf(false) }
+    val letGo by rememberUpdatedState(onScrubbing)
+    LaunchedEffect(lifted) { if (lifted != 0L) { delay(SCRUB_LINGER_MS); held = false; onScrubbing(false) } }
+    DisposableEffect(Unit) { onDispose { if (held) letGo(false) } }
     Column(Modifier.fillMaxWidth()) {
         Box(
             Modifier.fillMaxWidth().height(56.dp).background(Poster.Stock2).testTag("scrub")
@@ -83,7 +90,7 @@ fun Scrub(range: LongRange, playhead: Double, onScrub: (Double) -> Unit, onScrub
                     awaitEachGesture {
                         val down = awaitFirstDown()
                         val w = size.width.toFloat(); val h = size.height.toFloat()
-                        lifted = 0L; onScrubbing(true)
+                        lifted = 0L; held = true; onScrubbing(true)
                         var t = scrubDelta(range.first.toDouble(), down.position.x, 0f, w, h, range)
                         var lastX = down.position.x
                         onScrub(t)
