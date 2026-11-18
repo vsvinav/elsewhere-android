@@ -17,12 +17,17 @@ class RecordTextTest {
         assertEquals("last fix 2 days ago", lastFixText(now - 2 * 86400 - 5, now))
     }
 
-    @Test fun `a redelivered start honours a pause that is still running`() {
+    @Test fun `a start without an action asks the settings, so a running pause holds and an enabled record runs`() {
         val paused = Recording(enabled = true, since = now - 3600, pausedUntil = now + 3600)
-        assertTrue(pausedFor(null, paused, now))
-        assertFalse(pausedFor(null, paused.copy(pausedUntil = now - 1), now))
-        assertTrue(pausedFor(RecordService.ACTION_PAUSE, paused.copy(pausedUntil = 0L), now))
-        assertFalse(pausedFor("", paused, now))
+        assertTrue(pausedFor(null, { paused }, now))
+        assertFalse(pausedFor(null, { paused.copy(pausedUntil = now - 1) }, now))
+        assertFalse(pausedFor(null, { Recording(enabled = true, since = now - 86400) }, now))
+    }
+
+    @Test fun `an explicit action decides on its own without reading the settings`() {
+        val unread: () -> Recording = { error("settings must not be read") }
+        assertTrue(pausedFor(RecordService.ACTION_PAUSE, unread, now))
+        assertFalse(pausedFor("", unread, now))
     }
 
     @Test fun `the notification line`() {
