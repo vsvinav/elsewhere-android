@@ -55,8 +55,19 @@ class TimelineTest {
         assertEquals(1, atPlayhead(c, iso("2024-01-05T11:59:59Z").toDouble()).cities)
     }
 
-    @Test fun `away nights come from the beds strip`() {
-        assertEquals(5, atPlayhead(cumulative(tiny()), iso("2024-01-11T00:00:00Z").toDouble()).nightsAway)
+    @Test fun `away nights come from the beds strip and land at their own midnight`() {
+        val c = cumulative(tiny())
+        assertEquals(0, atPlayhead(c, iso("2024-01-05T23:59:59Z").toDouble()).nightsAway)
+        assertEquals(1, atPlayhead(c, iso("2024-01-06T00:00:00Z").toDouble()).nightsAway)
+        assertEquals(5, atPlayhead(c, iso("2024-01-10T23:00:00Z").toDouble()).nightsAway)
+    }
+
+    @Test fun `one giant leg emits every km mark it crosses`() {
+        val far = Fx.record(
+            activities = listOf(Fx.act(iso("2024-01-02T00:00:00Z"), iso("2024-01-03T00:00:00Z"), "FLYING", 21_000_000.0, -9.14, 38.72, 151.21, -33.87)),
+            range = range,
+        )
+        assertEquals(listOf("10,000 km so far", "20,000 km so far"), cumulative(far).milestones.map { it.text })
     }
 
     @Test fun `a milestone fires once and lingers for two percent of the range`() {

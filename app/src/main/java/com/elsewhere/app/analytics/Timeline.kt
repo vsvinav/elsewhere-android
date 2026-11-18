@@ -18,7 +18,6 @@ class Cumulative(
 data class Milestone(val ts: Double, val text: String)
 data class Rail(val km: Double, val cities: Int, val nightsAway: Int, val flights: Int, val milestone: String?)
 
-private const val DAY = 86400.0
 /** How long a milestone stays on the rail, as a share of the window: about a second of scrubbing. */
 private const val LINGER = 0.02
 private val CITY_MARKS = setOf(1, 10, 25, 50, 100, 200)
@@ -38,7 +37,7 @@ private class Ev(val ts: Double, val km: Double = 0.0, val city: String? = null,
 
 /**
  * The record counted up in event order: a leg lands its km (and a flight) at its last point, a city counts at the
- * first lvl-0 visit that names it, a night away counts at the next UTC midnight. Pure; callers `remember` it per Record.
+ * first lvl-0 visit that names it, a night away counts at the UTC midnight of its date. Pure; callers `remember` it per Record.
  */
 fun cumulative(data: Record): Cumulative {
     val evs = ArrayList<Ev>()
@@ -50,14 +49,14 @@ fun cumulative(data: Record): Cumulative {
     }
     for (v in data.visits) if (v.lvl == 0) data.places[v.placeId]?.city?.let { evs += Ev(v.start.toDouble(), city = it) }
     for (n in bedStrip(data)) if (n.kind == NightKind.NEW || n.kind == NightKind.REPEAT)
-        evs += Ev(LocalDate.parse(n.date).atStartOfDay(ZoneOffset.UTC).toEpochSecond() + DAY, night = true)
+        evs += Ev(LocalDate.parse(n.date).atStartOfDay(ZoneOffset.UTC).toEpochSecond().toDouble(), night = true)
     evs.sortBy { it.ts }
     val ts = DoubleArray(evs.size); val km = DoubleArray(evs.size); val cities = IntArray(evs.size)
     val nights = IntArray(evs.size); val flights = IntArray(evs.size)
     val miles = ArrayList<Milestone>(); val seen = HashSet<String>()
     var k = 0.0; var c = 0; var n = 0; var f = 0; var kmMark = KM_EVERY
     evs.forEachIndexed { i, e ->
-        if (e.km > 0) { k += e.km; if (k >= kmMark) { miles += Milestone(e.ts, "%,d km so far".format(kmMark.toInt())); kmMark += KM_EVERY } }
+        if (e.km > 0) { k += e.km; while (k >= kmMark) { miles += Milestone(e.ts, "%,d km so far".format(kmMark.toInt())); kmMark += KM_EVERY } }
         if (e.flight) { f++; if (f in FLIGHT_MARKS) miles += Milestone(e.ts, "your ${ord(f)} flight") }
         if (e.city != null && seen.add(e.city)) { c++; if (c in CITY_MARKS) miles += Milestone(e.ts, if (c == 1) "your first city" else "…and that's your ${ord(c)} city") }
         if (e.night) { n++; if (n in NIGHT_MARKS) miles += Milestone(e.ts, "$n nights away") }
