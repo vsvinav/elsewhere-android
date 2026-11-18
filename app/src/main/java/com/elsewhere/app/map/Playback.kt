@@ -1,5 +1,6 @@
 package com.elsewhere.app.map
 
+import com.elsewhere.app.analytics.Grain
 import com.elsewhere.app.analytics.Lens
 import com.elsewhere.app.analytics.Segment
 import com.elsewhere.app.analytics.SegmentKind
@@ -22,6 +23,10 @@ import kotlinx.coroutines.flow.transformLatest
 data class PlayState(
     val playhead: Double, val playing: Boolean, val speed: Double = 1.0, val rate: Double = 3600.0,
     val lens: Lens = Lens.ALL, val follow: Boolean = true,
+    /** The user's pick; null leaves the grain to the window's span. */
+    val grain: Grain? = null,
+    /** A finger is on the strip: the replay pauses and the rail prints every frame. */
+    val scrubbing: Boolean = false,
 )
 
 /** Advances the playhead by `dt` real seconds, pacing by segment so every movement is readable and no stay drags. */

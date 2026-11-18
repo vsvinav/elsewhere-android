@@ -2,6 +2,7 @@ package com.elsewhere.app.ui.tabs.replay
 
 import com.elsewhere.app.Fx
 import com.elsewhere.app.Fx.H
+import com.elsewhere.app.analytics.Grain
 import com.elsewhere.app.data.Record
 import com.elsewhere.app.data.RecordSource
 import com.elsewhere.app.data.Settings
@@ -19,6 +20,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -39,7 +41,8 @@ class PlaybackViewModelTest {
     @BeforeEach fun up() = Dispatchers.setMain(dispatcher)
     @AfterEach fun down() = Dispatchers.resetMain()
 
-    private fun vm() = PlaybackViewModel(RangeStore(Source(rec), CoroutineScope(dispatcher)), maps, tiles, MemoryCostMeter()).also { dispatcher.scheduler.runCurrent() }
+    private val range = RangeStore(Source(rec), CoroutineScope(dispatcher))
+    private fun vm() = PlaybackViewModel(range, maps, tiles, MemoryCostMeter()).also { dispatcher.scheduler.runCurrent() }
 
     @Test fun `the first showing plays, a later one leaves a paused, detached replay alone`() = runTest(dispatcher) {
         val vm = vm()
@@ -62,5 +65,19 @@ class PlaybackViewModelTest {
         val vm = vm()
         assertTrue(vm.basemap.value is Basemap.Google)
         assertEquals(1, tiles.sessions)
+    }
+
+    @Test fun `grain is remembered until the window changes`() = runTest(dispatcher) {
+        val vm = vm()
+        vm.setGrain(Grain.DAY); assertEquals(Grain.DAY, vm.state.value.grain)
+        range.range.value = 0L..(24 * H); dispatcher.scheduler.runCurrent()
+        assertNull(vm.state.value.grain)
+    }
+
+    @Test fun `scrubbing pauses and is a flag`() = runTest(dispatcher) {
+        val vm = vm()
+        vm.setPlaying(true); vm.setScrubbing(true)
+        assertTrue(vm.state.value.scrubbing); assertFalse(vm.state.value.playing)
+        vm.setScrubbing(false); assertFalse(vm.state.value.scrubbing); assertFalse(vm.state.value.playing)
     }
 }

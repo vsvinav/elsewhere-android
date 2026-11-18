@@ -2,6 +2,7 @@ package com.elsewhere.app.ui.tabs.replay
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.elsewhere.app.analytics.Grain
 import com.elsewhere.app.analytics.Lens
 import com.elsewhere.app.data.MapsSettings
 import com.elsewhere.app.data.Record
@@ -63,8 +64,8 @@ class PlaybackViewModel @Inject constructor(range: RangeStore, maps: MapsSetting
     private var shownOnce = false
 
     init {
-        // A new window rewinds to its start, as the web's setRange does; the first record also seeds the playhead.
-        viewModelScope.launch { range.filtered.collect { rec -> if (rec != null) state.update { it.copy(playhead = rec.meta.range.first.toDouble()) } } }
+        // A new window rewinds to its start and drops the grain pick, as the web's setRange does; the first record also seeds the playhead.
+        viewModelScope.launch { range.filtered.collect { rec -> if (rec != null) state.update { it.copy(playhead = rec.meta.range.first.toDouble(), grain = null) } } }
     }
 
     /** One real-time frame of `dt` seconds while playing. */
@@ -95,4 +96,8 @@ class PlaybackViewModel @Inject constructor(range: RangeStore, maps: MapsSetting
 
     fun setFollow(on: Boolean) = state.update { it.copy(follow = on) }
     fun setLens(lens: Lens) = state.update { it.copy(lens = lens) }
+    fun setGrain(g: Grain?) = state.update { it.copy(grain = g) }
+
+    /** A finger landing on the strip pauses the replay; lifting it leaves the replay paused where it was dragged. */
+    fun setScrubbing(on: Boolean) = state.update { if (on) it.copy(scrubbing = true, playing = false) else it.copy(scrubbing = false) }
 }
