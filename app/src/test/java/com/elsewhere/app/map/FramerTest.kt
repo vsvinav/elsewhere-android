@@ -101,4 +101,14 @@ class FramerTest {
         assertTrue(grainKey(data, Fx.utc(2024, 7, 30).toDouble(), Grain.MONTH) != grainKey(data, Fx.utc(2024, 8, 1).toDouble(), Grain.MONTH))
         assertEquals(grainKey(data, t1.toDouble(), Grain.DAY), grainKey(data, t2.toDouble(), Grain.DAY))
     }
+
+    @Test fun `stops either side of the date line frame the short way round, over the Pacific`() {
+        val m = Fx.utc(2024, 3)
+        val rec = Fx.record(visits = listOf(visit(m + D, m + 2 * D, "fiji", lng = 170.0, lat = -18.0), visit(m + 3 * D, m + 4 * D, "samoa", lng = -170.0, lat = -14.0)), range = m..m + 10 * D)
+        val b = grainBounds(rec, (m + 2 * D).toDouble(), Grain.MONTH)!!
+        assertEquals(170.0, b.swLng, 1e-9); assertEquals(190.0, b.neLng, 1e-9)
+        val f = frameOf(b, 1080, 1600)
+        assertEquals(180.0, f.center.lng, 1e-9)
+        assertTrue(f.zoom > 3.0)
+    }
 }

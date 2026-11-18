@@ -77,5 +77,20 @@ fun grainKey(data: Record, now: Double, grain: Grain): String = when (grain) {
 /** The start of the trip the playhead is inside, if any. */
 private fun tripUnder(data: Record, now: Double): Long? = data.trips.firstOrNull { it.start <= now && now <= it.end }?.start
 
-private fun boundsAround(pts: List<Located>): Bounds? =
-    if (pts.isEmpty()) null else Bounds(pts.minOf { it.lat }, pts.minOf { it.lng }, pts.maxOf { it.lat }, pts.maxOf { it.lng })
+/**
+ * The box around `pts`, longitudes unwrapped from the first point (a jump past 180° is read as the short way round),
+ * so a trip across the Pacific frames over the Pacific; the box may run past ±180, as [Projector.bounds] allows.
+ */
+private fun boundsAround(pts: List<Located>): Bounds? {
+    if (pts.isEmpty()) return null
+    var s = Double.POSITIVE_INFINITY; var n = Double.NEGATIVE_INFINITY; var w = Double.POSITIVE_INFINITY; var e = Double.NEGATIVE_INFINITY
+    var prev = pts[0].lng
+    for (p in pts) {
+        var l = p.lng
+        while (l - prev > 180) l -= 360.0
+        while (prev - l > 180) l += 360.0
+        prev = l
+        if (p.lat < s) s = p.lat; if (p.lat > n) n = p.lat; if (l < w) w = l; if (l > e) e = l
+    }
+    return Bounds(s, w, n, e)
+}

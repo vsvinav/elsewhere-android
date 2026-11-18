@@ -74,4 +74,22 @@ class FollowTest {
         repeat(600) { t += 16; cam = f.tick(rec, now = 17 * H, rate = 3600.0, speed = 1.0, dt = 0.016, tMs = t, w = 1080, h = 1600, current = cam) ?: cam }
         assertEquals(madrid.lat, cam.lat, 0.05); assertEquals(madrid.lng, cam.lng, 0.05)
     }
+
+    @Test fun `a reset forgets the span's frame, so a new record under the same key is framed afresh`() {
+        val madrid = LatLng(40.42, -3.70); val tokyo = LatLng(35.68, 139.69)
+        fun rec(city: String, at: LatLng) = data.copy(
+            trips = listOf(Trip(16 * H, 20 * H, 1, 5000.0, emptyMap(), listOf(city), null)),
+            visits = data.visits + visit(17 * H, 19 * H, "stop", lng = at.lng, lat = at.lat),
+            places = mapOf("stop" to Fx.place(city = city, lat = at.lat, lng = at.lng)),
+        )
+        val f = Follow()
+        var cam = Cam(0.0, 0.0, 2f)
+        var t = 0L
+        repeat(600) { t += 16; cam = f.tick(rec("Madrid", madrid), now = 17 * H, rate = 3600.0, speed = 1.0, dt = 0.016, tMs = t, w = 1080, h = 1600, current = cam, grain = Grain.YEAR) ?: cam }
+        f.reset()
+        val b = rec("Tokyo", tokyo)
+        repeat(600) { t += 16; cam = f.tick(b, now = 17 * H, rate = 3600.0, speed = 1.0, dt = 0.016, tMs = t, w = 1080, h = 1600, current = cam, grain = Grain.YEAR) ?: cam }
+        val want = frameOf(grainBounds(b, (17 * H).toDouble(), Grain.YEAR)!!, 1080, 1600)
+        assertEquals(want.center.lng, cam.lng, 0.05); assertEquals(want.zoom, cam.zoom.toDouble(), 0.1)
+    }
 }

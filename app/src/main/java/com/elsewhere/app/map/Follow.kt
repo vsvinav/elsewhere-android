@@ -39,7 +39,7 @@ class Follow {
     private var anticip: Anticipation? = null
     private var coarseKey = ""; private var coarse: Bounds? = null
 
-    fun reset() { springs = null; zWant = null; recent.clear(); anticip = null }
+    fun reset() { springs = null; zWant = null; recent.clear(); anticip = null; coarseKey = ""; coarse = null }
 
     /**
      * One frame: where the camera should be now, or null when it has not moved and was reported within the last half
