@@ -79,19 +79,14 @@ class TimelineTest {
         assertNull(atPlayhead(c, first.ts + span * 0.021).milestone)
     }
 
-    @Test fun `grain by span`() {
-        assertEquals(Grain.YEAR, grainOf(401L * 86400)); assertEquals(Grain.MONTH, grainOf(400L * 86400))
-        assertEquals(Grain.MONTH, grainOf(22L * 86400)); assertEquals(Grain.DAY, grainOf(21L * 86400))
-    }
-
     @Test fun `a short window only has days`() {
         val (grain, allowed) = resolveGrain(tiny(range = range.first..range.first + 10 * D), Grain.YEAR)
         assertEquals(Grain.DAY, grain); assertEquals(listOf(Grain.DAY), allowed)
     }
 
-    @Test fun `without trips the year has nothing to show, so a pick of it falls back to the span`() {
+    @Test fun `without trips the year has nothing to show, so a pick of it falls back to the day`() {
         val (grain, allowed) = resolveGrain(tiny(), Grain.YEAR)
-        assertEquals(Grain.MONTH, grain); assertEquals(listOf(Grain.MONTH, Grain.DAY), allowed)
+        assertEquals(Grain.DAY, grain); assertEquals(listOf(Grain.MONTH, Grain.DAY), allowed)
         assertEquals(Grain.DAY, resolveGrain(tiny(), Grain.DAY).first)
     }
 
@@ -99,6 +94,6 @@ class TimelineTest {
         val trip = Trip(iso("2024-01-05T12:00:00Z"), iso("2024-01-10T10:00:00Z"), 5, 1450.0, emptyMap(), listOf("Porto", "Paris"), null)
         val (grain, allowed) = resolveGrain(tiny(trips = listOf(trip)), Grain.YEAR)
         assertEquals(Grain.YEAR, grain); assertEquals(Grain.entries, allowed)
-        assertEquals(Grain.MONTH, resolveGrain(tiny(trips = listOf(trip)), null).first)
+        assertEquals(Grain.DAY, resolveGrain(tiny(trips = listOf(trip)), null).first)
     }
 }

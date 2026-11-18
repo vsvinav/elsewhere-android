@@ -74,13 +74,7 @@ fun atPlayhead(c: Cumulative, t: Double): Rail {
     return if (i < 0) Rail(0.0, 0, 0, 0, m) else Rail(c.km[i], c.cities[i], c.nightsAway[i], c.flights[i], m)
 }
 
-fun grainOf(spanSeconds: Long): Grain = when {
-    spanSeconds > 400L * 86400 -> Grain.YEAR
-    spanSeconds > 21L * 86400 -> Grain.MONTH
-    else -> Grain.DAY
-}
-
-/** Which grains have something to show in this window, and the one in force given the user's pick. */
+/** Which grains have something to show in this window, and the one in force: Replay opens on DAY, the trail, unless a coarser grain is picked. */
 fun resolveGrain(data: Record, picked: Grain?): Pair<Grain, List<Grain>> {
     val span = data.meta.range.last - data.meta.range.first
     val allowed = when {
@@ -88,8 +82,7 @@ fun resolveGrain(data: Record, picked: Grain?): Pair<Grain, List<Grain>> {
         data.trips.isNotEmpty() -> Grain.entries
         else -> listOf(Grain.MONTH, Grain.DAY)
     }
-    val derived = grainOf(span)
-    return (picked?.takeIf { it in allowed } ?: derived.takeIf { it in allowed } ?: allowed.first()) to allowed
+    return (picked?.takeIf { it in allowed } ?: Grain.DAY) to allowed
 }
 
 private fun pathKm(path: List<LatLng>): Double {
