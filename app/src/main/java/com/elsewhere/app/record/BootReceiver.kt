@@ -10,13 +10,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** Recording is a standing choice: a reboot picks it back up. */
+/** Recording is a standing choice: a reboot or an app update picks it back up. */
 @AndroidEntryPoint
 class BootReceiver : BroadcastReceiver() {
     @Inject lateinit var controller: RecordController
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         val pending = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try { controller.resumeIfEnabled() } finally { pending.finish() }
