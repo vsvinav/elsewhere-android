@@ -38,9 +38,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -97,14 +95,6 @@ fun hudInfo(data: Record, playhead: Long): HudInfo {
 }
 
 fun ink(lens: Lens): Color = Color(android.graphics.Color.parseColor(lens.color))
-
-/** Where each New Year falls along the scrub, as a fraction of the window. */
-fun yearTicks(range: LongRange): List<Pair<Int, Float>> {
-    val m0 = range.first; val m1 = range.last
-    if (m1 <= m0) return emptyList()
-    val y0 = Instant.ofEpochSecond(m0).atOffset(ZoneOffset.UTC).year; val y1 = Instant.ofEpochSecond(m1).atOffset(ZoneOffset.UTC).year
-    return (y0 + 1..y1).map { y -> y to ((java.time.LocalDate.of(y, 1, 1).atStartOfDay(ZoneOffset.UTC).toEpochSecond() - m0).toFloat() / (m1 - m0)) }
-}
 
 /** The speed slider's log scale: 2^-1 … 2^5, as the web's `Math.log2(speed)` range input. */
 const val SPEED_LOG_MIN = -1f
@@ -174,7 +164,7 @@ fun ReplayHud(
             )
             if (!follow) { Spacer(Modifier.width(8.dp)); InkButton("Follow", onFollow, quiet = true) }
         }
-        Scrub(range, playhead, onScrub)
+        Scrub(range, playhead, onScrub, {}, {})
     }
 }
 
@@ -206,37 +196,11 @@ private fun PlayButton(playing: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PosterSlider(value: Float, onChange: (Float) -> Unit, range: ClosedFloatingPointRange<Float>, modifier: Modifier = Modifier) {
+fun PosterSlider(value: Float, onChange: (Float) -> Unit, range: ClosedFloatingPointRange<Float>, modifier: Modifier = Modifier) {
     Slider(
         value, onChange, modifier, valueRange = range,
         colors = SliderDefaults.colors(thumbColor = Poster.Ink, activeTrackColor = Poster.Red, inactiveTrackColor = Poster.Stock3, activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent),
     )
-}
-
-private const val SCRUB_STEP_S = 600.0
-
-/** The timeline: a slider over the window with each New Year marked above it. */
-@Composable
-private fun Scrub(range: LongRange, playhead: Double, onScrub: (Double) -> Unit) {
-    val span = (range.last - range.first).toDouble().coerceAtLeast(1.0)
-    val frac = (((if (playhead.isNaN()) range.first.toDouble() else playhead) - range.first) / span).toFloat().coerceIn(0f, 1f)
-    val years = remember(range) { yearTicks(range) }
-    val measurer = rememberTextMeasurer()
-    val style = PosterType.Label.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Poster.Ink3)
-    Column(Modifier.fillMaxWidth()) {
-        Canvas(Modifier.fillMaxWidth().height(14.dp)) {
-            for ((y, pct) in years) {
-                val x = pct * size.width
-                val t = measurer.measure(y.toString(), style)
-                drawText(t, topLeft = Offset((x - t.size.width / 2f).coerceIn(0f, size.width - t.size.width), 0f))
-                drawLine(Poster.Ghost, Offset(x, t.size.height.toFloat()), Offset(x, size.height), 1.dp.toPx())
-            }
-        }
-        PosterSlider(
-            frac, { f -> onScrub(range.first + ((f * span) / SCRUB_STEP_S).roundToInt() * SCRUB_STEP_S) }, 0f..1f,
-            Modifier.fillMaxWidth().semantics { contentDescription = "Timeline position" },
-        )
-    }
 }
 
 /** Luggage tags that print when the playhead arrives somewhere new. */
