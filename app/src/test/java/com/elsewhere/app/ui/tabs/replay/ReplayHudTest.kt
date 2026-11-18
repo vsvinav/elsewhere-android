@@ -101,7 +101,7 @@ class ReplayHudTest {
 
     @Test fun `the month counts its cities and nights away`() {
         val i = hudInfo(trips, at, Grain.MONTH, grainIndex(trips))
-        assertEquals("THIS MONTH", i.lab); assertEquals("2 cities", i.where); assertEquals("2 nights away", i.sub)
+        assertEquals("THIS MONTH", i.lab); assertEquals("2 cities", i.where); assertEquals("2 nights", i.sub)
         assertEquals("1 city", hudInfo(trips, Fx.utc(2019, 5, 20), Grain.MONTH, grainIndex(trips)).where)
     }
 

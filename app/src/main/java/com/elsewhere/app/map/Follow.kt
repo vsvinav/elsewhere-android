@@ -1,5 +1,6 @@
 package com.elsewhere.app.map
 
+import com.elsewhere.app.analytics.Grain
 import com.elsewhere.app.analytics.SegmentKind
 import com.elsewhere.app.analytics.positionAt
 import com.elsewhere.app.analytics.segmentAt
@@ -36,15 +37,26 @@ class Follow {
     private var zWant: Double? = null
     private val recent = ArrayDeque<Recent>()
     private var anticip: Anticipation? = null
+    private var coarseKey = ""; private var coarse: Bounds? = null
 
     fun reset() { springs = null; zWant = null; recent.clear(); anticip = null }
 
     /**
      * One frame: where the camera should be now, or null when it has not moved and was reported within the last half
      * second. `tMs` is a monotonic clock, `w`/`h` the viewport in px, `current` where the map sits before the spring starts.
+     * At the year or the month the camera holds that span's content instead and only glides as the content changes.
      */
-    fun tick(data: Record, now: Long, rate: Double, speed: Double, dt: Double, tMs: Long, w: Int, h: Int, current: Cam): Cam? {
+    fun tick(data: Record, now: Long, rate: Double, speed: Double, dt: Double, tMs: Long, w: Int, h: Int, current: Cam, grain: Grain = Grain.DAY): Cam? {
         val here = positionAt(data, now) ?: return null
+        val key = grainKey(data, now.toDouble(), grain)
+        if (key != coarseKey) { coarseKey = key; coarse = if (grain == Grain.DAY) null else grainBounds(data, now.toDouble(), grain) }
+        coarse?.let { b ->
+            val f = frameOf(b, w, h)
+            val sp = springs ?: Springs(Spring(current.lng), Spring(current.lat), Spring(current.zoom.toDouble())).also { springs = it }
+            sp.lng.step(f.center.lng, dt, POS_PERIOD_S); sp.lat.step(f.center.lat, dt, POS_PERIOD_S); sp.zoom.step(f.zoom, dt, ZOOM_PERIOD_S)
+            zWant = f.zoom; recent.clear(); anticip = null
+            return report(sp, tMs)
+        }
         val seg = segmentAt(data, now)
         val nxt = segmentAt(data, seg.end + 2)
         val f = frameFor(seg, if (nxt.start > seg.start) nxt else null, here, now, rate, w, h)
@@ -78,6 +90,11 @@ class Follow {
         sp.lng.step(center.lng, dt, POS_PERIOD_S * posCalm); sp.lat.step(center.lat, dt, POS_PERIOD_S * posCalm)
         sp.zoom.step(zTarget, dt, ZOOM_PERIOD_S * calm)
 
+        return report(sp, tMs)
+    }
+
+    /** The camera the springs sit at, or null when it has not moved and was reported within the last half second. */
+    private fun report(sp: Springs, tMs: Long): Cam? {
         val moved = abs(sp.lng.v) + abs(sp.lat.v) > 1e-7 || abs(sp.zoom.v) > 1e-4
         if (!moved && tMs - lastTarget <= 500) return null
         lastTarget = tMs

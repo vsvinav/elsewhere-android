@@ -4,7 +4,9 @@ import com.elsewhere.app.Fx
 import com.elsewhere.app.Fx.H
 import com.elsewhere.app.Fx.act
 import com.elsewhere.app.Fx.visit
+import com.elsewhere.app.analytics.Grain
 import com.elsewhere.app.data.LatLng
+import com.elsewhere.app.data.Trip
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -52,5 +54,24 @@ class FollowTest {
         repeat(2000) { t += 16; cam = f.tick(data, now = 7 * H / 2, rate = 3600.0, speed = 1.0, dt = 0.016, tMs = t, w = 1080, h = 1600, current = cam) ?: cam }
         assertNotNull(f.tick(data, now = 7 * H / 2, rate = 3600.0, speed = 1.0, dt = 0.016, tMs = t + 600, w = 1080, h = 1600, current = cam))
         assertTrue(abs(cam.lat - a.lat) < 1e-3)
+    }
+
+    @Test fun `at a coarse grain the camera springs to the span's frame and ignores the subject`() {
+        val madrid = LatLng(40.42, -3.70)
+        val trip = Trip(16 * H, 20 * H, 1, 5000.0, emptyMap(), listOf("Madrid"), null)
+        val rec = data.copy(
+            trips = listOf(trip),
+            visits = data.visits + visit(17 * H, 19 * H, "madrid", lng = madrid.lng, lat = madrid.lat),
+            places = mapOf("madrid" to Fx.place(city = "Madrid", lat = madrid.lat, lng = madrid.lng)),
+        )
+        val f = Follow()
+        var cam = Cam(0.0, 0.0, 2f)
+        var t = 0L
+        repeat(600) { t += 16; cam = f.tick(rec, now = 17 * H, rate = 3600.0, speed = 1.0, dt = 0.016, tMs = t, w = 1080, h = 1600, current = cam, grain = Grain.YEAR) ?: cam }
+        val want = frameOf(grainBounds(rec, (17 * H).toDouble(), Grain.YEAR)!!, 1080, 1600)
+        assertEquals(want.center.lat, cam.lat, 0.05); assertEquals(want.center.lng, cam.lng, 0.05); assertEquals(want.zoom, cam.zoom.toDouble(), 0.1)
+        // Back at the day the follow-cam takes over and heads for the stay in Madrid.
+        repeat(600) { t += 16; cam = f.tick(rec, now = 17 * H, rate = 3600.0, speed = 1.0, dt = 0.016, tMs = t, w = 1080, h = 1600, current = cam) ?: cam }
+        assertEquals(madrid.lat, cam.lat, 0.05); assertEquals(madrid.lng, cam.lng, 0.05)
     }
 }

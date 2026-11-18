@@ -39,6 +39,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -74,6 +75,9 @@ import com.elsewhere.app.map.RevealDots
 import com.elsewhere.app.map.Stamp
 import com.elsewhere.app.map.StampHold
 import com.elsewhere.app.map.Trail
+import com.elsewhere.app.map.TripArc
+import com.elsewhere.app.map.begunBy
+import com.elsewhere.app.map.grainBounds
 import com.elsewhere.app.map.Trails
 import com.elsewhere.app.map.activeTrails
 import com.elsewhere.app.map.intersects
@@ -81,6 +85,7 @@ import com.elsewhere.app.map.rememberMapHost
 import com.elsewhere.app.map.stampHeading
 import com.elsewhere.app.map.stampOf
 import com.elsewhere.app.map.trailHead
+import com.elsewhere.app.map.tripArcs
 import com.elsewhere.app.map.wakeLength
 import com.elsewhere.app.ui.world.Poster
 import com.elsewhere.app.ui.world.PosterType
@@ -88,6 +93,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -134,8 +140,10 @@ fun ReplayTab(vm: PlaybackViewModel = hiltViewModel()) {
     // Dragging or pinching by hand hands the camera over; the Follow button takes it back.
     LaunchedEffect(host) { host.events.collect { if (it == MapEvent.DragStart) vm.setFollow(false) } }
 
+    val fitPad = with(LocalDensity.current) { FIT_PAD.roundToPx() }
     LaunchedEffect(host, rec) {
         var last = 0L; var lastHead = Double.NaN; var lastPlaying = false; var lastLens: Lens? = null; var animUntil = 0L; var lastCam: Cam? = null
+        var lastGrain: Grain? = null; var lastDrawn: Grain? = null
         while (true) withFrameNanos { t ->
             val dt = if (last == 0L) 0.0 else min(0.25, (t - last) / 1e9); last = t
             val tMs = t / 1_000_000
@@ -143,16 +151,22 @@ fun ReplayTab(vm: PlaybackViewModel = hiltViewModel()) {
             val st = vm.state.value
             if (st.playhead.isNaN()) return@withFrameNanos
             val now = st.playhead.toLong()
+            val grain = resolveGrain(rec, st.grain).first
+            // A new grain reframes once: the year's trips or the month's stops, even with the camera handed over.
+            if (grain != lastGrain) {
+                if (lastGrain != null) { follow.reset(); if (!st.follow) grainBounds(rec, st.playhead, grain)?.let { host.fit(it, fitPad) } }
+                lastGrain = grain
+            }
             if (st.follow && viewport != IntSize.Zero) {
-                follow.tick(rec, now, st.rate, st.speed, dt, tMs, viewport.width, viewport.height, host.camera.value)?.let { host.moveTo(it) }
+                follow.tick(rec, now, st.rate, st.speed, dt, tMs, viewport.width, viewport.height, host.camera.value, grain)?.let { host.moveTo(it) }
             } else follow.reset()
             arrivals.at(rec, now, st.playing, tMs)
             val newTags = arrivals.prune(tMs) || arrivals.tags !== tags
             if (newTags) tags = arrivals.tags
             // The canvas redraws per frame only while the clock runs or something eased is still settling; a paused
             // map redraws on camera and state changes alone. `frame` is the one state the canvas reads per frame.
-            val changed = st.playhead != lastHead || st.playing != lastPlaying || st.lens != lastLens
-            if (changed) { animUntil = tMs + SETTLE_MS; lastHead = st.playhead; lastPlaying = st.playing; lastLens = st.lens }
+            val changed = st.playhead != lastHead || st.playing != lastPlaying || st.lens != lastLens || grain != lastDrawn
+            if (changed) { animUntil = tMs + SETTLE_MS; lastHead = st.playhead; lastPlaying = st.playing; lastLens = st.lens; lastDrawn = grain }
             val cam = host.camera.value
             val moved = cam != lastCam; lastCam = cam
             if (st.playing || tMs < animUntil || newTags || moved) frame.longValue = tMs
@@ -202,13 +216,14 @@ fun ReplayScreen(
 // ---- The replay on the map ---------------------------------------------------------------------------------------
 
 /**
- * One Canvas over whichever host is up, redrawn every frame of the clock: the paused record as hairlines, a dotted
- * wake and a solid head behind the stamp, the places reached so far, and the stamp itself in the ink of the current
- * movement. Points are placed by a pure Mercator projection of the camera the loop just set, so a frame costs no
- * SDK calls and the overlay never lags the basemap by a frame.
+ * One Canvas over whichever host is up, redrawn every frame of the clock. By day: the paused record as hairlines, a
+ * dotted wake and a solid head behind the stamp, the places reached so far, and the stamp itself in the ink of the
+ * current movement. By month: the hairlines and the places, no head or stamp. By year: the trips alone, as arcs.
+ * Points are placed by a pure Mercator projection of the camera the loop just set, so a frame costs no SDK calls and
+ * the overlay never lags the basemap by a frame.
  */
 @Composable
-private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, state: StateFlow<PlayState>, frame: State<Long>, modifier: Modifier = Modifier) {
+internal fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, state: StateFlow<PlayState>, frame: State<Long>, modifier: Modifier = Modifier) {
     val measurer = rememberTextMeasurer()
     val icons = remember { StampIcons() }
     val dots = remember(data) { RevealDots(data) }
@@ -221,29 +236,42 @@ private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, stat
     val texts = remember { HashMap<String, TextLayoutResult>() }
     val taken = remember { ArrayList<FloatArray>() }
     val labelStyle = PosterType.Label.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Poster.Ink, letterSpacing = 0.02.em)
+    val arcs = remember(data) { tripArcs(data) }
+    val arcPath = remember { Path() }
     Canvas(modifier) {
         val tMs = frame.value
         val st = state.value
         if (st.playhead.isNaN()) return@Canvas
         val cam = host.camera.value
         val now = st.playhead; val nowL = now.toLong(); val rate = st.rate; val d = density
-        val lensTrails = trails.simplified(st.lens, cam.zoom.toDouble())
+        val grain = resolveGrain(data, st.grain).first
         val proj = Projector(cam, size.width.roundToInt(), size.height.roundToInt(), d)
 
-        if (!st.playing) {
-            // Paused: the whole record as hairlines, like the strip printed on the pass; projected once per camera.
+        if (grain == Grain.YEAR) {
+            // The year is its trips: finished hops in red ink, the one under way fading in, the rest not yet drawn.
+            for (a in arcs.begunBy(now)) {
+                val alpha = if (a.ts <= now) 230 / 255f else (60 + 170 * min(1.0, max(0.0, (now - a.t0) / max(1.0, a.ts - a.t0)))).toFloat() / 255f
+                drawPath(arcPath.of(a, proj), Poster.Red.copy(alpha = alpha), style = Stroke(2f * d, cap = StrokeCap.Round))
+            }
+            return@Canvas
+        }
+        val lensTrails = trails.simplified(st.lens, cam.zoom.toDouble())
+        if (!st.playing || grain == Grain.MONTH) {
+            // Paused, or at the month: the whole record as hairlines, like the strip printed on the pass; projected once per camera.
             for ((path, color) in hairlines.of(cam, st.lens, size, lensTrails, proj)) drawPath(path, color, style = Stroke(1.5f * d))
         }
-        // A dotted wake that fades over ~16 s of screen time, then a solid head in the leg's own ink over only the live trails.
-        val headLen = HEAD_REAL_S * rate; val wakeLen = wake.at(wakeLength(rate), tMs)
-        val dash = PathEffect.dashPathEffect(floatArrayOf(5 * d, 4 * d))
-        for (t in activeTrails(lensTrails, now - wakeLen, now)) {
-            val c = ink(t.lens).copy(alpha = (if (st.playing) 0.8f else 0.4f) * if (t.guessed) 110 / 255f else 1f)
-            polyline(t, now - wakeLen, now, c, 2.5f * d, fade = true, dashed = dash, proj, bands)
-        }
-        for (t in activeTrails(lensTrails, now - headLen * 1.6, now)) {
-            val c = ink(t.lens).copy(alpha = if (t.guessed) 110 / 255f else 1f)
-            polyline(t, now - headLen, now, c, 6f * d, fade = true, dashed = null, proj, bands)
+        if (grain == Grain.DAY) {
+            // A dotted wake that fades over ~16 s of screen time, then a solid head in the leg's own ink over only the live trails.
+            val headLen = HEAD_REAL_S * rate; val wakeLen = wake.at(wakeLength(rate), tMs)
+            val dash = PathEffect.dashPathEffect(floatArrayOf(5 * d, 4 * d))
+            for (t in activeTrails(lensTrails, now - wakeLen, now)) {
+                val c = ink(t.lens).copy(alpha = (if (st.playing) 0.8f else 0.4f) * if (t.guessed) 110 / 255f else 1f)
+                polyline(t, now - wakeLen, now, c, 2.5f * d, fade = true, dashed = dash, proj, bands)
+            }
+            for (t in activeTrails(lensTrails, now - headLen * 1.6, now)) {
+                val c = ink(t.lens).copy(alpha = if (t.guessed) 110 / 255f else 1f)
+                polyline(t, now - headLen, now, c, 6f * d, fade = true, dashed = null, proj, bands)
+            }
         }
 
         // Only places already visited exist on the map; a fresh one fades in over a second of screen time.
@@ -267,6 +295,7 @@ private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, stat
             drawText(t, color = Poster.Stock.copy(alpha = 0.92f * alpha), topLeft = Offset(x0, y0), drawStyle = Stroke(4 * d))
             drawText(t, color = Poster.Ink.copy(alpha = alpha), topLeft = Offset(x0, y0))
         }
+        if (grain != Grain.DAY) return@Canvas
 
         // The stamp: a stock disc with the leg's ink ring and the vehicle inside, turned along a long leg and upright on a short one, like the web's.
         val w = whereaboutsAt(data, nowL) ?: return@Canvas
@@ -292,6 +321,21 @@ private fun ReplayCanvas(host: MapHost, data: Record, trails: ReplayTrails, stat
 
 /** How long after the last change the canvas keeps redrawing, so the eased wake, ring and stamp hold can settle. */
 private const val SETTLE_MS = 2500L
+
+/** Room kept clear of the map's edge when a grain change fits the year's trips or the month's stops by hand. */
+private val FIT_PAD = 48.dp
+
+/** An arc as a screen path, rewound into `this` so the year draws without allocating a path per hop; the pen lifts where the arc crosses the date line. */
+private fun Path.of(a: TripArc, proj: Projector): Path {
+    rewind()
+    var px = Float.NaN
+    for (p in a.path) {
+        val x = proj.x(p.lng); val y = proj.y(p.lat)
+        if (px.isNaN() || abs(x - px) > proj.world / 2) moveTo(x, y) else lineTo(x, y)
+        px = x
+    }
+    return this
+}
 
 /** Alpha steps a fading trail is drawn in: one stroked path per band instead of a line per segment. */
 private const val FADE_BANDS = 4

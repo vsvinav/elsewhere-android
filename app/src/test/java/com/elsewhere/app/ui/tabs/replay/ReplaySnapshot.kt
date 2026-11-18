@@ -4,8 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
@@ -14,12 +17,24 @@ import com.elsewhere.app.analytics.Grain
 import com.elsewhere.app.analytics.Lens
 import com.elsewhere.app.analytics.cumulative
 import com.elsewhere.app.data.Record
+import com.elsewhere.app.data.Viewport
 import com.elsewhere.app.map.Arrival
+import com.elsewhere.app.map.Basemap
+import com.elsewhere.app.map.Bounds
+import com.elsewhere.app.map.Cam
+import com.elsewhere.app.map.MapEvent
+import com.elsewhere.app.map.MapHost
 import com.elsewhere.app.map.PlayState
+import com.elsewhere.app.map.ReplayTrails
+import com.elsewhere.app.map.Tap
 import com.elsewhere.app.Fx
 import com.elsewhere.app.ui.world.ElsewhereTheme
 import com.elsewhere.app.ui.world.LocalMotion
 import com.elsewhere.app.ui.world.Poster
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.junit.Rule
 import org.junit.Test
 
@@ -51,4 +66,32 @@ class ReplaySnapshot {
 
     /** No trips on record: the Year chip is dead and the window falls to Month. */
     @Test fun noTrips() = shoot(data.copy(trips = emptyList()), PlayState(playhead = at.toDouble(), playing = false))
+
+    /** The year, framed on the northern hemisphere: Lisbon's two hops in red, the hop out to Tokyo fading in under the playhead, no trail, dots or stamp. */
+    @Test fun year() {
+        val tokyo = data.trips[1]
+        val state = PlayState(playhead = tokyo.start + 1.0 * Fx.D, playing = false, follow = false, grain = Grain.YEAR)
+        val host = StillHost(Cam(45.0, -100.0, 1.0f))
+        paparazzi.snapshot {
+            ElsewhereTheme {
+                CompositionLocalProvider(LocalMotion provides false) {
+                    ReplayScreen(data, state, emptyList(), ReplayActions(), Modifier.height(760.dp)) { m ->
+                        Box(m.fillMaxSize().background(Poster.Stock)) { ReplayCanvas(host, data, ReplayTrails(data), MutableStateFlow(state), mutableLongStateOf(0L), Modifier.fillMaxSize()) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A host whose camera never moves, so the canvas alone is on trial. */
+private class StillHost(cam: Cam) : MapHost {
+    override val camera: StateFlow<Cam> = MutableStateFlow(cam)
+    override val events: SharedFlow<MapEvent> = MutableSharedFlow()
+    override val taps: SharedFlow<Tap> = MutableSharedFlow()
+    override val viewport: StateFlow<Viewport?> = MutableStateFlow(null)
+    override fun moveTo(cam: Cam, animateMs: Int) {}
+    override fun fit(bounds: Bounds, paddingPx: Int) {}
+    override fun project(lat: Double, lng: Double): Offset? = null
+    @Composable override fun Content(modifier: Modifier, basemap: Basemap, copyright: String?, overlays: @Composable () -> Unit) = overlays()
 }

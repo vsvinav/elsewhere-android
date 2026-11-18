@@ -13,7 +13,8 @@ import kotlin.math.tan
  * rendered so far. Both SDKs draw a 256-logical-pixel tile per zoom level, so `density` turns that into physical px.
  */
 class Projector(cam: Cam, widthPx: Int, heightPx: Int, density: Float = 1f) {
-    private val world = 256.0 * 2.0.pow(cam.zoom.toDouble()) * density
+    /** The whole world's width in px at this zoom: a run of points that jumps further than half of it has crossed the date line. */
+    val world = 256.0 * 2.0.pow(cam.zoom.toDouble()) * density
     private val cx = (cam.lng + 180) / 360 * world
     private val cy = (0.5 - mercRad(cam.lat) / (2 * PI)) * world
     private val ox = widthPx / 2.0 - cx

@@ -131,7 +131,7 @@ fun hudInfo(data: Record, playhead: Long, grain: Grain = Grain.DAY, idx: GrainIn
             val ym = "%04d-%02d".format(u.year, u.monthValue)
             val cities = HashSet<String>()
             for (v in data.visits) if (v.lvl == 0 && v.end >= a0 && v.start < b0) data.places[v.placeId]?.city?.let(cities::add)
-            day.copy(lab = "THIS MONTH", where = plural(cities.size, "city", "cities"), sub = plural(ix!!.nightsAway.count { it.startsWith(ym) }, "night away", "nights away"), ink = null)
+            day.copy(lab = "THIS MONTH", where = plural(cities.size, "city", "cities"), sub = plural(ix!!.nightsAway.count { it.startsWith(ym) }, "night"), ink = null)
         }
     }
 }

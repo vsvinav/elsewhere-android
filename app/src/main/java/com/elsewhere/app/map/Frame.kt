@@ -42,3 +42,7 @@ fun frameFor(seg: Segment, next: Segment?, here: Located, now: Long, rate: Doubl
     val pull = if (prog > 0.85) 0.35 + ((prog - 0.85) / 0.15) * 0.65 else 0.35
     return Frame(lerp(mid(seg), here, pull), z)
 }
+
+/** The frame that holds `b` in the middle of a viewport of the given size, never closer than a town nor wider than the world. */
+fun frameOf(b: Bounds, w: Int, h: Int): Frame =
+    Frame(LatLng((b.swLat + b.neLat) / 2, (b.swLng + b.neLng) / 2), max(2.0, min(14.0, fitZoom(LatLng(b.swLat, b.swLng), LatLng(b.neLat, b.neLng), w.toDouble(), h.toDouble(), 0.7))))
